@@ -46,6 +46,15 @@ int64_t GetTimeMicros()
     return now;
 }
 
+int64_t GetTimeBenchmark()
+{
+    int64_t now = (boost::posix_time::microsec_clock::universal_time() -
+                      boost::posix_time::ptime(boost::gregorian::date(1970, 1, 1)))
+                      .total_microseconds();
+    assert(now > 0);
+    return now;
+}
+
 uint64_t GetStopwatch()
 {
     struct timespec t;

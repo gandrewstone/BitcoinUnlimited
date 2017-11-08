@@ -6326,7 +6326,15 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
     else if (strCommand == NetMsgType::XTHINBLOCK && !fImporting && !fReindex && !IsInitialBlockDownload() &&
              IsThinBlocksEnabled())
     {
+#if defined(BENCHMARK_CPU)
+      int64_t start = GetTimeBenchmark();
+      bool handleMessage = CXThinBlock::HandleMessage(vRecv, pfrom, strCommand, 0);
+      int64_t end = GetTimeBenchmark();
+      cpu_xthin_block_time += (end - start);
+      return handleMessage;
+#else
         return CXThinBlock::HandleMessage(vRecv, pfrom, strCommand, 0);
+#endif
     }
 
 
