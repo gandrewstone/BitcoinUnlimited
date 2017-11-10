@@ -19,6 +19,8 @@
 #include "wallet/walletdb.h"
 #endif
 
+#include "cpu_benchmarks.h"
+
 #include <stdint.h>
 
 #include <boost/assign/list_of.hpp>
@@ -120,6 +122,72 @@ UniValue getinfo(const UniValue& params, bool fHelp)
 
     return obj;
 }
+
+UniValue getbenchmarkinfo(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "getbenchmarkinfo\n"
+            "Returns an object containing various benchmark info.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"Time spent in\": xxxxx,                   (string) unit of time\n"
+            "  \"handling xthin message\": xxxxx,          (numeric) CXThinBlock::HandleMessage()\n"
+            "  \"deserializing xthin blocks\": xxxxx,      (numeric) vRecv >> thinBlock;\n"
+            "  \"xthin IsValid checking\": xxxxx,          (numeric) IsThinBlockValid()\n"
+            "  \"xthin block header checks\": xxxxxxx,     (numeric) mapBlockIndex.find(prevHash) + AcceptBlockHeader + !pindex\n"
+            "  \"xthin avail+work+expedited\": xxxxxx,     (numeric) UpdateBlockAvailability + ClearThinBlockData + IsExpeditedUpstream + AddThinBlockInFlight + mapThinBlocksInFlight.count ||| AT MOST\n"
+            "  \"xthin store+send\": xxxxx,                (numeric) IsRecentlyExpeditedAndStore + SendExpeditedBlock\n"
+            "  \"total xthin.process\": xxxxx,             (numeric) thinBlock.process\n"
+            "  \"xthin.process start\": xxxxxx,            (numeric) bunch of misc constructors and setters and stuff\n"
+            "  \"xthin.process orphans\": xxxxxx,          (numeric) mapOrphanTransactions iterate through + set collision\n"
+            "  \"xthin.process mempool\": xxxxxx,          (numeric) mempool.queryHashes + iterate through all hashes + pfrom->mapMissingTx iteration + foreach on vTxHashes + ComputeMerkleRoot + ReconstructBlock ||| AT MOST\n"
+            "  \"xthin.process reconstruct\": xxxx,        (numeric) ReconstructBlock\n"
+            "  \"xthin.process end\": xxxx,                (numeric) finish up function, lauch process block thread and do remaining collision checks\n"
+            "  \"xthin blk msg thread init\": x.xxxx,      (numeric) pthread init + ChainParams()\n"
+            "  \"xthin process new block\": x.xxxx,        (numeric) ProcessNewBlock()\n"
+            "  \"xthin invalid state\": x.xxxx,            (numeric) state.Valid + findMostWorkChain() + LargestBlockSeen\n"
+            "  \"xthin flight cleanup\": x.xxxx,           (numeric) ClearThinBlockData + thinblock cleanup functions\n"
+            "  \"xthin blk msg thread close\": x.xxxx,     (numeric) PV cleanup functions\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("getbenchmarkinfo", "")
+            + HelpExampleRpc("getbenchmarkinfo", "")
+        );
+
+    UniValue obj(UniValue::VOBJ);
+
+#ifdef CPU_BENCHMARK
+    {
+        LOCK(cs_block_benchmarks);
+        obj.push_back(Pair("Time spent in", "Microseconds"));
+        obj.push_back(Pair("handling xthin message",cpu_xthin_block_time));
+        obj.push_back(Pair("deserializing xthin blocks",cpu_xthin_block_deserialize));
+        obj.push_back(Pair("xthin IsValid checking",cpu_xthin_block_isValid_check));
+        obj.push_back(Pair("xthin block header checks",cpu_xthin_block_header_checks));
+        obj.push_back(Pair("xthin avail+work+expedited",cpu_xthin_availability_work_expedited));
+        obj.push_back(Pair("xthin store+send",cpu_xthin_store_send));
+        obj.push_back(Pair("total xthin.process",cpu_xthin_process));
+        obj.push_back(Pair("xthin.process start",cpu_xthin_process_start));
+        obj.push_back(Pair("xthin.process orphans",cpu_xthin_process_orphans));
+        obj.push_back(Pair("xthin.process mempool",cpu_xthin_process_mempool));
+        obj.push_back(Pair("xthin.process reconstruct",cpu_xthin_process_reconstruct));
+        obj.push_back(Pair("xthin.process end",cpu_xthin_process_finish));
+
+        obj.push_back(Pair("xthin blk msg thread init",cpu_end_block_process_init));
+        obj.push_back(Pair("xthin process new block",cpu_end_block_process_function_time));
+        obj.push_back(Pair("xthin invalid state",cpu_end_block_process_invalid_state_time));
+        obj.push_back(Pair("xthin flight cleanup",cpu_end_block_process_flightcleanup_time));
+        obj.push_back(Pair("xthin blk msg thread close",cpu_end_block_process_final_time));
+    }
+#else
+        obj.push_back(Pair("Error", "Benchmarks not active, restart with CPU_BENCHMARKS to use this rpc call"));
+#endif
+
+
+    return obj;
+}
+
 
 #ifdef ENABLE_WALLET
 class DescribeAddressVisitor : public boost::static_visitor<UniValue>
@@ -415,6 +483,7 @@ static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafeMode
   //  --------------------- ------------------------  -----------------------  ----------
     { "control",            "getinfo",                &getinfo,                true  }, /* uses wallet if enabled */
+    { "control",            "getbenchmarkinfo",       &getbenchmarkinfo,       true  }, /* uses CPU_BENCHMARK if enabled */
     { "util",               "validateaddress",        &validateaddress,        true  }, /* uses wallet if enabled */
     { "util",               "createmultisig",         &createmultisig,         true  },
     { "util",               "verifymessage",          &verifymessage,          true  },

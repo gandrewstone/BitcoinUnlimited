@@ -41,10 +41,19 @@ int64_t cpu_xthin_process_reconstruct = 0;
 int64_t cpu_xthin_process_finish = 0;
 
 /** these are for processing the block itself */
+//pthread init + ChainParams()
 int64_t cpu_end_block_process_init = 0;
+
+//ProcessNewBlock()
 int64_t cpu_end_block_process_function_time = 0;
+
+//state.Valid + findMostWorkChain() + LargestBlockSeen
 int64_t cpu_end_block_process_invalid_state_time = 0;
+
+//ClearThinBlockData + thinblock cleanup functions
 int64_t cpu_end_block_process_flightcleanup_time = 0;
+
+//PV cleanup functions
 int64_t cpu_end_block_process_final_time = 0;
 
 
