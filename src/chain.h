@@ -15,6 +15,7 @@
 #include "util.h"
 
 #include <vector>
+#include <atomic>
 
 class CBlockFileInfo
 {
