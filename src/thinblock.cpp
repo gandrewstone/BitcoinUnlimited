@@ -23,7 +23,9 @@
 #include "util.h"
 #include "utiltime.h"
 
+#if defined(ENABLE_CPUBENCHMARK)
 #include "cpu_benchmarks.h"
+#endif
 
 using namespace std;
 
@@ -548,7 +550,7 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
         return error("%s message received from a non XTHIN node, peer=%s", strCommand, pfrom->GetLogName());
     }
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t start_deserialize = GetTimeBenchmark();
 #endif
 
@@ -558,14 +560,14 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
     CXThinBlock thinBlock;
     vRecv >> thinBlock;
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_deserialize = GetTimeBenchmark();
     cpu_xthin_block_deserialize += (end_deserialize - start_deserialize);
 #endif
     {
         LOCK(cs_main);
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
       int64_t start_isValid = GetTimeBenchmark();
 
       // Message consistency checking (FIXME: some redundancy here with AcceptBlockHeader)
@@ -594,7 +596,7 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
 #endif
 
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t start_header_checks = GetTimeBenchmark();
 #endif
         // Is there a previous block or header to connect with?
@@ -631,7 +633,7 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
             thindata.ClearThinBlockData(pfrom, thinBlock.header.GetHash());
             return true;
         }
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_header_checks = GetTimeBenchmark();
     cpu_xthin_block_header_checks += (end_header_checks - start_header_checks);
 ///
@@ -650,7 +652,7 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
             LogPrint("thin", "Received xthinblock but returning because we already have block data %s from peer %s hop"
                              " %d size %d bytes\n",
                 inv.hash.ToString(), pfrom->GetLogName(), nHops, nSizeThinBlock);
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_availability_haveData = GetTimeBenchmark();
     cpu_xthin_availability_work_expedited += (end_availability_haveData - start_availability);
 #endif
@@ -668,7 +670,7 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
 
             LogPrintf("%s %s from peer %s received but does not extend longest chain; requesting full block\n",
                 strCommand, inv.hash.ToString(), pfrom->GetLogName());
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_availability_lessWork = GetTimeBenchmark();
     cpu_xthin_availability_work_expedited += (end_availability_lessWork - start_availability);
 #endif
@@ -695,7 +697,7 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
             if (!pfrom->mapThinBlocksInFlight.count(inv.hash) && !connmgr->IsExpeditedUpstream(pfrom))
             {
                 dosMan.Misbehaving(pfrom, 10);
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_availability_end3 = GetTimeBenchmark();
     cpu_xthin_availability_work_expedited += (end_availability_end3 - start_availability);
 #endif
@@ -703,21 +705,21 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
                     "%s %s from peer %s but was unrequested\n", strCommand, inv.hash.ToString(), pfrom->GetLogName());
             }
         }
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_availability = GetTimeBenchmark();
     cpu_xthin_availability_work_expedited += (end_availability - start_availability);
 #endif
     }
 
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t start_store_send = GetTimeBenchmark();
 #endif
     // Send expedited block without checking merkle root.
     if (!IsRecentlyExpeditedAndStore(inv.hash))
         SendExpeditedBlock(thinBlock, nHops, pfrom);
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_store_send = GetTimeBenchmark();
     cpu_xthin_store_send += (end_store_send - start_store_send);
 ///
@@ -736,7 +738,7 @@ bool CXThinBlock::process(CNode *pfrom,
     string strCommand) // TODO: request from the "best" txn source not necessarily from the block source
 {
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t start_process_initial = GetTimeBenchmark();
 #endif
     // In PV we must prevent two thinblocks from simulaneously processing from that were recieved from the
@@ -781,14 +783,14 @@ bool CXThinBlock::process(CNode *pfrom,
 
     bool fMerkleRootCorrect = true;
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_process_initial = GetTimeBenchmark();
     cpu_xthin_process_start += (end_process_initial - start_process_initial);
 #endif
 
     {
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t start_process_orphans = GetTimeBenchmark();
 #endif
 
@@ -806,7 +808,7 @@ bool CXThinBlock::process(CNode *pfrom,
             }
         }
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_process_orphans = GetTimeBenchmark();
     cpu_xthin_process_orphans += (end_process_orphans - start_process_orphans);
 ///
@@ -891,7 +893,7 @@ bool CXThinBlock::process(CNode *pfrom,
                 }
                 else
                 {
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t start_process_reconstruct = GetTimeBenchmark();
                     if (!ReconstructBlock(pfrom, fXVal, missingCount, unnecessaryCount))
                     {
@@ -908,7 +910,7 @@ bool CXThinBlock::process(CNode *pfrom,
                 }
             }
         }
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_process_mempool = GetTimeBenchmark();
     cpu_xthin_process_mempool += (end_process_mempool - start_process_mempool);
 #endif
@@ -916,7 +918,7 @@ bool CXThinBlock::process(CNode *pfrom,
     } // End locking cs_orphancache, mempool.cs and cs_xval
     LogPrint("thin", "Total in memory thinblockbytes size is %ld bytes\n", thindata.GetThinBlockBytes());
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t start_process_finish = GetTimeBenchmark();
 #endif
 
@@ -932,7 +934,7 @@ bool CXThinBlock::process(CNode *pfrom,
         vGetData.push_back(CInv(MSG_THINBLOCK, header.GetHash()));
         pfrom->PushMessage(NetMsgType::GETDATA, vGetData);
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_process_finish_collision_or_badroot = GetTimeBenchmark();
     cpu_xthin_process_finish += (end_process_finish_collision_or_badroot - start_process_finish);
 #endif
@@ -963,7 +965,7 @@ bool CXThinBlock::process(CNode *pfrom,
 
         LogPrint("thin", "Sending re-req for %d missing transaction(s), peer=%s", pfrom->thinBlockWaitingForTxns,
             pfrom->GetLogName());
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_process_finish_missing = GetTimeBenchmark();
     cpu_xthin_process_finish += (end_process_finish_missing - start_process_finish);
 #endif
@@ -980,7 +982,7 @@ bool CXThinBlock::process(CNode *pfrom,
         std::vector<CInv> vGetData;
         vGetData.push_back(CInv(MSG_BLOCK, header.GetHash()));
         pfrom->PushMessage(NetMsgType::GETDATA, vGetData);
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_process_finish_missingtx = GetTimeBenchmark();
     cpu_xthin_process_finish += (end_process_finish_missingtx - start_process_finish);
 #endif
@@ -1003,7 +1005,7 @@ bool CXThinBlock::process(CNode *pfrom,
     PV->HandleBlockMessage(
         pfrom, strCommand, std::shared_ptr<CBlock>(std::shared_ptr<CBlock>{}, &pfrom->thinBlock), GetInv(), blockSize);
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_process_finish = GetTimeBenchmark();
     cpu_xthin_process_finish += (end_process_finish - start_process_finish);
 #endif

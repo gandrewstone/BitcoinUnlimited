@@ -19,7 +19,9 @@
 #include "wallet/walletdb.h"
 #endif
 
+#if defined(ENABLE_CPUBENCHMARK)
 #include "cpu_benchmarks.h"
+#endif
 
 #include <stdint.h>
 
@@ -157,7 +159,7 @@ UniValue getbenchmarkinfo(const UniValue& params, bool fHelp)
 
     UniValue obj(UniValue::VOBJ);
 
-#ifdef CPU_BENCHMARK
+#ifdef ENABLE_CPUBENCHMARK
     {
         LOCK(cs_block_benchmarks);
         obj.push_back(Pair("Time spent in", "Microseconds"));
@@ -181,7 +183,7 @@ UniValue getbenchmarkinfo(const UniValue& params, bool fHelp)
         obj.push_back(Pair("xthin blk msg thread close",cpu_end_block_process_final_time));
     }
 #else
-        obj.push_back(Pair("Error", "Benchmarks not active, restart with CPU_BENCHMARKS to use this rpc call"));
+        obj.push_back(Pair("Error", "Benchmarks not active, restart with ENABLE_CPUBENCHMARK to use this rpc call"));
 #endif
 
 
@@ -483,7 +485,7 @@ static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafeMode
   //  --------------------- ------------------------  -----------------------  ----------
     { "control",            "getinfo",                &getinfo,                true  }, /* uses wallet if enabled */
-    { "control",            "getbenchmarkinfo",       &getbenchmarkinfo,       true  }, /* uses CPU_BENCHMARK if enabled */
+    { "control",            "getbenchmarkinfo",       &getbenchmarkinfo,       true  }, /* uses ENABLE_CPUBENCHMARK if enabled */
     { "util",               "validateaddress",        &validateaddress,        true  }, /* uses wallet if enabled */
     { "util",               "createmultisig",         &createmultisig,         true  },
     { "util",               "verifymessage",          &verifymessage,          true  },

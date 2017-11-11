@@ -17,7 +17,9 @@
 
 #include <boost/thread/thread.hpp>
 
+#if defined(ENABLE_CPUBENCHMARK)
 #include "cpu_benchmarks.h"
+#endif
 
 using namespace std;
 
@@ -549,7 +551,7 @@ void HandleBlockMessageThread(CNode *pfrom,
     uint64_t nSizeBlock)
 {
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t start_block_processing = GetTimeBenchmark();
 #endif
 
@@ -576,7 +578,7 @@ void HandleBlockMessageThread(CNode *pfrom,
     bool forceProcessing = pfrom->fWhitelisted && !IsInitialBlockDownload();
     const CChainParams &chainparams = Params();
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_block_process_start = GetTimeBenchmark();
     int64_t end_process_block_init = end_block_process_start - start_block_processing;
 #endif
@@ -591,7 +593,7 @@ void HandleBlockMessageThread(CNode *pfrom,
         ProcessNewBlock(state, chainparams, pfrom, block.get(), forceProcessing, NULL, false);
     }
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_block_process_finish = GetTimeBenchmark();
     int64_t end_block_process_finish_time = end_block_process_finish - end_block_process_start;
 #endif
@@ -638,7 +640,7 @@ void HandleBlockMessageThread(CNode *pfrom,
                 (double)(GetTimeMicros() - startTime) / 1000000.0, pfrom->GetLogName());
     }
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_block_process_invalid_state = GetTimeBenchmark();
     int64_t end_block_process_invalid_state_time = end_block_process_invalid_state - end_block_process_finish;
 #endif
@@ -680,7 +682,7 @@ void HandleBlockMessageThread(CNode *pfrom,
         }
     }
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_block_process_flightcleanup = GetTimeBenchmark();
     int64_t end_block_process_flightcleanup_time = end_block_process_flightcleanup - end_block_process_invalid_state;
 #endif
@@ -709,7 +711,7 @@ void HandleBlockMessageThread(CNode *pfrom,
     if (IsChainNearlySyncd())
         FlushStateToDisk(state, FLUSH_STATE_ALWAYS);
 
-#if defined(BENCHMARK_CPU)
+#if defined(ENABLE_CPUBENCHMARK)
     int64_t end_block_process_final = GetTimeBenchmark();
     int64_t end_block_process_final_time = end_block_process_final - end_block_process_flightcleanup;
     {
