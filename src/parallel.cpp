@@ -716,11 +716,11 @@ void HandleBlockMessageThread(CNode *pfrom,
     int64_t end_block_process_final_time = end_block_process_final - end_block_process_flightcleanup;
     {
         LOCK(cs_block_benchmarks);
-        cpu_end_block_process_init = end_process_block_init;
-        cpu_end_block_process_function_time = end_block_process_finish_time;
-        cpu_end_block_process_invalid_state_time = end_block_process_invalid_state_time;
-        cpu_end_block_process_flightcleanup_time = end_block_process_flightcleanup_time;
-        cpu_end_block_process_final_time = end_block_process_final_time;
+        cpu_end_block_process_init += end_process_block_init;
+        cpu_end_block_process_function_time += end_block_process_finish_time;
+        cpu_end_block_process_invalid_state_time += end_block_process_invalid_state_time;
+        cpu_end_block_process_flightcleanup_time += end_block_process_flightcleanup_time;
+        cpu_end_block_process_final_time += end_block_process_final_time;
     }
 #endif
 }
