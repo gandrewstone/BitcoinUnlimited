@@ -227,8 +227,8 @@ AC_ARG_ENABLE([zmq],
   [use_zmq=$enableval],
   [use_zmq=yes])
 
-AC_ARG_ENABLE([zmq],
-  [AS_HELP_STRING([--enable-cpu-benchmarks],
+AC_ARG_ENABLE([cpu-benchmark],
+  [AS_HELP_STRING([--enable-cpu-benchmark],
   [enable cpu benchmarks and getbenchmarkinfo rpc call])],
   [enable_cpubenchmark=$enableval],
   [enable_cpubenchmark=no])
@@ -1209,7 +1209,7 @@ if test x$bitcoin_enable_qt != xno; then
     echo "    qt version  = $bitcoin_qt_got_major_vers"
     echo "    with qr     = $use_qr"
 fi
-echo "  with cpu benchmark = $enable_cpubenchmark "
+echo "  with cpu benchmark = $enable_cpubenchmark"
 echo "  with zmq      = $use_zmq"
 echo "  with test     = $use_tests"
 echo "  with bench    = $use_bench"
