@@ -109,6 +109,7 @@ BITCOIN_CORE_H = \
   consensus/consensus.h \
   core_io.h \
   core_memusage.h \
+  cpu_benchmarks.h \
   dosman.h \
   expedited.h \
   fastfilter.h \
@@ -178,10 +179,6 @@ BITCOIN_CORE_H = \
   zmq/zmqconfig.h\
   zmq/zmqnotificationinterface.h \
   zmq/zmqpublishnotifier.h
-  
-if ENABLE_CPUBENCHMARK
-  BITCOIN_CORE_H += cpu_benchmarks.h
-endif
 
 
 obj/build.h: FORCE
@@ -204,6 +201,7 @@ libbitcoin_server_a_SOURCES = \
   buip055fork.cpp \
   chain.cpp \
   checkpoints.cpp \
+  cpu_benchmarks.cpp \
   connmgr.cpp \
   dosman.cpp \
   expedited.cpp \
@@ -241,11 +239,6 @@ libbitcoin_server_a_SOURCES = \
   validationinterface.cpp \
   versionbits.cpp \
   $(BITCOIN_CORE_H)
-
-if ENABLE_CPUBENCHMARK
-  libbitcoin_server_a_SOURCES += cpu_benchmarks.cpp
-endif
-
 
 if ENABLE_ZMQ
 libbitcoin_zmq_a_CPPFLAGS = $(BITCOIN_INCLUDES) $(ZMQ_CFLAGS)

@@ -1,6 +1,4 @@
-#if defined(ENABLE_CPUBENCHMARK)
 #include "cpu_benchmarks.h"
-#endif
 
 /** XTHIN INFO */
 CCriticalSection cs_block_benchmarks;
