@@ -23,6 +23,10 @@
 #include "util.h"
 #include "utiltime.h"
 
+#if defined(ENABLE_CPUBENCHMARK)
+#include "cpu_benchmarks.h"
+#endif
+
 using namespace std;
 
 static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, int &unnecessaryCount);
@@ -546,15 +550,40 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
         return error("%s message received from a non XTHIN node, peer=%s", strCommand, pfrom->GetLogName());
     }
 
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t start_deserialize = GetTimeBenchmark();
+#endif
+
     int nSizeThinBlock = vRecv.size();
     CInv inv(MSG_BLOCK, uint256());
 
     CXThinBlock thinBlock;
     vRecv >> thinBlock;
 
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_deserialize = GetTimeBenchmark();
+    cpu_xthin_block_deserialize += (end_deserialize - start_deserialize);
+#endif
     {
         LOCK(cs_main);
 
+#if defined(ENABLE_CPUBENCHMARK)
+      int64_t start_isValid = GetTimeBenchmark();
+
+      // Message consistency checking (FIXME: some redundancy here with AcceptBlockHeader)
+      if (!IsThinBlockValid(pfrom, thinBlock.vMissingTx, thinBlock.header))
+      {
+          dosMan.Misbehaving(pfrom, 100);
+          LogPrintf("Received an invalid %s from peer %s\n", strCommand, pfrom->GetLogName());
+
+          thindata.ClearThinBlockData(pfrom, thinBlock.header.GetHash());
+          int64_t end_isValid_failed = GetTimeBenchmark();
+          cpu_xthin_block_isValid_check += (end_isValid_failed - start_isValid);
+          return false;
+      }
+      int64_t end_isvalid = GetTimeBenchmark();
+      cpu_xthin_block_isValid_check += (end_isvalid - start_isValid);
+#else
         // Message consistency checking (FIXME: some redundancy here with AcceptBlockHeader)
         if (!IsThinBlockValid(pfrom, thinBlock.vMissingTx, thinBlock.header))
         {
@@ -564,7 +593,12 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
             thindata.ClearThinBlockData(pfrom, thinBlock.header.GetHash());
             return false;
         }
+#endif
 
+
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t start_header_checks = GetTimeBenchmark();
+#endif
         // Is there a previous block or header to connect with?
         {
             uint256 prevHash = thinBlock.header.hashPrevBlock;
@@ -599,7 +633,12 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
             thindata.ClearThinBlockData(pfrom, thinBlock.header.GetHash());
             return true;
         }
-
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_header_checks = GetTimeBenchmark();
+    cpu_xthin_block_header_checks += (end_header_checks - start_header_checks);
+///
+    int64_t start_availability = GetTimeBenchmark();
+#endif
         inv.hash = pIndex->GetBlockHash();
         UpdateBlockAvailability(pfrom->GetId(), inv.hash);
 
@@ -613,8 +652,12 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
             LogPrint("thin", "Received xthinblock but returning because we already have block data %s from peer %s hop"
                              " %d size %d bytes\n",
                 inv.hash.ToString(), pfrom->GetLogName(), nHops, nSizeThinBlock);
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_availability_haveData = GetTimeBenchmark();
+    cpu_xthin_availability_work_expedited += (end_availability_haveData - start_availability);
+#endif
             return true;
-        }
+        }    
 
         // Request full block if it isn't extending the best chain
         if (pIndex->nChainWork <= chainActive.Tip()->nChainWork)
@@ -627,6 +670,10 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
 
             LogPrintf("%s %s from peer %s received but does not extend longest chain; requesting full block\n",
                 strCommand, inv.hash.ToString(), pfrom->GetLogName());
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_availability_lessWork = GetTimeBenchmark();
+    cpu_xthin_availability_work_expedited += (end_availability_lessWork - start_availability);
+#endif
             return true;
         }
 
@@ -650,23 +697,50 @@ bool CXThinBlock::HandleMessage(CDataStream &vRecv, CNode *pfrom, string strComm
             if (!pfrom->mapThinBlocksInFlight.count(inv.hash) && !connmgr->IsExpeditedUpstream(pfrom))
             {
                 dosMan.Misbehaving(pfrom, 10);
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_availability_end3 = GetTimeBenchmark();
+    cpu_xthin_availability_work_expedited += (end_availability_end3 - start_availability);
+#endif
                 return error(
                     "%s %s from peer %s but was unrequested\n", strCommand, inv.hash.ToString(), pfrom->GetLogName());
             }
         }
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_availability = GetTimeBenchmark();
+    cpu_xthin_availability_work_expedited += (end_availability - start_availability);
+#endif
     }
 
+
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t start_store_send = GetTimeBenchmark();
+#endif
     // Send expedited block without checking merkle root.
     if (!IsRecentlyExpeditedAndStore(inv.hash))
         SendExpeditedBlock(thinBlock, nHops, pfrom);
 
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_store_send = GetTimeBenchmark();
+    cpu_xthin_store_send += (end_store_send - start_store_send);
+///
+    int64_t start_process = GetTimeBenchmark();
+    bool xthinProcess = thinBlock.process(pfrom, nSizeThinBlock, strCommand);
+    int64_t end_process = GetTimeBenchmark();
+    cpu_xthin_process += (end_process - start_process);
+    return xthinProcess;
+#else
     return thinBlock.process(pfrom, nSizeThinBlock, strCommand);
+#endif
 }
 
 bool CXThinBlock::process(CNode *pfrom,
     int nSizeThinBlock,
     string strCommand) // TODO: request from the "best" txn source not necessarily from the block source
 {
+
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t start_process_initial = GetTimeBenchmark();
+#endif
     // In PV we must prevent two thinblocks from simulaneously processing from that were recieved from the
     // same peer. This would only happen as in the example of an expedited block coming in
     // after an xthin request, because we would never explicitly request two xthins from the same peer.
@@ -708,7 +782,18 @@ bool CXThinBlock::process(CNode *pfrom,
     set<uint64_t> setHashesToRequest;
 
     bool fMerkleRootCorrect = true;
+
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_process_initial = GetTimeBenchmark();
+    cpu_xthin_process_start += (end_process_initial - start_process_initial);
+#endif
+
     {
+
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t start_process_orphans = GetTimeBenchmark();
+#endif
+
         // Do the orphans first before taking the mempool.cs lock, so that we maintain correct locking order.
         READLOCK(cs_orphancache);
         for (map<uint256, COrphanTx>::iterator mi = mapOrphanTransactions.begin(); mi != mapOrphanTransactions.end();
@@ -723,6 +808,12 @@ bool CXThinBlock::process(CNode *pfrom,
             }
         }
 
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_process_orphans = GetTimeBenchmark();
+    cpu_xthin_process_orphans += (end_process_orphans - start_process_orphans);
+///
+    int64_t start_process_mempool = GetTimeBenchmark();
+#endif
         // We don't have to keep the lock on mempool.cs here to do mempool.queryHashes
         // but we take the lock anyway so we don't have to re-lock again later.
         READLOCK(mempool.cs);
@@ -802,13 +893,34 @@ bool CXThinBlock::process(CNode *pfrom,
                 }
                 else
                 {
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t start_process_reconstruct = GetTimeBenchmark();
+                    if (!ReconstructBlock(pfrom, fXVal, missingCount, unnecessaryCount))
+                    {
+                        int64_t end_process_reconstruct_fail = GetTimeBenchmark();
+                        cpu_xthin_process_reconstruct += (end_process_reconstruct_fail - start_process_reconstruct);
+                        return false;
+                    }
+    int64_t end_process_reconstruct = GetTimeBenchmark();
+    cpu_xthin_process_reconstruct += (end_process_reconstruct - start_process_reconstruct);
+#else
                     if (!ReconstructBlock(pfrom, fXVal, missingCount, unnecessaryCount))
                         return false;
+#endif
                 }
             }
         }
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_process_mempool = GetTimeBenchmark();
+    cpu_xthin_process_mempool += (end_process_mempool - start_process_mempool);
+#endif
+
     } // End locking cs_orphancache, mempool.cs and cs_xval
     LogPrint("thin", "Total in memory thinblockbytes size is %ld bytes\n", thindata.GetThinBlockBytes());
+
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t start_process_finish = GetTimeBenchmark();
+#endif
 
     // These must be checked outside of the mempool.cs lock or deadlock may occur.
     // A merkle root mismatch here does not cause a ban because and expedited node will forward an xthin
@@ -822,6 +934,10 @@ bool CXThinBlock::process(CNode *pfrom,
         vGetData.push_back(CInv(MSG_THINBLOCK, header.GetHash()));
         pfrom->PushMessage(NetMsgType::GETDATA, vGetData);
 
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_process_finish_collision_or_badroot = GetTimeBenchmark();
+    cpu_xthin_process_finish += (end_process_finish_collision_or_badroot - start_process_finish);
+#endif
         if (!fMerkleRootCorrect)
             return error(
                 "mismatched merkle root on xthinblock: rerequesting a thinblock, peer=%s", pfrom->GetLogName());
@@ -849,6 +965,10 @@ bool CXThinBlock::process(CNode *pfrom,
 
         LogPrint("thin", "Sending re-req for %d missing transaction(s), peer=%s", pfrom->thinBlockWaitingForTxns,
             pfrom->GetLogName());
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_process_finish_missing = GetTimeBenchmark();
+    cpu_xthin_process_finish += (end_process_finish_missing - start_process_finish);
+#endif
         return true;
     }
 
@@ -862,6 +982,10 @@ bool CXThinBlock::process(CNode *pfrom,
         std::vector<CInv> vGetData;
         vGetData.push_back(CInv(MSG_BLOCK, header.GetHash()));
         pfrom->PushMessage(NetMsgType::GETDATA, vGetData);
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_process_finish_missingtx = GetTimeBenchmark();
+    cpu_xthin_process_finish += (end_process_finish_missingtx - start_process_finish);
+#endif
         return error("Still missing transactions for xthinblock: re-requesting a full block");
     }
 
@@ -880,6 +1004,11 @@ bool CXThinBlock::process(CNode *pfrom,
     // Process the full block
     PV->HandleBlockMessage(
         pfrom, strCommand, std::shared_ptr<CBlock>(std::shared_ptr<CBlock>{}, &pfrom->thinBlock), GetInv(), blockSize);
+
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_process_finish = GetTimeBenchmark();
+    cpu_xthin_process_finish += (end_process_finish - start_process_finish);
+#endif
 
     return true;
 }

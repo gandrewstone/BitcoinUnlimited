@@ -74,7 +74,9 @@ public:
 
     void reset()
     {
-        bzero(&vData[0],FILTER_BYTES);
+        /// Changed this to memset from bzero. bzero is deprecated on most OS
+        /// and reduces portability since it is not a standard C function - Griffith
+        memset(&vData[0],0,FILTER_BYTES);
     }
 };
 

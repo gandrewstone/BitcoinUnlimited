@@ -109,6 +109,7 @@ BITCOIN_CORE_H = \
   consensus/consensus.h \
   core_io.h \
   core_memusage.h \
+  cpu_benchmarks.h \
   dosman.h \
   expedited.h \
   fastfilter.h \
@@ -186,6 +187,7 @@ obj/build.h: FORCE
 	  $(abs_top_srcdir)
 libbitcoin_util_a-clientversion.$(OBJEXT): obj/build.h
 
+
 # server: shared between bitcoind and bitcoin-qt
 libbitcoin_server_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(MINIUPNPC_CPPFLAGS) $(EVENT_CFLAGS) $(EVENT_PTHREADS_CFLAGS)
 libbitcoin_server_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
@@ -199,6 +201,7 @@ libbitcoin_server_a_SOURCES = \
   buip055fork.cpp \
   chain.cpp \
   checkpoints.cpp \
+  cpu_benchmarks.cpp \
   connmgr.cpp \
   dosman.cpp \
   expedited.cpp \

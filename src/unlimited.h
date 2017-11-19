@@ -101,7 +101,7 @@ class CTxInputData
 {
 public:
     CTransaction tx;
-    uint nodeId; // hold the id so I don't keep a ref to the node
+    uint64_t nodeId; // hold the id so I don't keep a ref to the node
     bool whitelisted;
     std::string nodeName;
 };

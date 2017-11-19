@@ -95,6 +95,14 @@ public:
         statistics[CStatKey(name)] = this;
     }
 
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(value);
+        READWRITE(name);
+    }
+
     void init(const char *namep)
     {
         LOCK(cs_statMap);

@@ -17,6 +17,10 @@
 
 #include <boost/thread/thread.hpp>
 
+#if defined(ENABLE_CPUBENCHMARK)
+#include "cpu_benchmarks.h"
+#endif
+
 using namespace std;
 
 static const unsigned int nScriptCheckQueues = 4;
@@ -546,6 +550,11 @@ void HandleBlockMessageThread(CNode *pfrom,
     const CInv inv,
     uint64_t nSizeBlock)
 {
+
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t start_block_processing = GetTimeBenchmark();
+#endif
+
     int64_t startTime = GetTimeMicros();
     CValidationState state;
 
@@ -568,6 +577,12 @@ void HandleBlockMessageThread(CNode *pfrom,
     // conditions in AcceptBlock().
     bool forceProcessing = pfrom->fWhitelisted && !IsInitialBlockDownload();
     const CChainParams &chainparams = Params();
+
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_block_process_start = GetTimeBenchmark();
+    int64_t end_process_block_init = end_block_process_start - start_block_processing;
+#endif
+
     if (PV->Enabled())
     {
         ProcessNewBlock(state, chainparams, pfrom, block.get(), forceProcessing, NULL, true);
@@ -577,6 +592,11 @@ void HandleBlockMessageThread(CNode *pfrom,
         LOCK(cs_main); // locking cs_main here prevents any other thread from beginning starting a block validation.
         ProcessNewBlock(state, chainparams, pfrom, block.get(), forceProcessing, NULL, false);
     }
+
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_block_process_finish = GetTimeBenchmark();
+    int64_t end_block_process_finish_time = end_block_process_finish - end_block_process_start;
+#endif
 
     int nDoS;
     if (state.IsInvalid(nDoS))
@@ -620,6 +640,11 @@ void HandleBlockMessageThread(CNode *pfrom,
                 (double)(GetTimeMicros() - startTime) / 1000000.0, pfrom->GetLogName());
     }
 
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_block_process_invalid_state = GetTimeBenchmark();
+    int64_t end_block_process_invalid_state_time = end_block_process_invalid_state - end_block_process_finish;
+#endif
+
     // When we request a thinblock we may get back a regular block if it is smaller than a thinblock
     // Therefore we have to remove the thinblock in flight if it exists and we also need to check that
     // the block didn't arrive from some other peer.  This code ALSO cleans up the thin block that
@@ -657,6 +682,11 @@ void HandleBlockMessageThread(CNode *pfrom,
         }
     }
 
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_block_process_flightcleanup = GetTimeBenchmark();
+    int64_t end_block_process_flightcleanup_time = end_block_process_flightcleanup - end_block_process_invalid_state;
+#endif
+
     // Erase any txns from the orphan cache that are no longer needed
     PV->ClearOrphanCache(*block);
 
@@ -680,6 +710,19 @@ void HandleBlockMessageThread(CNode *pfrom,
     // process the block advance the tip.
     if (IsChainNearlySyncd())
         FlushStateToDisk(state, FLUSH_STATE_ALWAYS);
+
+#if defined(ENABLE_CPUBENCHMARK)
+    int64_t end_block_process_final = GetTimeBenchmark();
+    int64_t end_block_process_final_time = end_block_process_final - end_block_process_flightcleanup;
+    {
+        LOCK(cs_block_benchmarks);
+        cpu_end_block_process_init += end_process_block_init;
+        cpu_end_block_process_function_time += end_block_process_finish_time;
+        cpu_end_block_process_invalid_state_time += end_block_process_invalid_state_time;
+        cpu_end_block_process_flightcleanup_time += end_block_process_flightcleanup_time;
+        cpu_end_block_process_final_time += end_block_process_final_time;
+    }
+#endif
 }
 
 
