@@ -124,14 +124,15 @@ void CBloomFilter::insert(const vector<unsigned char> &vKey)
     isEmpty = false;
 }
 
-void CBloomFilter::insert(const COutPoint &outpoint)
+static std::vector<unsigned char> ToVector(const COutPoint &outpoint)
 {
     CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
     stream << outpoint;
-    vector<unsigned char> data(stream.begin(), stream.end());
-    insert(data);
+    return std::vector<unsigned char>(stream.begin(), stream.end());
 }
 
+
+void CBloomFilter::insert(const COutPoint &outpoint) { insert(ToVector(outpoint)); }
 void CBloomFilter::insert(const uint256 &hash)
 {
     vector<unsigned char> data(hash.begin(), hash.end());
@@ -154,14 +155,7 @@ bool CBloomFilter::contains(const vector<unsigned char> &vKey) const
     return true;
 }
 
-bool CBloomFilter::contains(const COutPoint &outpoint) const
-{
-    CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
-    stream << outpoint;
-    vector<unsigned char> data(stream.begin(), stream.end());
-    return contains(data);
-}
-
+bool CBloomFilter::contains(const COutPoint &outpoint) const { return contains(ToVector(outpoint)); }
 bool CBloomFilter::contains(const uint256 &hash) const
 {
     vector<unsigned char> data(hash.begin(), hash.end());
@@ -306,6 +300,7 @@ void CRollingBloomFilter::insert(const uint256 &hash)
     insert(data);
 }
 
+void CRollingBloomFilter::insert(const COutPoint &outpoint) { insert(ToVector(outpoint)); }
 bool CRollingBloomFilter::contains(const std::vector<unsigned char> &vKey) const
 {
     if (nInsertions < nBloomSize / 2)
@@ -321,6 +316,7 @@ bool CRollingBloomFilter::contains(const uint256 &hash) const
     return contains(data);
 }
 
+bool CRollingBloomFilter::contains(const COutPoint &outpoint) const { return contains(ToVector(outpoint)); }
 void CRollingBloomFilter::reset()
 {
     unsigned int nNewTweak = GetRand(std::numeric_limits<unsigned int>::max());
