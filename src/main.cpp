@@ -20,6 +20,7 @@
 #include "connmgr.h"
 #include "consensus/consensus.h"
 #include "consensus/merkle.h"
+#include "consensus/tokengroups.h"
 #include "consensus/tx_verify.h"
 #include "consensus/validation.h"
 #include "dosman.h"
@@ -295,9 +296,28 @@ bool GetTransaction(const uint256 &hash,
         return true;
     }
 
-    if (g_txindex)
+    // Disallow any OP_GROUP txs from entering the mempool until OP_GROUP is enabled.
+    // This ensures that someone won't create an invalid OP_GROUP tx that sits in the mempool until after activation,
+    // potentially causing this node to create a bad block.
+    if ((unsigned int)chainActive.Tip()->nHeight < miningEnforceOpGroup.value)
     {
-        if (g_txindex->FindTx(hash, hashBlock, txOut))
+        if (IsAnyTxOutputGrouped(tx))
+            return state.DoS(0, false, REJECT_NONSTANDARD, "premature-op_group-tx");
+    }
+
+    // Rather not work on nonstandard transactions (unless -testnet/-regtest)
+    std::string reason;
+    if (fRequireStandard && !IsStandardTx(tx, reason))
+        return state.DoS(0, false, REJECT_NONSTANDARD, reason);
+
+    // Don't relay version 2 transactions until CSV is active, and we can be
+    // sure that such transactions will be mined (unless we're on
+    // -testnet/-regtest).
+    const CChainParams &chainparams = Params();
+    if (fRequireStandard && tx.nVersion >= 2 &&
+        VersionBitsTipState(chainparams.GetConsensus(), Consensus::DEPLOYMENT_CSV) != THRESHOLD_ACTIVE)
+    {
+        if (g_txindex && g_txindex->FindTx(hash, hashBlock, txOut))
         {
             return true;
         }

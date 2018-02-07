@@ -309,6 +309,14 @@ CTweakRef<uint64_t> miningForkTime("consensus.forkMay2020Time",
     &nMiningForkTime,
     &ForkTimeValidator); // Fri May 15 12:00:00 UTC 2020
 
+CTweak<uint32_t> miningEnforceOpGroup("mining.opgroup",
+    "Enable enforcement of the OP_GROUP opcode at this block height",
+    std::numeric_limits<uint32_t>::max());
+
+CTweak<bool> miningForkOpGroup("mining.forkOpgroup",
+    "Enable enforcement of the OP_GROUP opcode at the fork point",
+    true);
+
 CTweak<uint64_t> maxScriptOps("consensus.maxScriptOps",
     "Maximum number of script operations allowed.  Stack pushes are excepted.",
     MAX_OPS_PER_SCRIPT);

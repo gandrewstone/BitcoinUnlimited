@@ -40,6 +40,10 @@ const char *GetTxnOutputType(txnouttype t)
         return "cltv"; // CLTV HODL Freeze
     case TX_LABELPUBLIC:
         return "publiclabel";
+    case TX_GRP_PUBKEYHASH:
+        return "grouppubkeyhash";
+    case TX_GRP_SCRIPTHASH:
+        return "groupscripthash";
     }
     return nullptr;
 }
@@ -95,8 +99,16 @@ static bool MatchLabelPublic(const CScript &script, std::vector<valtype> &dataCa
     // data deve contenere il OP_DATA
     if (script.size() < 1 || script[0] != OP_RETURN || !script.IsPushOnly(script.begin() + 1))
     {
+<<<<<<< HEAD
         return false;
     }
+=======
+        // GP2PKH (group pay to public key hash): Bitcoin address tx, sender provides hash of pubkey, receiver provides
+        // signature and pubkey
+        mTemplates.insert(make_pair(TX_GRP_PUBKEYHASH, CScript() << OP_GRP_DATA << OP_GRP_DATA << OP_GROUP << OP_DROP
+                                                                 << OP_DROP << OP_DUP << OP_HASH160 << OP_PUBKEYHASH
+                                                                 << OP_EQUALVERIFY << OP_CHECKSIG));
+>>>>>>> ab6c01bef... add quantity to OP_GROUP, allow limited quantity tokens via a single mint operation, format c++ and python files as per our style and PEP8 recommendations
 
     valtype data;
     opcodetype opcode;
@@ -214,10 +226,11 @@ bool Solver(const CScript &scriptPubKey, txnouttype &typeRet, std::vector<valtyp
 
     // Shortcut for pay-to-script-hash, which are more constrained than the other types:
     // it is always OP_HASH160 20 [20 byte hash] OP_EQUAL
-    if (scriptPubKey.IsPayToScriptHash())
+    // or [data] OP_GROUP OP_DROP OP_HASH160 20 [20 byte hash] OP_EQUAL
+    vector<unsigned char> hashBytes;
+    if (scriptPubKey.IsPayToScriptHash(&hashBytes))
     {
         typeRet = TX_SCRIPTHASH;
-        vector<unsigned char> hashBytes(scriptPubKey.begin() + 2, scriptPubKey.begin() + 22);
         vSolutionsRet.push_back(hashBytes);
         return true;
     }
@@ -283,10 +296,9 @@ bool Solver(const CScript &scriptPubKey, txnouttype &typeRet, std::vector<valtyp
     return false;
 }
 
-bool ExtractDestination(const CScript &scriptPubKey, CTxDestination &addressRet)
+bool ExtractDestinationAndType(const CScript &scriptPubKey, CTxDestination &addressRet, txnouttype &whichType)
 {
     vector<valtype> vSolutions;
-    txnouttype whichType;
     if (!Solver(scriptPubKey, whichType, vSolutions))
         return false;
 
@@ -299,12 +311,12 @@ bool ExtractDestination(const CScript &scriptPubKey, CTxDestination &addressRet)
         addressRet = pubKey.GetID();
         return true;
     }
-    else if (whichType == TX_PUBKEYHASH)
+    else if ((whichType == TX_PUBKEYHASH) || (whichType == TX_GRP_PUBKEYHASH))
     {
         addressRet = CKeyID(uint160(vSolutions[0]));
         return true;
     }
-    else if (whichType == TX_SCRIPTHASH)
+    else if ((whichType == TX_SCRIPTHASH) || (whichType == TX_GRP_SCRIPTHASH))
     {
         addressRet = CScriptID(uint160(vSolutions[0]));
         return true;
@@ -320,6 +332,12 @@ bool ExtractDestination(const CScript &scriptPubKey, CTxDestination &addressRet)
     }
     // Multisig txns have more than one address...
     return false;
+}
+
+bool ExtractDestination(const CScript &scriptPubKey, CTxDestination &addressRet)
+{
+    txnouttype whichType;
+    return ExtractDestinationAndType(scriptPubKey, addressRet, whichType);
 }
 
 bool ExtractDestinations(const CScript &scriptPubKey,

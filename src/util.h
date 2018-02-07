@@ -203,6 +203,8 @@ enum
 
     ELECTRUM = 0x100000000,
     MPOOLSYNC = 0x200000000
+    TOKEN      = 0x400000000,
+    VALIDATION = 0x800000000,
 };
 
 namespace Logging
@@ -228,7 +230,7 @@ To add a new log category:
             {GRAPHENE, "graphene"}, {RESPEND, "respend"}, {WB, "weakblocks"}, {CMPCT, "cmpctblock"},            \
             {ELECTRUM, "electrum"}, {MPOOLSYNC, "mempoolsync"},                                                 \
         {                                                                                                       \
-            ZMQ, "zmq"                                                                                          \
+            TOKEN, "token"                                                                                      \
         }                                                                                                       \
     }
 
@@ -496,6 +498,14 @@ void UnsetArg(const std::string &strArg);
  * @return none
  */
 void SetBoolArg(const std::string &strArg, bool fValue);
+
+/*
+ * Convert string into true/false
+ *
+ * @param strValue String to parse as a boolean
+ * @return true or false
+ */
+bool InterpretBool(const std::string &strValue);
 
 /**
  * Set an argument if it doesn't already have a value

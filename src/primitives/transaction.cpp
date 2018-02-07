@@ -8,6 +8,7 @@
 
 #include "hashwrapper.h"
 #include "policy/policy.h"
+#include "streams.h"
 #include "tinyformat.h"
 #include "utilstrencodings.h"
 
@@ -186,4 +187,17 @@ bool CTransaction::HasData(uint32_t dataID) const
         }
     }
     return false;
+
+std::string CMutableTransaction::HexStr(void) const
+{
+    CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+    ssTx << *this;
+    return ::HexStr(ssTx.begin(), ssTx.end());
+}
+
+std::string CTransaction::HexStr(void) const
+{
+    CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+    ssTx << *this;
+    return ::HexStr(ssTx.begin(), ssTx.end());
 }

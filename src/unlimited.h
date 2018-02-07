@@ -292,6 +292,8 @@ extern CTweak<uint64_t> blockSigopsPerMb;
 extern CTweak<uint64_t> coinbaseReserve;
 extern CTweak<uint64_t> blockMiningSigopsPerMb;
 extern CTweak<unsigned int> unconfPushAction;
+extern CTweak<uint32_t> miningEnforceOpGroup;
+extern CTweak<bool> miningForkOpGroup;
 
 extern std::list<CStatBase *> mallocedStats;
 

@@ -256,6 +256,8 @@ public:
 
     // Return the size of the transaction in bytes.
     size_t GetTxSize() const;
+    /** return this transaction as a hex string.  Useful for debugging and display */
+    std::string HexStr() const;
 };
 
 /** A mutable version of CTransaction. */
