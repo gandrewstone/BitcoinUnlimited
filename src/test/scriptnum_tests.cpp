@@ -4,6 +4,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "script/script.h"
+#include "script/bignum.h"
+#include "script/interpreter.h"
 #include "scriptnum10.h"
 #include "test/test_bitcoin.h"
 
@@ -258,5 +260,209 @@ BOOST_AUTO_TEST_CASE(minimize_encoding_test)
         negkpadded.push_back(0x80);
     }
 }
+
+BOOST_AUTO_TEST_CASE(bignum_test)
+{
+    BigNum m1;
+
+    m1 = BigNum(100) * 10_BN;
+    BOOST_CHECK(m1 == 1000_BN);
+
+    m1 = BigNum(100) * 0x10_BN;
+    BOOST_CHECK(m1 == 1600_BN);
+
+    m1 = BigNum(12345678910111213) * 1234567891011121314151617181920_BN;
+    BOOST_CHECK(m1 == 15241578775156478982436124619934121108852868960_BN);
+
+    // check multiplication and constructor equivalence
+    BOOST_CHECK(m1 * BigNum(12345) == m1 * 12345_BN);
+    BOOST_CHECK(m1 * BigNum(-12345) == m1 * -12345_BN);
+
+    BOOST_CHECK(m1 * 3_BN == m1 + m1 + m1);
+    BOOST_CHECK(m1 * 3_BN - m1 == m1 + m1);
+
+    BigNum biggest =
+        0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff_BN;
+    // BOOST_CHECK_EXCEPTION(biggest + 1_BN, OutOfBounds, [](auto &e) -> bool { return strcmp(e.what(), "Numerical upper
+    // bound exceeded")==0; });
+
+    // BigNum smallest = (-biggest) - 1_BN;
+    // printf("%s\n", smallest.str().c_str());
+    // BOOST_CHECK_EXCEPTION(smallest - 1_BN, OutOfBounds, [](auto &e) -> bool { return strcmp(e.what(), "Numerical
+    // lower bound exceeded")==0; });
+
+    // Check truncated division "modulo"
+    BOOST_CHECK((1234_BN).tdiv(123) == 4_BN);
+    BOOST_CHECK((-1234_BN).tdiv(123) == -4_BN);
+
+    unsigned char buf[520];
+    memset(buf, 0xff, 520);
+    VchType buf2;
+
+    BigNum b2;
+    auto b1 = 1000_BN;
+    b1.serialize(buf, 2);
+    BOOST_CHECK(buf[0] == 232); // Check LE
+    BOOST_CHECK(buf[1] == 3);
+    BOOST_CHECK(buf[2] == 0); // Check sign
+    BOOST_CHECK(buf[3] == 0xff); // Check untouched
+
+    buf2 = b1.serialize(2);
+    BOOST_CHECK(buf2.size() == 3);
+    BOOST_CHECK(buf2[0] == 232); // Check LE
+    BOOST_CHECK(buf2[1] == 3);
+    BOOST_CHECK(buf2[2] == 0); // Check sign
+    buf2 = b1.serialize(3);
+    BOOST_CHECK(buf2.size() == 4);
+    BOOST_CHECK(buf2[0] == 232); // Check LE
+    BOOST_CHECK(buf2[1] == 3);
+    BOOST_CHECK(buf2[2] == 0); // Check zero-extend
+    BOOST_CHECK(buf2[3] == 0); // Check sign
+
+    b2.deserialize(buf, 3);
+    BOOST_CHECK(b1 == b2);
+
+    b1 = -2000_BN;
+    BOOST_CHECK(b1.serialize(buf, 2) == 3);
+    BOOST_CHECK(buf[0] == 208); // Check LE
+    BOOST_CHECK(buf[1] == 7);
+    BOOST_CHECK(buf[2] == 0x80); // Check sign
+    BOOST_CHECK(buf[3] == 0xff); // Check untouched
+    b2.deserialize(buf, 3);
+    BOOST_CHECK(b1 == b2);
+
+    buf2 = b1.serialize(2);
+    BOOST_CHECK(buf2.size() == 3);
+    BOOST_CHECK(buf2[0] == 208); // Check LE
+    BOOST_CHECK(buf2[1] == 7);
+    BOOST_CHECK(buf2[2] == 0x80); // Check sign
+    buf2 = b1.serialize(3);
+    BOOST_CHECK(buf2.size() == 4);
+    BOOST_CHECK(buf2[0] == 208); // Check LE
+    BOOST_CHECK(buf2[1] == 7);
+    BOOST_CHECK(buf2[2] == 0); // Check zero-extend
+    BOOST_CHECK(buf2[3] == 0x80); // Check sign
+
+    b1.serialize(buf, 4);
+    BOOST_CHECK(buf[0] == 208); // Check LE
+    BOOST_CHECK(buf[1] == 7);
+    BOOST_CHECK(buf[2] == 0); // Check pad
+    BOOST_CHECK(buf[3] == 0);
+    BOOST_CHECK(buf[4] == 0x80); // Check sign
+    BOOST_CHECK(buf[5] == 0xff); // Check untouched
+    b2.deserialize(buf, 5);
+    BOOST_CHECK(b1 == b2);
+
+    std::vector<unsigned char> vec = CScriptNum::serialize(1000);
+    b2 = 0_BN;
+    b2.deserialize(&vec[0], vec.size());
+    BOOST_CHECK(b2 == 1000_BN);
+
+    vec = CScriptNum::serialize(-1234);
+    b2 = 0_BN;
+    b2.deserialize(&vec[0], vec.size());
+    BOOST_CHECK(b2 == -1234_BN);
+
+    BOOST_CHECK(biggest.serialize(buf, 10) == -513); // Check correct requested size error
+}
+
+std::vector<unsigned char> bns(long int i, size_t pad = 8) { return BigNum(i).serialize(pad); }
+void testScript(const CScript &s, bool expectedRet, bool expectedStackTF, ScriptError expectedError)
+{
+    ScriptMachine sm(0, ScriptImportedState(), 0xffffffff, 0xffffffff);
+    bool ret = sm.Eval(s);
+    BOOST_CHECK(ret == expectedRet);
+    if (expectedRet)
+    {
+        BOOST_CHECK(sm.getStack().size() == 1);
+        BOOST_CHECK(((bool)sm.getStack()[0]) == expectedStackTF);
+    }
+    else
+    {
+        BOOST_CHECK_MESSAGE(sm.getError() == expectedError, "got: " << ScriptErrorString(sm.getError()) << " ("
+                                                                    << sm.getError() << ")");
+    }
+}
+
+void testScript(const CScript &s, bool expectedStackTF) { testScript(s, true, expectedStackTF, SCRIPT_ERR_OK); }
+void testScript(const CScript &s, ScriptError expectedError) { testScript(s, false, false, expectedError); }
+BOOST_AUTO_TEST_CASE(bignumscript_test)
+{
+    CScript s;
+    // Should wrap due to mod
+    testScript(CScript() << 0x1000 << OP_SETBMD << bns(0xfff) << OP_BIN2BIGNUM << OP_1 << OP_ADD, false);
+    // Should not wrap
+    testScript(CScript() << 0x1000 << OP_SETBMD << bns(0xffe) << OP_BIN2BIGNUM << OP_1 << OP_ADD, true);
+
+    // Check equality
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << bns(0xffeff) << OP_BIN2BIGNUM << OP_EQUAL, true);
+
+    testScript(CScript() << bns(0xffeff) << bns(0xefeff) << OP_BIN2BIGNUM << OP_EQUAL, false);
+
+    testScript(
+        CScript() << bns(0xffeff) << OP_BIN2BIGNUM << OP_4 << OP_RSHIFT << bns(0xffef) << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << bns(4) << OP_BIN2BIGNUM << OP_RSHIFT << bns(0xffef)
+                         << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+
+    testScript(
+        CScript() << bns(0xffeff) << OP_BIN2BIGNUM << OP_4 << OP_LSHIFT << bns(0xffeff0) << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << bns(4) << OP_BIN2BIGNUM << OP_LSHIFT << bns(0xffeff0)
+                         << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+
+    // Can't shift by negative numbers
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << -20 << OP_RSHIFT, SCRIPT_ERR_BAD_OPERATION_ON_TYPE);
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << bns(-20) << OP_BIN2BIGNUM << OP_LSHIFT,
+        SCRIPT_ERR_BAD_OPERATION_ON_TYPE);
+
+    // Shift too big
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << 10000 << OP_LSHIFT, SCRIPT_ERR_INVALID_NUMBER_RANGE);
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << 10000 << OP_BIN2BIGNUM << OP_LSHIFT,
+        SCRIPT_ERR_INVALID_NUMBER_RANGE);
+
+    // Big right shift becomes 0
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << 10000 << OP_BIN2BIGNUM << OP_RSHIFT, false);
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << 10000 << OP_BIN2BIGNUM << OP_RSHIFT, false);
+
+    // multiply only enabled for bignum
+    testScript(CScript() << 10 << 20 << OP_MUL, SCRIPT_ERR_DISABLED_OPCODE);
+    // Try 1 bignum arg
+    testScript(CScript() << 10 << OP_BIN2BIGNUM << 20 << OP_MUL << 1 << OP_NUM2BIN << 200 << OP_EQUAL, true);
+    testScript(CScript() << 10 << 20 << OP_BIN2BIGNUM << OP_MUL << 200 << OP_BIN2BIGNUM << OP_EQUAL, true);
+    // Try negative
+    testScript(CScript() << 10 << -20 << OP_BIN2BIGNUM << OP_MUL << -200 << OP_BIN2BIGNUM << OP_EQUAL, true);
+
+    s = CScript() << (0x100000000000000000000000000000000_BN).serialize(256 / 8) << OP_SETBMD
+                  << (0x123456789abcdef_BN).serialize(256 / 8) << OP_BIN2BIGNUM
+                  << (0xfedcba9876543210_BN).serialize(256 / 8) << OP_BIN2BIGNUM << OP_MUL
+                  << (1505644448203263502622459810266844400_BN).serialize(256 / 8) << OP_BIN2BIGNUM << OP_EQUAL;
+    testScript(s, true);
+
+    // Test mul with BMD modular operation
+    testScript(CScript() << (0x100000000000000000000000000000000_BN).serialize(256 / 8) << OP_SETBMD
+                         << (0x123456789abcdef_BN).serialize(256 / 8) << OP_BIN2BIGNUM
+                         << (0xfedcba9876543210_BN).serialize(256 / 8) << OP_BIN2BIGNUM
+                         << (0x123456789a_BN).serialize(256 / 8) << OP_SETBMD << OP_MUL << bns(46379439580)
+                         << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+
+    // This is the same as prior because MOD kind-of-distributes through *, (A*B)%C == ((A%C)*(B%C))%C
+    testScript(CScript() << (0x123456789a_BN).serialize(256 / 8) << OP_SETBMD
+                         << (0x123456789abcdef_BN).serialize(256 / 8) << OP_BIN2BIGNUM
+                         << (0xfedcba9876543210_BN).serialize(256 / 8) << OP_BIN2BIGNUM << OP_MUL << bns(46379439580)
+                         << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+
+    // Try negative mul with BMD mod
+    testScript(CScript() << (0x123456789a_BN).serialize(256 / 8) << OP_SETBMD
+                         << (-0x123456789abcdef_BN).serialize(256 / 8) << OP_BIN2BIGNUM
+                         << (0xfedcba9876543210_BN).serialize(256 / 8) << OP_BIN2BIGNUM << OP_MUL << bns(-46379439580)
+                         << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+}
+
 
 BOOST_AUTO_TEST_SUITE_END()

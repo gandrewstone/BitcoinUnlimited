@@ -900,6 +900,7 @@ protected:
     };
 };
 
+
 UniValue SubmitBlock(CBlock &block)
 {
     uint256 hash = block.GetHash();
@@ -921,16 +922,19 @@ UniValue SubmitBlock(CBlock &block)
     CValidationState state;
     submitblock_StateCatcher sc(block.GetHash());
     LOG(RPC, "Received block %s via RPC.\n", block.GetHash().ToString());
-    RegisterValidationInterface(&sc);
+    bool fAccepted = false;
+    {
+        RaiiRegisterValidationInterface regDereg(&sc);
 
-    // In we are mining our own block or not running in parallel for any reason
-    // we must terminate any block validation threads that are currently running,
-    // Unless they have more work than our own block or are processing a chain
-    // that has more work than our block.
-    PV->StopAllValidationThreads(block.GetBlockHeader().nBits);
+        // In we are mining our own block or not running in parallel for any reason
+        // we must terminate any block validation threads that are currently running,
+        // Unless they have more work than our own block or are processing a chain
+        // that has more work than our block.
+        PV->StopAllValidationThreads(block.GetBlockHeader().nBits);
 
-    bool fAccepted = ProcessNewBlock(state, Params(), nullptr, &block, true, nullptr, false);
-    UnregisterValidationInterface(&sc);
+        fAccepted = ProcessNewBlock(state, Params(), nullptr, &block, true, nullptr, false);
+    }
+
     if (fBlockPresent)
     {
         if (fAccepted && !sc.found)

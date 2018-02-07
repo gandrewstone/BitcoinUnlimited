@@ -9,6 +9,7 @@ import copy
 if sys.version_info[0] < 3:
     raise "Use Python 3"
 import logging
+import enum
 
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import *
@@ -36,17 +37,21 @@ class MyTest (BitcoinTestFramework):
         assert(worked)
         # Check stack
         stk = sm.stack()
-        assert_equal(int.from_bytes(stk[1], byteorder='little'), 1)
-        assert_equal(len(stk[0]), 0)
+        assert_equal(stk[1][0], cashlib.StackItemType.BYTES)
+        assert_equal(int.from_bytes(stk[1][1], byteorder='little'), 1)
+        assert_equal(len(stk[0][1]), 0)
 
         altstk = sm.altstack()
-        assert_equal(int.from_bytes(altstk[0], byteorder='little'), 5)
-        assert_equal(int.from_bytes(altstk[1], byteorder='little'), 6)
+        assert_equal(stk[0][0], cashlib.StackItemType.BYTES)
+        assert_equal(int.from_bytes(altstk[0][1], byteorder='little'), 5)
+        assert_equal(stk[1][0], cashlib.StackItemType.BYTES)
+        assert_equal(int.from_bytes(altstk[1][1], byteorder='little'), 6)
 
         worked = sm.eval(CScript([OP_FROMALTSTACK, OP_FROMALTSTACK]))
         assert(worked)
         stk = sm.stack()
-        assert_equal(int.from_bytes(stk[0], byteorder='little'), 6)
+        assert_equal(stk[0][0], cashlib.StackItemType.BYTES)
+        assert_equal(int.from_bytes(stk[0][1], byteorder='little'), 6)
 
         # Check reset
         sm.reset()
@@ -68,7 +73,7 @@ class MyTest (BitcoinTestFramework):
         except cashlib.Error as e:
             assert(str(e) == 'stepped beyond end of script')
         stk = sm.stack()
-        assert_equal(int.from_bytes(stk[0], byteorder='little'), 2)
+        assert_equal(int.from_bytes(stk[0][1], byteorder='little'), 2)
 
         sm.reset()
         # Check clone
@@ -77,39 +82,39 @@ class MyTest (BitcoinTestFramework):
         sm2 = sm.clone()
         worked = sm.eval(CScript([OP_IF, OP_IF, OP_2, OP_ELSE, OP_3, OP_ENDIF, OP_ENDIF]))
         stk = sm.stack()
-        assert_equal(int.from_bytes(stk[0], byteorder='little'), 2)
+        assert_equal(int.from_bytes(stk[0][1], byteorder='little'), 2)
         sm.cleanup()
 
         worked = sm2.eval(CScript([OP_IF, OP_IF, OP_3, OP_ELSE, OP_2, OP_ENDIF, OP_ENDIF]))
         assert(worked)
         stk = sm2.stack()
-        assert_equal(int.from_bytes(stk[0], byteorder='little'), 3)
+        assert_equal(int.from_bytes(stk[0][1], byteorder='little'), 3)
         sm2.cleanup()
 
         # Check stack assignment
         sm = cashlib.ScriptMachine()
         worked = sm.eval(CScript([OP_1, OP_1]))
         assert(worked)
-        sm.setStackItem(1, b"")
+        sm.setStackItem(1, cashlib.StackItemType.BYTES, b"")
         worked = sm.eval(CScript([OP_IF, OP_IF, OP_2, OP_ELSE, OP_3, OP_ENDIF, OP_ENDIF]))
         assert(worked)
         stk = sm.stack()
         # since I overwrote a true with a false, the else condition should have been taken
-        assert_equal(int.from_bytes(stk[0], byteorder='little'), 3)
+        assert_equal(int.from_bytes(stk[0][1], byteorder='little'), 3)
 
         # Check stack push
         sm.reset()
-        sm.setStackItem(-1, b"")
-        sm.setStackItem(-1, bytes([1]))
+        sm.setStackItem(-1, cashlib.StackItemType.BYTES, b"")
+        sm.setStackItem(-1, cashlib.StackItemType.BYTES, bytes([1]))
         worked = sm.eval(CScript([OP_IF, OP_IF, OP_2, OP_ELSE, OP_3, OP_ENDIF, OP_ENDIF]))
         assert(worked)
         stk = sm.stack()
-        assert_equal(int.from_bytes(stk[0], byteorder='little'), 3)
+        assert_equal(int.from_bytes(stk[0][1], byteorder='little'), 3)
         assert(sm.error()[0] == 0)
 
         # Check script error
         sm.reset()
-        sm.setStackItem(-1, bytes([1]))
+        sm.setStackItem(-1, cashlib.StackItemType.BYTES, bytes([1]))
         worked = sm.eval(CScript([OP_IF, OP_IF, OP_2, OP_ELSE, OP_3, OP_ENDIF, OP_ENDIF]))
         assert(not worked)
         err = sm.error()

@@ -20,6 +20,11 @@ BCH = 100000000
 
 cashlib = None
 
+# match this with value in stackitem.h
+class StackItemType(IntEnum):
+    BYTES = 0
+    BIGNUM = 1
+
 class Error(BaseException):
     pass
 
@@ -223,36 +228,50 @@ class ScriptError(IntEnum):
     SCRIPT_ERR_UNKNOWN_ERROR = 1
     SCRIPT_ERR_EVAL_FALSE = 2
     SCRIPT_ERR_OP_RETURN = 3
+
+    # Max sizes
     SCRIPT_ERR_SCRIPT_SIZE = 4
     SCRIPT_ERR_PUSH_SIZE = 5
     SCRIPT_ERR_OP_COUNT = 6
     SCRIPT_ERR_STACK_SIZE = 7
     SCRIPT_ERR_SIG_COUNT = 8
     SCRIPT_ERR_PUBKEY_COUNT = 9
+
+    # Operands checks
     SCRIPT_ERR_INVALID_OPERAND_SIZE = 10
     SCRIPT_ERR_INVALID_NUMBER_RANGE = 11
     SCRIPT_ERR_IMPOSSIBLE_ENCODING = 12
     SCRIPT_ERR_INVALID_SPLIT_RANGE = 13
     SCRIPT_ERR_INVALID_BIT_COUNT = 14
+
+    # Failed verify operations
     SCRIPT_ERR_VERIFY = 15
     SCRIPT_ERR_EQUALVERIFY = 16
     SCRIPT_ERR_CHECKMULTISIGVERIFY = 17
     SCRIPT_ERR_CHECKSIGVERIFY = 18
     SCRIPT_ERR_CHECKDATASIGVERIFY = 19
     SCRIPT_ERR_NUMEQUALVERIFY = 20
-    SCRIPT_ERR_BAD_OPCODE = 21
 
+    # Logical/Format/Canonical errors
+    SCRIPT_ERR_BAD_OPCODE = 21
     SCRIPT_ERR_DISABLED_OPCODE = 22
     SCRIPT_ERR_INVALID_STACK_OPERATION = 23
     SCRIPT_ERR_INVALID_ALTSTACK_OPERATION = 24
     SCRIPT_ERR_UNBALANCED_CONDITIONAL = 25
+
+    #  Divisor errors
     SCRIPT_ERR_DIV_BY_ZERO = 26
     SCRIPT_ERR_MOD_BY_ZERO = 27
 
+    # Bitfield errors
     SCRIPT_ERR_INVALID_BITFIELD_SIZE = 28
     SCRIPT_ERR_INVALID_BIT_RANGE = 29
+
+    # CHECKLOCKTIMEVERIFY and CHECKSEQUENCEVERIFY
     SCRIPT_ERR_NEGATIVE_LOCKTIME = 30
     SCRIPT_ERR_UNSATISFIED_LOCKTIME = 31
+
+    # BIP62 (Malleability)
     SCRIPT_ERR_SIG_HASHTYPE = 32
     SCRIPT_ERR_SIG_DER = 33
     SCRIPT_ERR_MINIMALDATA = 34
@@ -261,13 +280,27 @@ class ScriptError(IntEnum):
     SCRIPT_ERR_PUBKEYTYPE = 37
     SCRIPT_ERR_CLEANSTACK = 38
     SCRIPT_ERR_SIG_NULLFAIL = 39
+
+    # Schnorr
     SCRIPT_ERR_SIG_BADLENGTH = 40
-    SCRIPT_ERR_MUST_USE_FORKID = 41
-    SCRIPT_ERR_DISCOURAGE_UPGRADABLE_NOPS = 42
-    SCRIPT_ERR_NONCOMPRESSED_PUBKEY = 43
-    SCRIPT_ERR_NUMBER_OVERFLOW = 44
-    SCRIPT_ERR_NUMBER_BAD_ENCODING = 45
-    SCRIPT_ERR_ERROR_COUNT = 46
+    SCRIPT_ERR_SIG_NONSCHNORR = 41
+    SCRIPT_ERR_MUST_USE_FORKID = 42
+
+    # Misc
+    SCRIPT_ERR_DISCOURAGE_UPGRADABLE_NOPS = 43
+    SCRIPT_ERR_NONCOMPRESSED_PUBKEY = 44
+    SCRIPT_ERR_NUMBER_OVERFLOW = 45
+    SCRIPT_ERR_NUMBER_BAD_ENCODING = 46
+    SIGCHECKS_LIMIT_EXCEEDED = 47
+
+    # Nextchain
+    SCRIPT_ERR_TEMPLATE = 48,
+    SCRIPT_ERR_EXEC_DEPTH_EXCEEDED = 49,
+    SCRIPT_ERR_EXEC_COUNT_EXCEEDED = 50,
+    SCRIPT_ERR_BAD_OPERATION_ON_TYPE = 51,
+    SCRIPT_ERR_DATA_REQUIRED = 52,
+
+    SCRIPT_ERR_ERROR_COUNT = 53
 
 class ScriptFlags(IntFlag):
     SCRIPT_VERIFY_P2SH = 1
@@ -394,22 +427,29 @@ class ScriptMachine:
         stk = []
         idx  = 0
         item = create_string_buffer(MAX_STACK_ITEM_LENGTH)
+        itemType = create_string_buffer(1)
         while 1:
-            result = cashlib.SmGetStackItem(self.smId, which, idx, item)
+            result = cashlib.SmGetStackItem(self.smId, which, idx, itemType, item)
             if result == -1: break
-            stk.append(item[0:result])
+            if itemType[0] == b'\x00':
+                itemTyp = StackItemType.BYTES
+            elif itemType[0] == b'\x01':
+                itemTyp = StackItemType.BIGNUM
+            else:
+                raise Error("Bad stack item type")
+            stk.append((itemTyp, item[0:result]))
             idx+=1
         return stk
 
-    def setAltStackItem(self, idx, value):
+    def setAltStackItem(self, idx, itemType, value):
         """Set an item on the stack to a value, index 0 is the top.  index -1 means push"""
-        self.setStackItem(idx, value, self.ALTSTACK)
+        self.setStackItem(idx, itemType, value, self.ALTSTACK)
 
-    def setStackItem(self, idx, value, which = None):
+    def setStackItem(self, idx, itemType, value, which = None):
         """Set an item on the stack to a value, index 0 is the top.  index -1 means push"""
         if self.smId==0: raise Error("accessed inactive script machine")
         if which is None: which = self.STACK
-        cashlib.SmSetStackItem(self.smId, which, idx, value, len(value))
+        cashlib.SmSetStackItem(self.smId, which, idx, int(itemType), value, len(value))
 
 
 def Test():

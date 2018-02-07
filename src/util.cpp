@@ -639,7 +639,7 @@ fs::path GetDefaultDataDir()
 // Unix: ~/.bitcoin
 #ifdef WIN32
     // Windows
-    return GetSpecialFolderPath(CSIDL_APPDATA) / "Bitcoin";
+    return GetSpecialFolderPath(CSIDL_APPDATA) / CBaseChainParams::NEXTCHAIN;
 #else
     fs::path pathRet;
     char *pszHome = getenv("HOME");
@@ -649,10 +649,10 @@ fs::path GetDefaultDataDir()
         pathRet = fs::path(pszHome);
 #ifdef MAC_OSX
     // Mac
-    return pathRet / "Library/Application Support/Bitcoin";
+    return pathRet / "Library/Application Support/" / CBaseChainParams::NEXTCHAIN;
 #else
     // Unix
-    return pathRet / ".bitcoin";
+    return pathRet / (std::string(".") + CBaseChainParams::NEXTCHAIN);
 #endif
 #endif
 }

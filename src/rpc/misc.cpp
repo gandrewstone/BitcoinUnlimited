@@ -126,7 +126,11 @@ UniValue getinfo(const UniValue &params, bool fHelp)
     obj.pushKV("status", statusStrings.GetPrintable());
     obj.pushKV("txindex", IsTxIndexReady() ? "synced" : "not ready");
     obj.pushKV("errors", GetWarnings("statusbar"));
-    obj.pushKV("fork", "Bitcoin Cash");
+    auto p = Params();
+    if (p.NetworkIDString() == CBaseChainParams::NEXTCHAIN)
+        obj.pushKV("fork", "NextChain");
+    else
+        obj.pushKV("fork", "Bitcoin Cash");
 
     return obj;
 }

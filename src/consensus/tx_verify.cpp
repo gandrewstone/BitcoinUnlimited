@@ -6,6 +6,7 @@
 #include "tx_verify.h"
 
 #include "consensus.h"
+#include "grouptokens.h"
 #include "main.h"
 #include "primitives/transaction.h"
 #include "script/interpreter.h"
@@ -223,6 +224,10 @@ bool CheckTransaction(const CTransactionRef tx, CValidationState &state)
         // BU convert 100 to a constant so we can use it during generation
         if (tx->vin[0].scriptSig.size() < 2 || tx->vin[0].scriptSig.size() > MAX_COINBASE_SCRIPTSIG_SIZE)
             return state.DoS(100, false, REJECT_INVALID, "bad-cb-length");
+
+        // Coinbase tx can't have group outputs because it has no group inputs or mintable outputs
+        if (IsAnyTxOutputGrouped(*tx))
+            return state.DoS(100, false, REJECT_INVALID, "coinbase-has-group-outputs");
     }
     else
     {

@@ -101,6 +101,7 @@ void StopTxAdmission()
 {
     cvTxInQ.notify_all();
     cvCommitQ.notify_all();
+    // cvCommitted.notify_all();
 }
 
 void FlushTxAdmission()
@@ -125,6 +126,7 @@ void FlushTxAdmission()
             {
                 cvCommitQ.timed_wait(lock, boost::posix_time::milliseconds(100));
             } while (!txCommitQ->empty());
+            // cvCommitted.notify_all();
         }
 
         { // block everything and check
@@ -477,7 +479,7 @@ void ThreadTxAdmission()
                         RelayTransaction(tx);
 
                         // LOG(MEMPOOL, "Accepted tx: peer=%s: accepted %s onto Q\n", txd.nodeName,
-                        //     tx->GetHash().ToString());
+                        //    tx->GetHash().ToString());
                     }
                     else
                     {
@@ -602,6 +604,8 @@ bool AcceptToMemoryPool(CTxMemPool &pool,
                 pcoinsTip->Uncache(remove);
         }
 
+        // Do this commit inside the cs_accept lock to ensure that this function retains its original sequential
+        // behavior
         if (res)
             CommitTxToMempool();
 
@@ -1099,7 +1103,6 @@ bool ParallelAcceptToMemoryPool(Snapshot &ss,
             // useful but spammy
             // LOG(MEMPOOL, "MempoolBytes:%d  LimitFreeRelay:%.5g  nMinRelay:%.4g  FeesSatoshiPerByte:%.4g  TxBytes:%d "
             //                         "TxFees:%d\n",
-            //                poolBytes, nFreeLimit, nMinRelay, ((double)nModifiedFees) / nSize, nSize, nModifiedFees);
             if (fLimitFree)
             {
                 if (nLimitFreeRelay > 0 && nModifiedFees < ::minRelayTxFee.GetFee(nSize))

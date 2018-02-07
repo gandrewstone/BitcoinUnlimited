@@ -12,6 +12,7 @@
 #include "blockstorage/sequential_files.h"
 #include "checkpoints.h"
 #include "connmgr.h"
+#include "consensus/grouptokens.h"
 #include "consensus/merkle.h"
 #include "consensus/tx_verify.h"
 #include "dosman.h"
@@ -31,6 +32,7 @@
 #include <algorithm>
 #include <boost/scope_exit.hpp>
 #include <unordered_set>
+void ProcessOrphans(std::vector<uint256> &vWorkQueue);
 
 extern CTweak<int> maxReorgDepth;
 void ProcessOrphans(std::vector<uint256> &vWorkQueue);
@@ -1040,6 +1042,14 @@ bool CheckInputs(const CTransactionRef &tx,
                 return false;
             }
         }
+
+        if (((unsigned int)chainActive.Tip()->nHeight >= enforceOpGroupStartHeight) &&
+            !CheckGroupTokens(*tx, state, inputs))
+        {
+            return state.DoS(0, false, REJECT_MALFORMED, "token-group-imbalance", false,
+                strprintf("Token group inputs and outputs do not balance"));
+        }
+
         if (pvChecks)
             pvChecks->reserve(tx->vin.size());
 
@@ -1292,7 +1302,7 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params &consensusParams)
     if (halvings >= 64)
         return 0;
 
-    CAmount nSubsidy = 50 * COIN;
+    CAmount nSubsidy = consensusParams.initialSubsidy;
     // Subsidy is cut in half every 210,000 blocks which will occur approximately every 4 years.
     nSubsidy >>= halvings;
     return nSubsidy;
@@ -3760,8 +3770,9 @@ bool ActivateBestChain(CValidationState &state,
 
                 if (pfrom)
                 {
-                    pfrom->PushMessage(NetMsgType::REJECT, (std::string)NetMsgType::BLOCK, state.GetRejectCode(),
-                        state.GetRejectReason().substr(0, MAX_REJECT_MESSAGE_LENGTH), pblock->GetHash());
+                    if (pblock)
+                        pfrom->PushMessage(NetMsgType::REJECT, (std::string)NetMsgType::BLOCK, state.GetRejectCode(),
+                            state.GetRejectReason().substr(0, MAX_REJECT_MESSAGE_LENGTH), pblock->GetHash());
                     if (nDoS > 0)
                         dosMan.Misbehaving(pfrom, nDoS);
                 }

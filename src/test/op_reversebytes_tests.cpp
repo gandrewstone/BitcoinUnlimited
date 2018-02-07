@@ -11,8 +11,8 @@
 
 #include <boost/test/unit_test.hpp>
 
-typedef std::vector<uint8_t> valtype;
-typedef std::vector<valtype> stacktype;
+typedef StackItem valtype;
+typedef Stack stacktype;
 
 BOOST_FIXTURE_TEST_SUITE(op_reversebytes_tests, BasicTestingSetup)
 
@@ -21,10 +21,9 @@ static void CheckErrorWithFlags(const uint32_t flags,
     const CScript &script,
     const ScriptError expected)
 {
-    BaseSignatureChecker sigchecker;
     ScriptError err = SCRIPT_ERR_OK;
     stacktype stack{original_stack};
-    bool r = EvalScript(stack, script, flags, MAX_OPS_PER_SCRIPT, sigchecker, &err);
+    bool r = EvalScript(stack, script, flags, MAX_OPS_PER_SCRIPT, ScriptImportedState(), &err);
     BOOST_CHECK(!r);
     BOOST_CHECK(err == expected);
 }
@@ -34,10 +33,9 @@ static void CheckPassWithFlags(const uint32_t flags,
     const CScript &script,
     const stacktype &expected)
 {
-    BaseSignatureChecker sigchecker;
     ScriptError err = SCRIPT_ERR_OK;
     stacktype stack{original_stack};
-    bool r = EvalScript(stack, script, flags, MAX_OPS_PER_SCRIPT, sigchecker, &err);
+    bool r = EvalScript(stack, script, flags, MAX_OPS_PER_SCRIPT, ScriptImportedState(), &err);
     BOOST_CHECK(r);
     BOOST_CHECK(err == SCRIPT_ERR_OK);
     BOOST_CHECK(stack == expected);
@@ -114,7 +112,7 @@ BOOST_AUTO_TEST_CASE(op_reversebytes_iota)
         {
             iota_data.emplace_back(item % 256);
         }
-        valtype iota_data_reversed = {iota_data.rbegin(), iota_data.rend()};
+        valtype iota_data_reversed = {iota_data.data().rbegin(), iota_data.data().rend()};
         for (size_t i = 0; i < 4096; i++)
         {
             uint32_t flags = lcg.next();
@@ -149,7 +147,7 @@ BOOST_AUTO_TEST_CASE(op_reversebytes_random_and_palindrome)
         {
             random_data.emplace_back(lcg.next() % 256);
         }
-        valtype random_data_reversed = {random_data.rbegin(), random_data.rend()};
+        valtype random_data_reversed = {random_data.data().rbegin(), random_data.data().rend()};
 
         // Make a palindrome of the form 0..n..0.
         valtype palindrome;

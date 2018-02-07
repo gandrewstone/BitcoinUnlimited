@@ -21,8 +21,11 @@ BOOST_FIXTURE_TEST_SUITE(excessiveblock_test, TestingSetup)
 
 BOOST_AUTO_TEST_CASE(rpc_excessive)
 {
-    BOOST_CHECK_NO_THROW(CallRPC("getexcessiveblock"));
+    // Set to values expected for this test
+    BOOST_CHECK_NO_THROW(CallRPC("setminingmaxblock 1000000"));
+    BOOST_CHECK_NO_THROW(CallRPC("setexcessiveblock 32000000 12"));
 
+    BOOST_CHECK_NO_THROW(CallRPC("getexcessiveblock"));
     BOOST_CHECK_NO_THROW(CallRPC("getminingmaxblock"));
 
     // Testing the parsing of input parameters of setexcessive block,

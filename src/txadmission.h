@@ -146,6 +146,7 @@ extern std::queue<CTxInputData> txDeferQ;
 // Transactions that are validated and can be committed to the mempool, and protection
 extern CWaitableCriticalSection csCommitQ;
 extern CConditionVariable cvCommitQ;
+// extern CConditionVariable cvCommitted;  // notified whenever txes are committed.
 extern std::map<uint256, CTxCommitData> *txCommitQ;
 
 // returns a transaction ref, if it exists in the commitQ

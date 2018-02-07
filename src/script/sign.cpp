@@ -105,6 +105,7 @@ static bool SignStep(const BaseSignatureCreator &creator,
         return Sign1(keyID, creator, scriptPubKey, scriptSigRet);
 
     case TX_PUBKEYHASH:
+    case TX_GRP_PUBKEYHASH:
         keyID = CKeyID(uint160(vSolutions[0]));
         if (!Sign1(keyID, creator, scriptPubKey, scriptSigRet))
             return false;
@@ -117,6 +118,7 @@ static bool SignStep(const BaseSignatureCreator &creator,
         return true;
 
     case TX_SCRIPTHASH:
+    case TX_GRP_SCRIPTHASH:
         return creator.KeyStore().GetCScript(uint160(vSolutions[0]), scriptSigRet);
 
     case TX_MULTISIG:
@@ -133,7 +135,7 @@ bool ProduceSignature(const BaseSignatureCreator &creator, const CScript &fromPu
     if (!SignStep(creator, fromPubKey, scriptSig, whichType))
         return false;
 
-    if (whichType == TX_SCRIPTHASH)
+    if ((whichType == TX_SCRIPTHASH) || (whichType == TX_GRP_SCRIPTHASH))
     {
         // Solver returns the subscript that need to be evaluated;
         // the final scriptSig is the signatures from that
@@ -153,8 +155,11 @@ bool ProduceSignature(const BaseSignatureCreator &creator, const CScript &fromPu
     // Additionally, while this constant is currently being raised it will eventually settle to a very high const
     // value.  There is no reason to break layering by using the tweak only to take that out later.
 
-    return VerifyScript(scriptSig, fromPubKey, STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_SIGHASH_FORKID,
-        MAX_OPS_PER_SCRIPT, creator.Checker());
+    // We don't have the capability of signing with tx context dependent instructions so ScriptImportedState can be
+    // degenrate.
+    ScriptImportedState sis(&creator.Checker(), CTransactionRef(nullptr), 0, 0);
+    return VerifyScript(
+        scriptSig, fromPubKey, STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_SIGHASH_FORKID, MAX_OPS_PER_SCRIPT, sis);
 }
 
 bool SignSignature(const CKeyStore &keystore,
@@ -187,31 +192,31 @@ bool SignSignature(const CKeyStore &keystore,
     return SignSignature(keystore, txout.scriptPubKey, txTo, nIn, txout.nValue, nHashType);
 }
 
-static CScript PushAll(const vector<valtype> &values)
+static CScript PushAll(const Stack &values)
 {
     CScript result;
-    for (const valtype &v : values)
-        result << v;
+    for (const StackItem &v : values)
+        result << v.data(); // Every item must be a vch or data() throws
     return result;
 }
 
 static CScript CombineMultisig(const CScript &scriptPubKey,
     const BaseSignatureChecker &checker,
     const vector<valtype> &vSolutions,
-    const vector<valtype> &sigs1,
-    const vector<valtype> &sigs2)
+    const Stack &sigs1,
+    const Stack &sigs2)
 {
     // Combine all the signatures we've got:
     set<valtype> allsigs;
-    for (const valtype &v : sigs1)
+    for (const StackItem &v : sigs1)
     {
         if (!v.empty())
-            allsigs.insert(v);
+            allsigs.insert(v.data());
     }
-    for (const valtype &v : sigs2)
+    for (const StackItem &v : sigs2)
     {
         if (!v.empty())
-            allsigs.insert(v);
+            allsigs.insert(v.data());
     }
 
     // Build a map of pubkey -> signature by matching sigs to pubkeys:
@@ -257,8 +262,8 @@ static CScript CombineSignatures(const CScript &scriptPubKey,
     const BaseSignatureChecker &checker,
     const txnouttype txType,
     const vector<valtype> &vSolutions,
-    vector<valtype> &sigs1,
-    vector<valtype> &sigs2)
+    Stack &sigs1,
+    Stack &sigs2)
 {
     switch (txType)
     {
@@ -271,10 +276,12 @@ static CScript CombineSignatures(const CScript &scriptPubKey,
     case TX_CLTV: // Freeze CLTV contains pubkey
     case TX_PUBKEY:
     case TX_PUBKEYHASH:
+    case TX_GRP_PUBKEYHASH:
         // Signatures are bigger than placeholders or empty scripts:
         if (sigs1.empty() || sigs1[0].empty())
             return PushAll(sigs2);
         return PushAll(sigs1);
+    case TX_GRP_SCRIPTHASH:
     case TX_SCRIPTHASH:
         if (sigs1.empty() || sigs1.back().empty())
             return PushAll(sigs2);
@@ -283,7 +290,7 @@ static CScript CombineSignatures(const CScript &scriptPubKey,
         else
         {
             // Recur to combine:
-            valtype spk = sigs1.back();
+            valtype spk = sigs1.back().data();
             CScript pubKey2(spk.begin(), spk.end());
 
             txnouttype txType2;
@@ -314,12 +321,12 @@ CScript CombineSignatures(const CScript &scriptPubKey,
     vector<vector<unsigned char> > vSolutions;
     Solver(scriptPubKey, txType, vSolutions);
 
-    vector<valtype> stack1;
+    Stack stack1;
     // scriptSig should have no ops in them, only data pushes.  Send MAX_OPS_PER_SCRIPT to mirror existing
     // behavior exactly.
-    EvalScript(stack1, scriptSig1, SCRIPT_VERIFY_STRICTENC, MAX_OPS_PER_SCRIPT, BaseSignatureChecker());
-    vector<valtype> stack2;
-    EvalScript(stack2, scriptSig2, SCRIPT_VERIFY_STRICTENC, MAX_OPS_PER_SCRIPT, BaseSignatureChecker());
+    EvalScript(stack1, scriptSig1, SCRIPT_VERIFY_STRICTENC, MAX_OPS_PER_SCRIPT, ScriptImportedState());
+    Stack stack2;
+    EvalScript(stack2, scriptSig2, SCRIPT_VERIFY_STRICTENC, MAX_OPS_PER_SCRIPT, ScriptImportedState());
 
     return CombineSignatures(scriptPubKey, checker, txType, vSolutions, stack1, stack2);
 }

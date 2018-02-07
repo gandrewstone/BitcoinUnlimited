@@ -8,12 +8,13 @@
 #define BITCOIN_SCRIPT_INTERPRETER_H
 
 #include "primitives/transaction.h"
+#include "script/bignum.h"
+#include "script/stackitem.h"
 #include "script_error.h"
 
 #include <stdint.h>
 #include <string>
 #include <vector>
-
 
 class CPubKey;
 class CScript;
@@ -135,6 +136,8 @@ enum
 
 };
 
+class BaseSignatureChecker;
+
 bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned int flags, ScriptError *serror);
 
 /**
@@ -186,11 +189,11 @@ public:
 class TransactionSignatureChecker : public BaseSignatureChecker
 {
 protected:
-    const CTransaction *txTo;
-    unsigned int nIn;
-    const CAmount amount;
-    mutable size_t nBytesHashed;
-    mutable size_t nSigops;
+    const CTransaction *txTo = nullptr;
+    unsigned int nIn = 0;
+    CAmount amount = 0;
+    mutable size_t nBytesHashed = 0;
+    mutable size_t nSigops = 0;
 
 public:
     TransactionSignatureChecker(const CTransaction *txToIn,
@@ -201,6 +204,20 @@ public:
     {
         nFlags = flags;
     }
+    TransactionSignatureChecker() {} // 2 phase initialization
+    void Init(const CTransaction *txToIn,
+        unsigned int nInIn,
+        const CAmount &amountIn,
+        unsigned int flags = SCRIPT_ENABLE_SIGHASH_FORKID)
+    {
+        txTo = txToIn;
+        nIn = nInIn;
+        amount = amountIn;
+        nFlags = flags;
+        nBytesHashed = 0;
+        nSigops = 0;
+    }
+
     bool CheckSig(const std::vector<unsigned char> &scriptSig,
         const std::vector<unsigned char> &vchPubKey,
         const CScript &scriptCode) const;
@@ -225,7 +242,70 @@ public:
     }
 };
 
-typedef std::vector<unsigned char> StackDataType;
+typedef StackItem StackDataType;
+typedef std::vector<StackItem> Stack;
+
+/** All external state that a script is allowed to access must be provided here.
+ */
+class ScriptImportedState
+{
+public:
+    const BaseSignatureChecker *checker = nullptr;
+    CTransactionRef tx = nullptr;
+    // CScript scriptCode;
+    unsigned int nIn = 0;
+    CAmount amount = 0;
+
+    ScriptImportedState(const BaseSignatureChecker *c,
+        CTransactionRef t,
+        unsigned int inputIdx,
+        unsigned int inputAmount)
+        : checker(c), tx(t), nIn(inputIdx), amount(inputAmount)
+    {
+    }
+    ScriptImportedState() {}
+};
+
+class ScriptImportedStateSig : public ScriptImportedState
+{
+public:
+    TransactionSignatureChecker tsc;
+
+    ScriptImportedStateSig(const CMutableTransaction *txToIn,
+        unsigned int inIndex,
+        const CAmount &amountIn,
+        unsigned int flags = SCRIPT_ENABLE_SIGHASH_FORKID)
+    {
+        tx = MakeTransactionRef(*txToIn);
+        nIn = inIndex;
+        amount = amountIn;
+        tsc.Init(&(*tx), nIn, amount, flags);
+        checker = &tsc;
+    }
+    ScriptImportedStateSig(const CTransaction *txToIn,
+        unsigned int inIndex,
+        const CAmount &amountIn,
+        unsigned int flags = SCRIPT_ENABLE_SIGHASH_FORKID)
+    {
+        tx = MakeTransactionRef(*txToIn);
+        nIn = inIndex;
+        amount = amountIn;
+        tsc.Init(&(*tx), nIn, amount, flags);
+        checker = &tsc;
+    }
+    ScriptImportedStateSig(const CTransactionRef txToIn,
+        unsigned int inIndex,
+        const CAmount &amountIn,
+        unsigned int flags = SCRIPT_ENABLE_SIGHASH_FORKID)
+    {
+        tx = txToIn;
+        nIn = inIndex;
+        amount = amountIn;
+        tsc.Init(&(*tx), nIn, amount, flags);
+        checker = &tsc;
+    }
+};
+
 
 /**
  * Class that keeps track of number of signature operations
@@ -240,14 +320,17 @@ public:
     unsigned char sighashtype = 0;
     /** Number of instructions executed */
     unsigned int nOpCount = 0;
+    /** Number of op_execs executed */
+    unsigned int nOpExec = 0;
 
     ScriptMachineResourceTracker() {}
     /** Combine the results of this tracker and another tracker */
     void update(const ScriptMachineResourceTracker &stats)
     {
         consensusSigCheckCount += stats.consensusSigCheckCount;
-        nOpCount = stats.nOpCount;
+        nOpCount += stats.nOpCount;
         sighashtype |= stats.sighashtype;
+        nOpExec += stats.nOpExec;
     }
 
     /** Set all tracked values to zero */
@@ -256,6 +339,7 @@ public:
         consensusSigCheckCount = 0;
         sighashtype = 0;
         nOpCount = 0;
+        nOpExec = 0;
     }
 };
 
@@ -263,10 +347,10 @@ class ScriptMachine
 {
 protected:
     unsigned int flags;
-    std::vector<StackDataType> stack;
-    std::vector<StackDataType> altstack;
+    Stack stack;
+    Stack altstack;
+    BigNum bigNumModulo = 0x10000000000000000_BN; // 64 bit magnitude
     const CScript *script;
-    const BaseSignatureChecker &checker;
     ScriptError error;
 
     unsigned char sighashtype;
@@ -364,8 +448,11 @@ protected:
     ConditionStack vfExec;
 
 public:
+    /** All the external information that this virtual machine is allowed to access */
+    const ScriptImportedState &sis;
+
     ScriptMachine(const ScriptMachine &from)
-        : checker(from.checker), pc(from.pc), pbegin(from.pbegin), pend(from.pend), pbegincodehash(from.pbegincodehash)
+        : pc(from.pc), pbegin(from.pbegin), pend(from.pend), pbegincodehash(from.pbegincodehash), sis(from.sis)
     {
         flags = from.flags;
         stack = from.stack;
@@ -378,14 +465,14 @@ public:
         stats = from.stats;
     }
 
-    ScriptMachine(unsigned int _flags,
-        const BaseSignatureChecker &_checker,
-        unsigned int _maxOps,
-        unsigned int _maxSigOps)
-        : flags(_flags), script(nullptr), checker(_checker), pc(CScript().end()), pbegin(CScript().end()),
-          pend(CScript().end()), pbegincodehash(CScript().end()), maxOps(_maxOps), maxConsensusSigOps(_maxSigOps)
+    ScriptMachine(unsigned int _flags, const ScriptImportedState &_sis, unsigned int _maxOps, unsigned int _maxSigOps)
+        : flags(_flags), script(nullptr), pc(CScript().end()), pbegin(CScript().end()), pend(CScript().end()),
+          pbegincodehash(CScript().end()), maxOps(_maxOps), maxConsensusSigOps(_maxSigOps), sis(_sis)
     {
     }
+
+    // How many OP_EXECs have been called recursively
+    unsigned int execDepth = 0;
 
     // Execute the passed script starting at the current machine state (stack and altstack are not cleared).
     bool Eval(const CScript &_script);
@@ -404,7 +491,7 @@ public:
 
     // Returns info about the next instruction to be run:
     // first bool is true if the instruction will be executed (false if this is passing across a not-taken branch)
-    std::tuple<bool, opcodetype, StackDataType, ScriptError> Peek();
+    std::tuple<bool, opcodetype, StackItem, ScriptError> Peek();
 
     // Remove all items from the altstack
     void ClearAltStack() { altstack.clear(); }
@@ -418,6 +505,23 @@ public:
         stack.pop_back();
     }
 
+    /** Reserve capacity in the passed stack, if needed.  Iterators and references MAY be invalidated.  Use this
+        function to control when these are invalidated (for example, to avoid invalidation during subsequent
+        push_back calls).
+
+        Returns false if stack usage exceeded.
+    */
+    bool reserveIfNeeded(Stack &s, unsigned int amt)
+    {
+        const int extra = 10;
+        auto curSz = s.size();
+        if (curSz + amt > s.capacity())
+        {
+            s.reserve(curSz + amt + extra);
+        }
+        return true;
+    }
+
     // clear all state except for configuration like maximums
     void Reset()
     {
@@ -428,10 +532,10 @@ public:
     }
 
     // Set the main stack to the passed data
-    void setStack(const std::vector<StackDataType> &stk) { stack = stk; }
+    void setStack(const Stack &stk) { stack = stk; }
     // Overwrite a stack entry with the passed data.  0 is the stack top, -1 is a special number indicating to push
     // an item onto the stack top.
-    void setStackItem(int idx, const StackDataType &item)
+    void setStackItem(int idx, const StackItem &item)
     {
         if (idx == -1)
             stack.push_back(item);
@@ -443,7 +547,7 @@ public:
 
     // Overwrite an altstack entry with the passed data.  0 is the stack top, -1 is a special number indicating to push
     // the item onto the top.
-    void setAltStackItem(int idx, const StackDataType &item)
+    void setAltStackItem(int idx, const StackItem &item)
     {
         if (idx == -1)
             altstack.push_back(item);
@@ -453,12 +557,16 @@ public:
         }
     }
 
+    // Load or modify the main stack
+    Stack &modifyStack() { return stack; }
+    // Load or modify the alt stack
+    Stack &modifyAltStack() { return stack; }
     // Set the alt stack to the passed data
-    void setAltStack(std::vector<StackDataType> &stk) { altstack = stk; }
+    void setAltStack(const Stack &stk) { altstack = stk; }
     // Get the main stack
-    const std::vector<StackDataType> &getStack() { return stack; }
+    const Stack &getStack() { return stack; }
     // Get the alt stack
-    const std::vector<StackDataType> &getAltStack() { return altstack; }
+    const Stack &getAltStack() { return altstack; }
     // Get any error that may have occurred
     const ScriptError &getError() { return error; }
     // Get the bitwise OR of all sighashtype bytes that occurred in the script
@@ -469,25 +577,38 @@ public:
     const ScriptMachineResourceTracker &getStats() { return stats; }
 };
 
-bool EvalScript(std::vector<std::vector<unsigned char> > &stack,
+bool EvalScript(Stack &stack,
     const CScript &script,
     unsigned int flags,
     unsigned int maxOps,
-    const BaseSignatureChecker &checker,
+    const ScriptImportedState &sis,
     ScriptError *error = nullptr,
     unsigned char *sighashtype = nullptr);
 bool VerifyScript(const CScript &scriptSig,
     const CScript &scriptPubKey,
     unsigned int flags,
     unsigned int maxOps,
-    const BaseSignatureChecker &checker,
+    const ScriptImportedState &sis,
     ScriptError *error = nullptr,
     ScriptMachineResourceTracker *tracker = nullptr);
+
+bool VerifyTemplate(const CScript &templat,
+    const CScript &constraint,
+    const CScript &satisfier,
+    unsigned int flags,
+    unsigned int maxOps,
+    unsigned int maxActualSigops,
+    const ScriptImportedState &sis,
+    ScriptError *serror,
+    ScriptMachineResourceTracker *tracker);
 
 // string prefixed to data when validating signed messages via RPC call.  This ensures
 // that the signature was intended for use on this blockchain.
 extern const std::string strMessageMagic;
 
 bool CheckPubKeyEncoding(const std::vector<uint8_t> &vchSig, unsigned int flags, ScriptError *serror);
+
+// Applies the specifier to the data in sis to generate items that are pushed onto the passed stack.
+ScriptError EvalPushTxState(const VchType &specifier, const ScriptImportedState &sis, Stack &stack);
 
 #endif // BITCOIN_SCRIPT_INTERPRETER_H

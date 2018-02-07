@@ -280,6 +280,8 @@ extern CTweakRef<uint64_t> miningBlockSize;
 extern CTweakRef<uint64_t> ebTweak;
 extern CTweak<uint64_t> maxMiningCandidates;
 extern CTweak<uint64_t> minMiningCandidateInterval;
+extern CTweakRef<uint32_t> miningEnforceOpGroup;
+extern CTweakRef<bool> miningForkOpGroupTweak;
 
 extern std::list<CStatBase *> mallocedStats;
 

@@ -22,6 +22,48 @@ class ScriptDebugError(Exception):
     pass
 
 
+def prettyStk(t):
+    ret = ""
+    if t[0] == cashlib.StackItemType.BYTES:
+        return "d_"+hexlify(t[1]).decode()
+    if t[0] == cashlib.StackItemType.BIGNUM:
+        return "n_"+hexlify(t[1]).decode()
+    else:
+        return "u_"+hexlify(t[1]).decode()
+
+def stepEval(sm, script):
+        worked = sm.begin(script)
+        count = 0
+        pos = 0
+        try:
+            while 1:
+                stk = sm.stack()
+                print("step %d" % count)
+                rest = CScript(script[pos:])
+                textrest = []
+                for (opcode, data, sop_idx) in rest.raw_iter():
+                    if not data:
+                        try:
+                            textrest.append(OPCODE_NAMES[opcode])
+                        except KeyError as e:
+                            textrest.append("OP_x%X" % opcode)
+                    else:
+                        textrest.append("DATA(%s)" % hexlify(data))
+                print("  stack: ", [ prettyStk(x) for x in stk])
+                print("  script: ", textrest)
+                count += 1
+                pos = sm.step()
+
+        except cashlib.Error as e:
+            if str(e) == 'stepped beyond end of script':
+                return (cashlib.ScriptError.SCRIPT_ERR_OK, pos)
+            else:
+                (err, pos) = sm.error()
+                print("Error: %d (%s): %s" % (err, err.name, str(e)))
+                return (err, pos)
+        return (cashlib.ScriptError.SCRIPT_ERR_OK, pos)
+
+
 def MakeCTransaction(data):
     if type(data) is str:
         data = unhexlify(data)
@@ -173,6 +215,15 @@ class ScriptDebugTest (BitcoinTestFramework):
             print(sm.error())
         pdb.set_trace()
 
+    def runAscript(self):
+        pdb.set_trace()
+        flags=cashlib.ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS | cashlib.ScriptFlags.SCRIPT_ENABLE_CHECKDATASIG
+        sm = cashlib.ScriptMachine(flags=flags, tx=None, inputIdx=0, inputAmount=1*cashlib.BCH)
+        # s = CScript([ unhexlify("000000000000000000000000000000000000000000000000000001"), OP_SETBMD, unhexlify("f334a8c048898e4de6b8ca6359533d7fb7c12df3619e22238400"), OP_BIN2BIGNUM, OP_DUP, OP_ADD])
+        s = CScript([ unhexlify("000000000000000000000000000000000000000000000000000001"), OP_SETBMD, unhexlify("f334a8c048898e4de6b8ca6359533d7fb7c12df3619e22238400"), OP_DUP, OP_BIN2BIGNUM, OP_SWAP, OP_BIN2BIGNUM, OP_ADD])
+        # s = CScript([ unhexlify("000000000000000000000000000000000000000000000000000001"), OP_SETBMD, unhexlify("f334a8c048898e4de6b8ca6359533d7fb7c12df3619e22238400"), OP_BIN2BIGNUM, unhexlify("f334a8c048898e4de6b8ca6359533d7fb7c12df3619e22238400"), OP_BIN2BIGNUM, OP_ADD, 26, OP_NUM2BIN])
+        stepEval(sm, s)
+
     def runDSVtest(self):
 
         # this DATASIGVERIFY transaction has a non-minimal number encoding so will fail with the default flags but succeed without MINIMALDATA
@@ -194,7 +245,8 @@ class ScriptDebugTest (BitcoinTestFramework):
         assert(result[0] == cashlib.ScriptError.SCRIPT_ERR_OK)
 
     def run_test(self):
-        self.runDSVtest()
+        self.runAscript()
+        # self.runDSVtest()
 
 
 

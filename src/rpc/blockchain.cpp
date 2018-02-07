@@ -12,7 +12,9 @@
 #include "chainparams.h"
 #include "checkpoints.h"
 #include "coins.h"
+#include "consensus/grouptokens.h"
 #include "consensus/validation.h"
+#include "dstencode.h"
 #include "hashwrapper.h"
 #include "main.h"
 #include "policy/policy.h"
@@ -31,6 +33,7 @@
 #include "utilstrencodings.h"
 #include "validation/validation.h"
 #include "validation/verifydb.h"
+#include "wallet/grouptokenwallet.h"
 
 #include <stdint.h>
 
@@ -38,6 +41,7 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/thread/thread.hpp> // boost::thread::interrupt
+#include <mutex>
 
 // In case of operator error, limit the rollback of a chain to 100 blocks
 static uint32_t nDefaultRollbackLimit = 100;
@@ -2337,6 +2341,230 @@ UniValue getchaintxstats(const UniValue &params, bool fHelp)
 }
 
 
+//! Search for a given set of pubkey scripts
+bool FindGroupTokenID(std::atomic<int> &scan_progress,
+    const std::atomic<bool> &should_abort,
+    int64_t &count,
+    CCoinsViewCursor *cursor,
+    const CGroupTokenID &needle,
+    std::map<COutPoint, Coin> &out_results)
+{
+    scan_progress = 0;
+    count = 0;
+    while (cursor->Valid())
+    {
+        COutPoint key;
+        Coin coins;
+        if (!cursor->GetKey(key) || !cursor->GetValue(coins))
+            return false;
+
+        const CTxOut &out = coins.out;
+        if (!out.IsNull())
+        {
+            if (++count % 8192 == 0)
+            {
+                boost::this_thread::interruption_point();
+                if (should_abort)
+                {
+                    // allow to abort the scan via the abort reference
+                    return false;
+                }
+            }
+            if (count % 256 == 0)
+            {
+                // update progress reference every 256 item
+                uint32_t high = 0x100 * *key.hash.begin() + *(key.hash.begin() + 1);
+                scan_progress = (int)(high * 100.0 / 65536.0 + 0.5);
+            }
+            CGroupTokenInfo tokenGrp(out.scriptPubKey);
+            // must be sitting in any group address
+            if ((tokenGrp.associatedGroup != NoGroup) && !tokenGrp.isAuthority() && tokenGrp.associatedGroup == needle)
+            {
+                out_results.emplace(key, coins);
+            }
+        }
+        cursor->Next();
+    }
+    scan_progress = 100;
+    return true;
+}
+
+/** RAII object to prevent concurrency issue when scanning the txout set */
+static std::mutex g_utxosetscan;
+static std::atomic<int> g_scan_progress;
+static std::atomic<bool> g_scan_in_progress;
+static std::atomic<bool> g_should_abort_scan;
+class CoinsViewScanReserver
+{
+private:
+    bool m_could_reserve;
+
+public:
+    explicit CoinsViewScanReserver() : m_could_reserve(false) {}
+    bool reserve()
+    {
+        assert(!m_could_reserve);
+        std::lock_guard<std::mutex> lock(g_utxosetscan);
+        if (g_scan_in_progress)
+        {
+            return false;
+        }
+        g_scan_in_progress = true;
+        m_could_reserve = true;
+        return true;
+    }
+
+    ~CoinsViewScanReserver()
+    {
+        if (m_could_reserve)
+        {
+            std::lock_guard<std::mutex> lock(g_utxosetscan);
+            g_scan_in_progress = false;
+        }
+    }
+};
+
+enum class OutputScriptType
+{
+    UNKNOWN,
+    P2PK,
+    P2PKH,
+    P2SH_P2WPKH,
+    P2WPKH
+};
+
+UniValue scantokens(const UniValue &params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 2)
+        throw std::runtime_error(
+            "scantokens <action> ( <scanobjects> )\n"
+            "\nScans the unspent transaction output set for possible entries that belong to a specified token group.\n"
+            "\nArguments:\n"
+            "1. \"action\"                     (string, required) The action to execute\n"
+            "                                      \"start\" for starting a scan\n"
+            "                                      \"abort\" for aborting the current scan (returns true when abort "
+            "was successful)\n"
+            "                                      \"status\" for progress report (in %) of the current scan\n"
+            "2. \"tokenGroupID\"               (string, optional) Token group identifier\n"
+            "\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"unspents\": [\n"
+            "    {\n"
+            "    \"txid\" : \"transactionid\",   (string) The transaction id\n"
+            "    \"vout\" : n,                 (numeric) the vout value\n"
+            "    \"address\" : \"address\",      (string) the address that received the tokens\n"
+            "    \"scriptPubKey\" : \"script\",  (string) the script key\n"
+            "    \"ION_amount\" : x.xxx,       (numeric) The total amount in ION of the unspent output\n"
+            "    \"token_amount\" : xxx,       (numeric) The total token amount of the unspent output\n"
+            "    \"height\" : n,               (numeric) Height of the unspent transaction output\n"
+            "   }\n"
+            "   ,...], \n"
+            " \"total_amount\" : xxx,          (numeric) The total token amount of all found unspent outputs\n"
+            "]\n");
+
+    RPCTypeCheck(params, {UniValue::VSTR, UniValue::VSTR});
+
+    UniValue result(UniValue::VOBJ);
+    if (params[0].get_str() == "status")
+    {
+        CoinsViewScanReserver reserver;
+        if (reserver.reserve())
+        {
+            // no scan in progress
+            return NullUniValue;
+        }
+        result.pushKV("progress", g_scan_progress);
+        return result;
+    }
+    else if (params[0].get_str() == "abort")
+    {
+        CoinsViewScanReserver reserver;
+        if (reserver.reserve())
+        {
+            // reserve was possible which means no scan was running
+            return false;
+        }
+        // set the abort flag
+        g_should_abort_scan = true;
+        return true;
+    }
+    else if (params[0].get_str() == "start")
+    {
+        CoinsViewScanReserver reserver;
+        if (!reserver.reserve())
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Scan already in progress, use action \"abort\" or \"status\"");
+        }
+        CAmount total_in = 0;
+
+        if (!params[1].isStr())
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "No token group ID specified");
+        }
+
+        CGroupTokenID needle = GetGroupToken(params[1].get_str());
+        if (!needle.isUserGroup())
+        {
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid group specified");
+        }
+
+        // Scan the unspent transaction output set for inputs
+        UniValue unspents(UniValue::VARR);
+        std::vector<CTxOut> input_txos;
+        std::map<COutPoint, Coin> coins;
+        g_should_abort_scan = false;
+        g_scan_progress = 0;
+        int64_t count = 0;
+        std::unique_ptr<CCoinsViewCursor> pcursor;
+        {
+            LOCK(cs_main);
+            FlushStateToDisk();
+            pcursor = std::unique_ptr<CCoinsViewCursor>(pcoinsdbview->Cursor());
+            assert(pcursor);
+        }
+        bool res = FindGroupTokenID(g_scan_progress, g_should_abort_scan, count, pcursor.get(), needle, coins);
+        result.pushKV("success", res);
+        result.pushKV("searched_items", count);
+
+        for (const auto &it : coins)
+        {
+            const COutPoint &outpoint = it.first;
+            const Coin &coin = it.second;
+            const CTxOut &txo = coin.out;
+            const CGroupTokenInfo &tokenGroupInfo = CGroupTokenInfo(txo.scriptPubKey);
+            CTxDestination dest;
+            ExtractDestination(txo.scriptPubKey, dest);
+
+            input_txos.push_back(txo);
+            total_in += tokenGroupInfo.quantity;
+
+            UniValue unspent(UniValue::VOBJ);
+            unspent.pushKV("txid", outpoint.hash.GetHex());
+            unspent.pushKV("vout", (int32_t)outpoint.n);
+            if (IsValidDestination(dest))
+            {
+                unspent.pushKV("address", EncodeDestination(dest));
+            }
+            unspent.pushKV("scriptPubKey", HexStr(txo.scriptPubKey.begin(), txo.scriptPubKey.end()));
+            unspent.pushKV("amount", ValueFromAmount(txo.nValue));
+            unspent.pushKV("satoshis", txo.nValue);
+            unspent.pushKV("tokenAmount", tokenGroupInfo.quantity);
+            unspent.pushKV("height", (int32_t)coin.nHeight);
+
+            unspents.push_back(unspent);
+        }
+
+        result.pushKV("unspents", unspents);
+        result.pushKV("total_amount", total_in);
+    }
+    else
+    {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid command");
+    }
+    return result;
+}
+
 static const CRPCCommand commands[] = {
     //  category              name                      actor (function)         okSafeMode
     //  --------------------- ------------------------  -----------------------  ----------
@@ -2363,7 +2591,7 @@ static const CRPCCommand commands[] = {
     {"blockchain", "saveorphanpool", &saveorphanpool, true},
     {"blockchain", "verifychain", &verifychain, true},
     {"blockchain", "getblockstats", &getblockstats, true},
-
+    {"blockchain", "scantokens", &scantokens, true},
     /* Not shown in help */
     {"hidden", "invalidateblock", &invalidateblock, true},
     {"hidden", "reconsiderblock", &reconsiderblock, true},

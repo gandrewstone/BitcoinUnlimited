@@ -9,6 +9,7 @@
 
 #include "amount.h"
 #include "clientversion.h"
+#include "consensus/grouptokens.h"
 #include "policy/policy.h"
 #include "script/ismine.h"
 #include "streams.h"
@@ -22,6 +23,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <functional>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -158,6 +160,23 @@ struct COutputEntry
     CTxDestination destination;
     CAmount amount;
     int vout;
+};
+
+struct CGroupedOutputEntry : public COutputEntry
+{
+    CGroupTokenID grp;
+    CAmount grpAmount;
+    CGroupedOutputEntry(const CGroupTokenID &_grp,
+        CAmount _grpAmount,
+        const CTxDestination &dest,
+        CAmount amt,
+        int outidx)
+        : grp(_grp), grpAmount(_grpAmount)
+    {
+        destination = dest;
+        amount = amt;
+        vout = outidx;
+    }
 };
 
 /** A transaction with a merkle branch linking it to the block chain. */
@@ -375,11 +394,28 @@ public:
     CAmount GetAvailableWatchOnlyCredit(const bool &fUseCache = true) const;
     CAmount GetChange() const;
 
+    // Get only BCH transaction amounts
     void GetAmounts(std::list<COutputEntry> &listReceived,
         std::list<COutputEntry> &listSent,
         CAmount &nFee,
         std::string &strSentAccount,
         const isminefilter &filter) const;
+
+    // Get all transaction amounts, including group information
+    void GetAmounts(std::list<CGroupedOutputEntry> &listReceived,
+        std::list<CGroupedOutputEntry> &listSent,
+        CAmount &nFee,
+        std::string &strSentAccount,
+        const isminefilter &filter) const;
+
+    // Get transactions for the passed group
+    void GetGroupAmounts(const CGroupTokenID &grp,
+        std::list<COutputEntry> &listReceived,
+        std::list<COutputEntry> &listSent,
+        CAmount &nFee,
+        std::string &strSentAccount,
+        const isminefilter &filter) const;
+
 
     void GetAccountAmounts(const std::string &strAccount,
         CAmount &nReceived,
@@ -424,6 +460,12 @@ public:
 
     std::string ToString() const;
 
+    /** returns the outpoint associated with this object */
+    COutPoint GetOutPoint() const { return COutPoint(tx->GetHash(), i); }
+    /** returns the value of this output in satoshis */
+    CAmount GetValue() const { return tx->vout[i].nValue; }
+    /** returns the constraint script */
+    CScript GetScriptPubKey() const { return tx->vout[i].scriptPubKey; }
     inline int cmp(const COutput &rhs) const
     {
         if (tx->GetHash() == rhs.tx->GetHash())
@@ -729,6 +771,13 @@ public:
         bool fIncludeZeroValue = false) const;
 
     /**
+     * populate vCoins with vector of available COutputs, filtered by the passed lambda function.
+       Returns the number of matches.
+     */
+    unsigned int FilterCoins(std::vector<COutput> &vCoins,
+        std::function<bool(const CWalletTx *, const CTxOut *)>) const;
+
+    /**
      * Shuffle and select coins until nTargetValue is reached while avoiding
      * small change; This method is stochastic for some inputs and upon
      * completion the coin set and corresponding actual target value is
@@ -844,6 +893,9 @@ public:
         int &nChangePosRet,
         std::string &strFailReason,
         bool includeWatching);
+
+    /** Sign the provided transaction */
+    bool SignTransaction(CMutableTransaction &tx);
 
     /**
      * Create a new transaction paying the recipients with a set of coins
@@ -1028,16 +1080,22 @@ protected:
     CPubKey vchPubKey;
 
 public:
+    /** Constructor does not reserve a key */
     CReserveKey(CWallet *pwalletIn)
     {
         nIndex = -1;
         pwallet = pwalletIn;
     }
 
+    /** Destructor returns the key if one has been reserved (and KeepKey was not called) */
     ~CReserveKey() { ReturnKey(); }
+    /** Un-reserve the key -- its ok to call this if no key is currently reserved */
     void ReturnKey();
+    /** Get a new key from the wallet, or return the previously reserved key */
     bool GetReservedKey(CPubKey &pubkey);
+    /** Commit the key reservation, and this CReserveKey object resets to constucted state. */
     void KeepKey();
+    /** Commit the key reservation, and this CReserveKey object resets to constucted state. */
     void KeepScript() { KeepKey(); }
 };
 

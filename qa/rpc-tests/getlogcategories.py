@@ -24,11 +24,12 @@ class GetLogCategories (BitcoinTestFramework):
         initialize_chain_clean(self.options.tmpdir, 4, bitcoinConfDict, wallets)
 
     def setup_network(self, split=False):
-        node_opts0 = ["-debug=all,-thin,-graphene,-mempool,-net"]
-        node_opts1 = ["-debug=all,-thin,-graphene,-mempool,-net,-addrman,-tor,-coindb,-rpc"]
-        node_opts2 = ["-debug=all,-thin,-graphene,-mempool,-net,-addrman,-tor,-coindb,-rpc,-evict,-blk,-lck,-proxy"]
+        node_opts0 = ["-debug=all,-thin,-graphene,-mempool,-net,-token,-validation"]
+        node_opts1 = ["-debug=all,-thin,-graphene,-mempool,-net,-addrman,-tor,-coindb,-rpc,-token,-validation"]
+        node_opts2 = ["-debug=all,-thin,-graphene,-mempool,-net,-addrman,-tor,-coindb,-rpc,-evict,-blk,-lck,-proxy,-token,-validation"]
+        node_opts3 = ["-debug=-token,-validation"]
 
-        #Append rpcauth to bitcoin.conf before initialization¶
+        #Append rpcauth to bitcoin.conf before initialization
         node_opts5 = ["debug=all","debug=-thin","debug=-graphene","debug=-mempool","debug=-net"]
         random.shuffle(node_opts5)
         with open(os.path.join(self.options.tmpdir+"/node3", "bitcoin.conf"), 'a') as f:
@@ -38,17 +39,18 @@ class GetLogCategories (BitcoinTestFramework):
             start_node(0, self.options.tmpdir, node_opts0),
             start_node(1, self.options.tmpdir, node_opts1),
             start_node(2, self.options.tmpdir, node_opts2),
-            start_node(3, self.options.tmpdir)
+            start_node(3, self.options.tmpdir, node_opts3)
         ]
 
         interconnect_nodes(self.nodes)
         self.is_network_split = False
 
     def run_test (self):
+        # Note zmq is off by default
         exp0 = "coindb tor addrman libevent http rpc partitioncheck bench prune reindex mempoolrej blk evict parallel rand req bloom estimatefee lck proxy dbase selectcoins zmq qt ibd respend weakblocks cmpctblock electrum mempoolsync priorityq dsproof tweaks"
         exp1 = "libevent http partitioncheck bench prune reindex mempoolrej blk evict parallel rand req bloom estimatefee lck proxy dbase selectcoins zmq qt ibd respend weakblocks cmpctblock electrum mempoolsync priorityq dsproof tweaks"
         exp2 = "libevent http partitioncheck bench prune reindex mempoolrej parallel rand req bloom estimatefee dbase selectcoins zmq qt ibd respend weakblocks cmpctblock electrum mempoolsync priorityq dsproof tweaks"
-        exp3 = "libevent http partitioncheck bench prune reindex mempoolrej parallel req bloom estimatefee dbase selectcoins respend weakblocks cmpctblock electrum mempoolsync priorityq dsproof tweaks"
+        exp3 = "libevent http partitioncheck bench prune reindex mempoolrej parallel req bloom estimatefee dbase selectcoins zmq respend weakblocks cmpctblock electrum mempoolsync priorityq dsproof tweaks"
         exp4 = exp1
         exp5 = exp0
         exp6 = ""
@@ -69,8 +71,8 @@ class GetLogCategories (BitcoinTestFramework):
         wait_bitcoinds()
         self.nodes = []
 
-        node_opts3 = ["-debug=all,-thin,-graphene,-mempool,-net,-addrman,-tor,-coindb,-rpc,-evict,-blk,-lck,-proxy,-zmq,-qt,-ibd,-rand"]
-        node_opts4 = ["-debug=-thin,-graphene,-mempool,-net,-addrman,-tor,-coindb,-rpc,all"]
+        node_opts3 = ["-debug=all,-thin,-graphene,-mempool,-net,-addrman,-tor,-coindb,-rpc,-evict,-blk,-lck,-proxy,-qt,-ibd,-rand,-token,-validation"]
+        node_opts4 = ["-debug=-thin,-graphene,-mempool,-net,-addrman,-tor,-coindb,-rpc,all,-token,-validation"]
 
 
         self.nodes.append(start_node(0, self.options.tmpdir, node_opts3))
@@ -111,6 +113,7 @@ if __name__ == '__main__':
 # Create a convenient function for an interactive python debugging session
 def Test():
     t = GetLogCategories()
+    t.drop_to_pdb = True
     bitcoinConf = {}
     flags = standardFlags()
     t.main(flags, bitcoinConf, None)

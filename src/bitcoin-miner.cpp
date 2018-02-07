@@ -9,10 +9,15 @@
 
 #include "allowed_args.h"
 #include "arith_uint256.h"
+#include "chainparams.h"
 #include "chainparamsbase.h"
+#include "consensus/params.h"
 #include "fs.h"
 #include "hashwrapper.h"
+#include "key.h"
+#include "pow.h"
 #include "primitives/block.h"
+#include "pubkey.h"
 #include "rpc/client.h"
 #include "rpc/protocol.h"
 #include "streams.h"
@@ -32,7 +37,6 @@
 
 #include <univalue.h>
 
-
 // below two require C++11
 #include <functional>
 #include <random>
@@ -46,6 +50,16 @@ LockData lockdata;
 typedef std::function<uint32_t(void)> RandFunc;
 
 using namespace std;
+
+class Secp256k1Init
+{
+    ECCVerifyHandle globalVerifyHandle;
+
+public:
+    Secp256k1Init() { ECC_Start(); }
+    ~Secp256k1Init() { ECC_Stop(); }
+};
+Secp256k1Init secp;
 
 // Internal miner
 //
@@ -214,6 +228,56 @@ static bool CpuMineBlockHasher(CBlockHeader *pblock,
     return found;
 }
 
+static bool CpuMineBlockHasherNextChain(CBlockHeader *pblock,
+    vector<unsigned char> &coinbaseBytes,
+    const std::vector<uint256> &merkleproof,
+    const RandFunc &randFunc,
+    const Consensus::Params &conp)
+{
+    uint32_t nExtraNonce = randFunc(); // Grab random 4-bytes from thread-safe generator we were passed
+    arith_uint256 hashTarget = arith_uint256().SetCompact(pblock->nBits);
+    bool found = false;
+    int ntries = 10;
+    unsigned char *pbytes = (unsigned char *)&coinbaseBytes[0];
+
+    while (!found)
+    {
+        // hashMerkleRoot:
+        {
+            ++nExtraNonce;
+            // 48 - next in arr after Height. (Height in coinbase required for block.version=2):
+            *(uint32_t *)(pbytes + 48) = nExtraNonce;
+            uint256 hash;
+            CHash256().Write(pbytes, coinbaseBytes.size()).Finalize(hash.begin());
+
+            pblock->hashMerkleRoot = CalculateMerkleRoot(hash, merkleproof);
+        }
+
+        //
+        // Search
+        //
+        uint256 hash;
+        while (!found)
+        {
+            if (CheckProofOfWork(pblock->GetHash(), pblock->nBits, conp))
+            {
+                // Found a solution
+                found = true;
+                printf("proof-of-work found  \n  hash: %s  \ntarget: %s\n", hash.GetHex().c_str(),
+                    hashTarget.GetHex().c_str());
+                break;
+            }
+            if (ntries-- < 1)
+            {
+                return false; // Give up leave
+            }
+            pblock->nNonce++;
+        }
+    }
+
+    return found;
+}
+
 static double GetDifficulty(uint64_t nBits)
 {
     int nShift = (nBits >> 24) & 0xff;
@@ -317,7 +381,10 @@ static UniValue CpuMineBlock(unsigned int searchDuration, const UniValue &params
 
     uint32_t startNonce = header.nNonce = randFunc();
 
-    printf("Mining: id: %x parent: %s bits: %x difficulty: %3.2f time: %d\n", (unsigned int)params["id"].get_int64(),
+    const CChainParams &cparams = Params();
+    auto conp = cparams.GetConsensus();
+
+    printf("Mining: id: %x parent: %s bits: %x difficulty: %3.4f time: %d\n", (unsigned int)params["id"].get_int64(),
         header.hashPrevBlock.ToString().c_str(), header.nBits, difficulty, header.nTime);
 
     int64_t start = GetTimeMillis();
@@ -329,7 +396,10 @@ static UniValue CpuMineBlock(unsigned int searchDuration, const UniValue &params
         // and the block will be rejected.  So do not advance time (let it be advanced by bitcoind every time we
         // request a new block).
         // header.nTime = (header.nTime < GetTime()) ? GetTime() : header.nTime;
-        found = CpuMineBlockHasher(&header, coinbaseBytes, merkleproof, randFunc);
+        if (conp.powAlgorithm == 1)
+            found = CpuMineBlockHasherNextChain(&header, coinbaseBytes, merkleproof, randFunc, conp);
+        else
+            found = CpuMineBlockHasher(&header, coinbaseBytes, merkleproof, randFunc);
     }
 
     const uint32_t nChecked = header.nNonce - startNonce;
@@ -609,6 +679,7 @@ int main(int argc, char *argv[])
         PrintExceptionContinue(nullptr, "AppInitRPC()");
         return EXIT_FAILURE;
     }
+    SelectParams(ChainNameFromCommandLine());
 
     int nThreads = GetArg("-cpus", 1);
     boost::thread_group minerThreads;

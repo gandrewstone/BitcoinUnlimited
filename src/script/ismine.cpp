@@ -114,6 +114,7 @@ static isminetype IsMine(const CKeyStore &keystore,
     }
     break;
     case TX_PUBKEYHASH:
+    case TX_GRP_PUBKEYHASH:
     {
         keyID = CKeyID(uint160(vSolutions[0]));
         bool haveKey = alreadyLocked ? keystore._HaveKey(keyID) : keystore.HaveKey(keyID);
@@ -122,6 +123,7 @@ static isminetype IsMine(const CKeyStore &keystore,
     }
     break;
     case TX_SCRIPTHASH:
+    case TX_GRP_SCRIPTHASH:
     {
         CScriptID scriptID = CScriptID(uint160(vSolutions[0]));
         CScript subscript;

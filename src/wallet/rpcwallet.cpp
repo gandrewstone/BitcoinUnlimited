@@ -8,6 +8,7 @@
 #include "chain.h"
 #include "core_io.h"
 #include "dstencode.h"
+#include "grouptokenwallet.h"
 #include "init.h"
 #include "main.h"
 #include "net.h"
@@ -1516,8 +1517,8 @@ void ListTransactions(const CWalletTx &wtx,
 {
     CAmount nFee;
     string strSentAccount;
-    list<COutputEntry> listReceived;
-    list<COutputEntry> listSent;
+    list<CGroupedOutputEntry> listReceived;
+    list<CGroupedOutputEntry> listSent;
 
     wtx.GetAmounts(listReceived, listSent, nFee, strSentAccount, filter);
 
@@ -1527,7 +1528,7 @@ void ListTransactions(const CWalletTx &wtx,
     // Sent
     if ((!listSent.empty() || nFee != 0) && (fAllAccounts || strAccount == strSentAccount))
     {
-        for (const COutputEntry &s : listSent)
+        for (const CGroupedOutputEntry &s : listSent)
         {
             UniValue entry(UniValue::VOBJ);
             if (involvesWatchonly || (::IsMine(*pwalletMain, s.destination, chainActive.Tip()) & ISMINE_WATCH_ONLY))
@@ -1535,6 +1536,11 @@ void ListTransactions(const CWalletTx &wtx,
             entry.pushKV("account", strSentAccount);
             MaybePushAddress(entry, s.destination);
             entry.pushKV("category", "send");
+            if (s.grp != NoGroup)
+            {
+                entry.pushKV("group", EncodeGroupToken(s.grp));
+                entry.pushKV("groupAmount", -s.grpAmount);
+            }
             entry.pushKV("satoshi", UniValue(-s.amount));
             entry.pushKV("amount", ValueFromAmount(-s.amount));
             if (pwalletMain->mapAddressBook.count(s.destination))
@@ -1551,7 +1557,7 @@ void ListTransactions(const CWalletTx &wtx,
     // Received
     if (listReceived.size() > 0 && wtx.GetDepthInMainChain() >= nMinDepth)
     {
-        for (const COutputEntry &r : listReceived)
+        for (const CGroupedOutputEntry &r : listReceived)
         {
             string account;
             if (pwalletMain->mapAddressBook.count(r.destination))
@@ -1575,6 +1581,11 @@ void ListTransactions(const CWalletTx &wtx,
                 else
                 {
                     entry.pushKV("category", "receive");
+                }
+                if (r.grp != NoGroup)
+                {
+                    entry.pushKV("group", EncodeGroupToken(r.grp));
+                    entry.pushKV("groupAmount", r.grpAmount);
                 }
                 entry.pushKV("satoshi", UniValue(r.amount));
                 entry.pushKV("amount", ValueFromAmount(r.amount));
@@ -2115,11 +2126,13 @@ UniValue gettransaction(const UniValue &params, bool fHelp)
             "can be \"\" for the default account.\n"
             "      \"address\" : \"bitcoinaddress\",   (string) The bitcoin address involved in the transaction\n"
             "      \"category\" : \"send|receive\",    (string) The category, either 'send' or 'receive'\n"
-            "      \"amount\" : x.xxx,                 (numeric) The amount in " +
+            "      \"group\": \"groupidentifier\",     (string) The token identifier (appears only if applicable)\n"
+            "      \"groupAmount\": n,               (numeric) The token quantity (appears only if applicable)\n"
+            "      \"amount\" : x.xxx,               (numeric) The amount in " +
             CURRENCY_UNIT +
             "\n"
             "      \"label\" : \"label\",              (string) A comment for the address/transaction, if any\n"
-            "      \"vout\" : n,                       (numeric) the vout value\n"
+            "      \"vout\" : n,                     (numeric) the vout value\n"
             "    }\n"
             "    ,...\n"
             "  ],\n"
@@ -2972,7 +2985,6 @@ static const CRPCCommand commands[] = {
     {"wallet",                "walletpassphrase",         &walletpassphrase,         true},
     {"wallet",                "removeprunedfunds",        &removeprunedfunds,        true},
 };
-/* clang-format on */
 
 void RegisterWalletRPCCommands(CRPCTable &table)
 {

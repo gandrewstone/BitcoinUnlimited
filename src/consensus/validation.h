@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "util.h"
+
 /** "reject" message codes */
 static const unsigned char REJECT_MALFORMED = 0x01;
 static const unsigned char REJECT_INVALID = 0x10;
@@ -53,6 +55,8 @@ public:
         strRejectReason = strRejectReasonIn;
         corruptionPossible = corruptionIn;
         strDebugMessage = strDebugMessageIn;
+        LOG(VALIDATION, "Validation DoS level: %d, Code: %d, Reason: %s, Message: %s\n", level, chRejectCode,
+            strRejectReason, strDebugMessage);
         if (mode == MODE_ERROR)
             return ret;
         nDoS += level;
@@ -68,6 +72,7 @@ public:
     }
     bool Error(const std::string &strRejectReasonIn)
     {
+        LOG(VALIDATION, "Validation Error Reason: %s\n", strRejectReasonIn);
         if (mode == MODE_VALID)
             strRejectReason = strRejectReasonIn;
         mode = MODE_ERROR;

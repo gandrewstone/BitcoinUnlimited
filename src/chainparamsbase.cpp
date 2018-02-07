@@ -17,6 +17,7 @@ const std::string CBaseChainParams::TESTNET = "test";
 const std::string CBaseChainParams::TESTNET4 = "test4";
 const std::string CBaseChainParams::SCALENET = "scale";
 const std::string CBaseChainParams::REGTEST = "regtest";
+const std::string CBaseChainParams::NEXTCHAIN = NEXTCHAIN_TICKER;
 
 /**
  * Main network
@@ -98,6 +99,8 @@ public:
 };
 static CBaseRegTestParams regTestParams;
 
+static CBaseChainParams nextChainParams(CBaseChainParams::NEXTCHAIN, 7227);
+
 static CBaseChainParams *pCurrentBaseParams = 0;
 
 const CBaseChainParams &BaseParams()
@@ -120,6 +123,8 @@ CBaseChainParams &BaseParams(const std::string &chain)
         return scaleNetParams;
     else if (chain == CBaseChainParams::REGTEST)
         return regTestParams;
+    else if (chain == CBaseChainParams::NEXTCHAIN)
+        return nextChainParams;
     else
         throw std::runtime_error(strprintf("%s: Unknown chain %s.", __func__, chain));
 }
@@ -138,6 +143,10 @@ std::string ChainNameFromCommandLine()
     num_selected += fScaleNet;
     bool fUnl = GetBoolArg("-chain_nol", false);
     num_selected += fUnl;
+    bool fNextChain = GetBoolArg("-xnex", false);
+    num_selected += fNextChain;
+    bool fBch = GetBoolArg("-bch", false);
+    num_selected += fBch;
 
     if (num_selected > 1)
         throw std::runtime_error("Invalid combination of -regtest, -testnet, -testnet4, -scalenet and -chain_nol.");
@@ -151,7 +160,13 @@ std::string ChainNameFromCommandLine()
         return CBaseChainParams::SCALENET;
     if (fUnl)
         return CBaseChainParams::UNL;
-    return CBaseChainParams::MAIN;
+    if (fNextChain)
+        return CBaseChainParams::NEXTCHAIN;
+    if (fBch)
+        return CBaseChainParams::MAIN;
+
+    // default on this branch is nextchain
+    return CBaseChainParams::NEXTCHAIN;
 }
 
 bool AreBaseParamsConfigured() { return pCurrentBaseParams != nullptr; }

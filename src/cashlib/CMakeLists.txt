@@ -23,6 +23,11 @@ add_library( # Sets the name of the library.
              ../script/interpreter.cpp
              ../script/script.cpp
              ../script/script.h
+             ../script/scripttemplate.cpp
+             ../script/scriptattributes.cpp
+             ../script/stackitem.cpp
+             ../script/pushtxstate.cpp
+             ../script/bignum.cpp
              ../primitives/transaction.cpp
              ../primitives/block.cpp
              ../primitives/block.h

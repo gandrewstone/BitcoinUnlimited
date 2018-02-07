@@ -11,10 +11,12 @@
 #include "checkpoints.h"
 #include "coincontrol.h"
 #include "consensus/consensus.h"
+#include "consensus/grouptokens.h"
 #include "consensus/validation.h"
 #include "core_io.h" // Freeze for debug only
 #include "dstencode.h"
 #include "fs.h"
+#include "grouptokenwallet.h"
 #include "key.h"
 #include "keystore.h"
 #include "main.h"
@@ -1333,15 +1335,142 @@ void CWalletTx::GetAmounts(list<COutputEntry> &listReceived,
 
         // In either case, we need to get the destination address
         CTxDestination address;
-
-        if (!ExtractDestination(txout.scriptPubKey, address) && !txout.scriptPubKey.IsUnspendable())
+        txnouttype whichType;
+        if (!ExtractDestinationAndType(txout.scriptPubKey, address, whichType) && !txout.scriptPubKey.IsUnspendable())
         {
             LOGA("CWalletTx::GetAmounts: Unknown transaction type found, txid %s\n", this->GetHash().ToString());
             address = CNoDestination();
         }
 
-        COutputEntry output = {address, txout.nValue, (int)i};
+        // Do not return group outputs from this API
+        if ((whichType != TX_GRP_PUBKEYHASH) && (whichType != TX_GRP_SCRIPTHASH))
+        {
+            COutputEntry output = {address, txout.nValue, (int)i};
 
+            // If we are debited by the transaction, add the output as a "sent" entry
+            if (nDebit > 0)
+                listSent.push_back(output);
+
+            // If we are receiving the output, add it as a "received" entry
+            if (fIsMine & filter)
+                listReceived.push_back(output);
+        }
+    }
+}
+
+void CWalletTx::GetGroupAmounts(const CGroupTokenID &grp,
+    list<COutputEntry> &listReceived,
+    list<COutputEntry> &listSent,
+    CAmount &nFee,
+    string &strSentAccount,
+    const isminefilter &filter) const
+{
+    nFee = 0;
+    listReceived.clear();
+    listSent.clear();
+    strSentAccount = strFromAccount;
+
+    // Compute fee:
+    CAmount nDebit = GetDebit(filter);
+    if (nDebit > 0) // debit>0 means we signed/sent this transaction
+    {
+        CAmount nValueOut = GetValueOut();
+        nFee = nDebit - nValueOut;
+    }
+
+    // Sent/received.
+    for (unsigned int i = 0; i < vout.size(); ++i)
+    {
+        const CTxOut &txout = vout[i];
+        isminetype fIsMine = pwallet->IsMine(txout);
+        // Only need to handle txouts if AT LEAST one of these is true:
+        //   1) they debit from us (sent)
+        //   2) the output is to us (received)
+        if (nDebit > 0)
+        {
+            // Don't report 'change' txouts
+            if (pwallet->IsChange(txout))
+                continue;
+        }
+        else if (!(fIsMine & filter))
+            continue;
+
+        // In either case, we need to get the destination address
+        CTxDestination address;
+        txnouttype whichType;
+        if (!ExtractDestinationAndType(txout.scriptPubKey, address, whichType) && !txout.scriptPubKey.IsUnspendable())
+        {
+            LOGA("CWalletTx::GetAmounts: Unknown transaction type found, txid %s\n", this->GetHash().ToString());
+            address = CNoDestination();
+        }
+
+        // Only return group outputs from this API
+        if ((whichType == TX_GRP_PUBKEYHASH) || (whichType == TX_GRP_SCRIPTHASH))
+        {
+            CGroupTokenInfo txgrp(txout.scriptPubKey);
+            if (grp == txgrp.associatedGroup)
+            {
+                COutputEntry output = {address, txgrp.quantity, (int)i};
+
+                // If we are debited by the transaction, add the output as a "sent" entry
+                if (nDebit > 0)
+                    listSent.push_back(output);
+
+                // If we are receiving the output, add it as a "received" entry
+                if (fIsMine & filter)
+                    listReceived.push_back(output);
+            }
+        }
+    }
+}
+
+void CWalletTx::GetAmounts(list<CGroupedOutputEntry> &listReceived,
+    list<CGroupedOutputEntry> &listSent,
+    CAmount &nFee,
+    string &strSentAccount,
+    const isminefilter &filter) const
+{
+    nFee = 0;
+    listReceived.clear();
+    listSent.clear();
+    strSentAccount = strFromAccount;
+
+    // Compute fee:
+    CAmount nDebit = GetDebit(filter);
+    if (nDebit > 0) // debit>0 means we signed/sent this transaction
+    {
+        CAmount nValueOut = GetValueOut();
+        nFee = nDebit - nValueOut;
+    }
+
+    // Sent/received.
+    for (unsigned int i = 0; i < vout.size(); ++i)
+    {
+        const CTxOut &txout = vout[i];
+        isminetype fIsMine = pwallet->IsMine(txout);
+        // Only need to handle txouts if AT LEAST one of these is true:
+        //   1) they debit from us (sent)
+        //   2) the output is to us (received)
+        if (nDebit > 0)
+        {
+            // Don't report 'change' txouts
+            if (pwallet->IsChange(txout))
+                continue;
+        }
+        else if (!(fIsMine & filter))
+            continue;
+
+        // In either case, we need to get the destination address
+        CTxDestination address;
+        txnouttype whichType;
+        if (!ExtractDestinationAndType(txout.scriptPubKey, address, whichType) && !txout.scriptPubKey.IsUnspendable())
+        {
+            LOGA("CWalletTx::GetAmounts: Unknown transaction type found, txid %s\n", this->GetHash().ToString());
+            address = CNoDestination();
+        }
+
+        CGroupTokenInfo txgrp(txout.scriptPubKey); // If group is invalid, txgrp zeros its members.
+        CGroupedOutputEntry output(txgrp.associatedGroup, txgrp.quantity, address, txout.nValue, (int)i);
         // If we are debited by the transaction, add the output as a "sent" entry
         if (nDebit > 0)
             listSent.push_back(output);
@@ -1351,6 +1480,7 @@ void CWalletTx::GetAmounts(list<COutputEntry> &listReceived,
             listReceived.push_back(output);
     }
 }
+
 
 void CWalletTx::GetAccountAmounts(const string &strAccount,
     CAmount &nReceived,
@@ -1641,7 +1771,7 @@ CAmount CWalletTx::GetAvailableCredit(bool fUseCache) const
     uint256 hashTx = GetHash();
     for (unsigned int i = 0; i < vout.size(); i++)
     {
-        if (!pwallet->IsSpent(hashTx, i))
+        if (!pwallet->IsSpent(hashTx, i) && (GetGroupToken(vout[i].scriptPubKey) == NoGroup))
         {
             const CTxOut &txout = vout[i];
             nCredit += pwallet->GetCredit(txout, ISMINE_SPENDABLE);
@@ -1684,7 +1814,7 @@ CAmount CWalletTx::GetAvailableWatchOnlyCredit(const bool &fUseCache) const
     CAmount nCredit = 0;
     for (unsigned int i = 0; i < vout.size(); i++)
     {
-        if (!pwallet->IsSpent(GetHash(), i))
+        if (!pwallet->IsSpent(GetHash(), i) && (GetGroupToken(vout[i].scriptPubKey) == NoGroup))
         {
             const CTxOut &txout = vout[i];
             nCredit += pwallet->GetCredit(txout, ISMINE_WATCH_ONLY);
@@ -1893,6 +2023,51 @@ CAmount CWallet::GetImmatureWatchOnlyBalance() const
         }
     }
     return nTotal;
+}
+
+unsigned int CWallet::FilterCoins(vector<COutput> &vCoins,
+    std::function<bool(const CWalletTx *, const CTxOut *)> func) const
+{
+    vCoins.clear();
+    unsigned int ret = 0;
+
+    {
+        LOCK(cs_wallet);
+        for (map<uint256, CWalletTx>::const_iterator it = mapWallet.begin(); it != mapWallet.end(); ++it)
+        {
+            const uint256 &wtxid = it->first;
+            const CWalletTx *pcoin = &(*it).second;
+
+            if (!CheckFinalTx(MakeTransactionRef(*pcoin)))
+                continue;
+
+            if (pcoin->IsCoinBase() && pcoin->GetBlocksToMaturity() > 0)
+                continue;
+
+            int nDepth = pcoin->GetDepthInMainChain();
+            if (nDepth < 0)
+                continue;
+
+            // We should not consider coins which aren't at least in our mempool
+            // It's possible for these to be conflicted via ancestors which we may never be able to detect
+            if (nDepth == 0 && !pcoin->InMempool())
+                continue;
+
+            for (unsigned int i = 0; i < pcoin->vout.size(); i++)
+            {
+                isminetype mine = IsMine(pcoin->vout[i]);
+                if (!(IsSpent(wtxid, i)) && mine != ISMINE_NO && !IsLockedCoin((*it).first, i) &&
+                    func(pcoin, &pcoin->vout[i]))
+                {
+                    // The UTXO is available
+                    COutput outpoint(pcoin, i, nDepth, (mine & ISMINE_SPENDABLE) != ISMINE_NO);
+                    vCoins.push_back(outpoint);
+                    ret++;
+                }
+            }
+        }
+    }
+    return ret;
 }
 
 void CWallet::AvailableCoins(vector<COutput> &vCoins,
@@ -2281,6 +2456,34 @@ bool CWallet::SelectCoins(const CAmount &nTargetValue,
         // use this tx then the txo is temporarily lost (until available is refilled).
     }
     assert(nValueRet >= nTargetValue);
+    return true;
+}
+
+bool CWallet::SignTransaction(CMutableTransaction &tx)
+{
+    AssertLockHeld(cs_wallet); // mapWallet
+
+    unsigned int sighashType = SIGHASH_ALL | SIGHASH_FORKID;
+
+    CTransaction txNewConst(tx);
+    int nIn = 0;
+    for (const auto &input : tx.vin)
+    {
+        std::map<uint256, CWalletTx>::const_iterator mi = mapWallet.find(input.prevout.hash);
+        if (mi == mapWallet.end() || input.prevout.n >= mi->second.vout.size())
+        {
+            return false;
+        }
+        const CScript &scriptPubKey = mi->second.vout[input.prevout.n].scriptPubKey;
+        const CAmount &amount = mi->second.vout[input.prevout.n].nValue;
+        CScript &scriptSigRes = tx.vin[nIn].scriptSig;
+        if (!ProduceSignature(
+                TransactionSignatureCreator(this, &txNewConst, nIn, amount, sighashType), scriptPubKey, scriptSigRes))
+        {
+            return false;
+        }
+        nIn++;
+    }
     return true;
 }
 
@@ -2764,54 +2967,102 @@ bool CWallet::CreateTransaction(const vector<CRecipient> &vecSend,
  */
 bool CWallet::CommitTransaction(CWalletTx &wtxNew, CReserveKey &reservekey)
 {
+    /** When the wallet is parallelized, this will higher performing, however right now its a wash.
+        Enqueuing like this will not provide feedback if the the mempool doesn't accept the tx.
+        And for RPC calls, you must FlushTxAdmission before returning
+    CTxInputData d;
+    d.tx = MakeTransactionRef(wtxNew);
+    d.whitelisted = true;
+    d.nodeName = "wallet";
+    EnqueueTxForAdmission(d);
+    */
+
+    /*
+    if (!wtxNew.AcceptToMemoryPool(AreFreeTxnsDisallowed()))
     {
-        if (fBroadcastTransactions)
+        // This must not fail. The transaction has already been signed and recorded.
+        LOGA("CommitTransaction(): Error: Transaction not valid\n");
+        return false;
+    }
+    */
+
+    if (fBroadcastTransactions)
+    {
+        auto txref = MakeTransactionRef(wtxNew);
+        CValidationDebugger debugger;
+        CValidationState state;
+        bool fMissingInputs = false;
+        std::vector<COutPoint> vCoinsToUncache;
+        bool isRespend = false;
+        const bool rejectAbsurdFee = true;
+        // Since this is our own wallet, we can use nonstandard
+        // TODO: limit nonstandard to a tweak because unless you are a miner it won't be mined
+        ParallelAcceptToMemoryPool(txHandlerSnap, mempool, state, txref, false, &fMissingInputs, rejectAbsurdFee,
+            TransactionClass::NONSTANDARD, vCoinsToUncache, &isRespend, &debugger);
+        if (debugger.IsValid())
         {
-            /** When the wallet is parallelized, this will higher performing, however right now its a wash.
-                Enqueuing like this will not provide feedback if the the mempool doesn't accept the tx.
-                And for RPC calls, you must FlushTxAdmission before returning
             CTxInputData d;
             d.tx = MakeTransactionRef(wtxNew);
             d.whitelisted = true;
             d.nodeName = "wallet";
             EnqueueTxForAdmission(d);
+
+            /* Handled below in fBroadcastTransactions
+            // wait for the tx to enter the mempool because wallet txes are traditionally synchronous
+            bool inMempool = false;
+            while(!shutdown_threads.load() && !inMempool)
+            {
+                boost::unique_lock<boost::mutex> lock(csCommitQ);
+                cvCommitted.wait();
+                if (mempool.exists(wtxNew.GetHash())) inMempool = true;
+                else
+                {
+                    // If its gone from the admission system, and not in the mempool return false.
+                    // This would mean that somehow the tx was valid during the parallelAccept, but now is not
+                    // which could happen only in a doublespend race condition.
+                    // Really, apps MUST look not at this return value but the blockchain to ensure committed,
+                    // even if true is returned...
+                    if ((txInQ.size() == 0)&&(txDeferQ.size() ==
+            0)&&(txCommitQ.find(wtxNew.GetHash())==txCommitQ.end()))
+                    {
+                        return false;
+                    }
+            }
+            if (!inMempool && shutdown_threads.load()) return false;
             */
-
-            // Broadcast
-            if (!wtxNew.AcceptToMemoryPool(false))
-            {
-                // This must not fail. The transaction has already been signed and recorded.
-                LOGA("CommitTransaction(): Error: Transaction not valid\n");
-                return false;
-            }
         }
-
-        LOCK(cs_wallet);
+        else // TODO return why tx is invalid (the debugger object)
         {
-            // This is only to keep the database open to defeat the auto-flush for the
-            // duration of this scope.  This is the only place where this optimization
-            // maybe makes sense; please don't do it anywhere else.
-            CWalletDB *pwalletdb = fFileBacked ? new CWalletDB(strWalletFile, "r+") : nullptr;
-
-            // Take key pair from key pool so it won't be used again
-            reservekey.KeepKey();
-
-            // Add tx to wallet, because if it has change it's also ours,
-            // otherwise just for transaction history.
-            AddToWallet(wtxNew, false, pwalletdb);
-
-            // Notify that old coins are spent
-            set<CWalletTx *> setCoins;
-            for (const CTxIn &txin : wtxNew.vin)
-            {
-                CWalletTx &coin = mapWallet[txin.prevout.hash];
-                coin.BindWallet(this);
-                NotifyTransactionChanged(this, coin.GetHash(), CT_UPDATED);
-            }
-
-            if (fFileBacked)
-                delete pwalletdb;
+            LOGA("CommitTransaction(): Error: Transaction not valid\n");
+            return false;
         }
+    }
+
+    {
+        LOCK(cs_wallet);
+        // This is only to keep the database open to defeat the auto-flush for the
+        // duration of this scope.  This is the only place where this optimization
+        // maybe makes sense; please don't do it anywhere else.
+        CWalletDB *pwalletdb = fFileBacked ? new CWalletDB(strWalletFile, "r+") : nullptr;
+
+        // Take key pair from key pool so it won't be used again
+        reservekey.KeepKey();
+
+        // Add tx to wallet, because if it has change it's also ours,
+        // otherwise just for transaction history.
+        AddToWallet(wtxNew, false, pwalletdb);
+
+        // Notify that old coins are spent
+        set<CWalletTx *> setCoins;
+        for (const CTxIn &txin : wtxNew.vin)
+        {
+            CWalletTx &coin = mapWallet[txin.prevout.hash];
+            coin.BindWallet(this);
+            NotifyTransactionChanged(this, coin.GetHash(), CT_UPDATED);
+        }
+
+        if (fFileBacked)
+            delete pwalletdb;
 
         // Track how many getdata requests our transaction gets
         mapRequestCount[wtxNew.GetHash()] = 0;
@@ -2821,6 +3072,22 @@ bool CWallet::CommitTransaction(CWalletTx &wtxNew, CReserveKey &reservekey)
             SyncWithWallets(MakeTransactionRef(wtxNew), nullptr, -1);
             wtxNew.RelayWalletTransaction();
         }
+    }
+
+
+    if (fBroadcastTransactions)
+    {
+        // Wait for tx to be admitted
+        // TODO, put a "Promise"-like callback in CTxInputData
+        for (int i = 0; (i < 50 && !shutdown_threads.load()); i++)
+        {
+            if (mempool.exists(wtxNew.GetHash()))
+            {
+                return true;
+            }
+            MilliSleep(100);
+        }
+        return false; // TX was not admitted
     }
     return true;
 }

@@ -66,6 +66,7 @@ typedef enum
     AddrBlockchainBCHtestnet = 2,
     AddrBlockchainBCHregtest = 3,
     AddrBlockchainNol = 4,
+    AddrBlockchainNextChain = 5,
 } ChainSelector;
 
 CChainParams *GetChainParams(ChainSelector chainSelector)
@@ -78,11 +79,14 @@ CChainParams *GetChainParams(ChainSelector chainSelector)
         return &Params(CBaseChainParams::REGTEST);
     else if (chainSelector == AddrBlockchainNol)
         return &Params(CBaseChainParams::UNL);
+    else if (chainSelector == AddrBlockchainNextChain)
+        return &Params(CBaseChainParams::NEXTCHAIN);
     else
         return nullptr;
 }
 
-
+// No-op this RPC function that is unused in .so context
+extern UniValue token(const UniValue &params, bool fHelp) { return UniValue(); }
 // helper functions
 namespace
 {
@@ -322,10 +326,12 @@ of the ScriptMachine.
 class ScriptMachineData
 {
 public:
-    ScriptMachineData() : sm(nullptr), tx(nullptr), checker(nullptr), script(nullptr) {}
+    ScriptMachineData() : sm(nullptr), tx(nullptr), sis(nullptr), script(nullptr) {}
     ScriptMachine *sm;
-    std::shared_ptr<CTransaction> tx;
+
+    CTransactionRef tx;
     std::shared_ptr<BaseSignatureChecker> checker;
+    std::shared_ptr<ScriptImportedState> sis;
     std::shared_ptr<CScript> script;
 
     ~ScriptMachineData()
@@ -343,8 +349,9 @@ public:
 SLAPI void *CreateNoContextScriptMachine(unsigned int flags)
 {
     ScriptMachineData *smd = new ScriptMachineData();
-    smd->checker = std::make_shared<BaseSignatureChecker>();
-    smd->sm = new ScriptMachine(flags, *smd->checker, 0xffffffff, 0xffffffff);
+
+    smd->sis = std::make_shared<ScriptImportedState>(nullptr, smd->tx, 0, 0);
+    smd->sm = new ScriptMachine(flags, *smd->sis, 0xffffffff, 0xffffffff);
     return (void *)smd;
 }
 
@@ -360,12 +367,12 @@ SLAPI void *CreateScriptMachine(unsigned int flags,
     checkSigInit();
 
     ScriptMachineData *smd = new ScriptMachineData();
-    smd->tx = std::make_shared<CTransaction>();
+    std::shared_ptr<CTransaction> txref = std::make_shared<CTransaction>();
 
     CDataStream ssData((char *)txData, (char *)txData + txbuflen, SER_NETWORK, PROTOCOL_VERSION);
     try
     {
-        ssData >> *smd->tx;
+        ssData >> *txref;
     }
     catch (const std::exception &)
     {
@@ -373,11 +380,13 @@ SLAPI void *CreateScriptMachine(unsigned int flags,
         return 0;
     }
 
+    smd->tx = txref;
     // Its ok to get the bare tx pointer: the life of the CTransaction is the same as TransactionSignatureChecker
     smd->checker = std::make_shared<TransactionSignatureChecker>(smd->tx.get(), inputIdx, inputAmount, flags);
+    smd->sis = std::make_shared<ScriptImportedState>(&(*smd->checker), smd->tx, inputIdx, inputAmount);
     // max ops and max sigchecks are set to the maximum value with the intention that the caller will check these if
     // needed because many uses of the script machine are for debugging and experimental scripts.
-    smd->sm = new ScriptMachine(flags, *smd->checker, 0xffffffff, 0xffffffff);
+    smd->sm = new ScriptMachine(flags, *smd->sis, 0xffffffff, 0xffffffff);
     return (void *)smd;
 }
 
@@ -396,8 +405,9 @@ SLAPI void *SmClone(void *smId)
     ScriptMachineData *from = (ScriptMachineData *)smId;
     ScriptMachineData *to = new ScriptMachineData();
     to->script = from->script;
-    to->checker = from->checker;
+    to->sis = from->sis;
     to->tx = from->tx;
+    to->sis->tx = to->tx; // Get it pointing to the right object even though they are currently the same
     to->sm = new ScriptMachine(*from->sm);
     return (void *)to;
 }
@@ -458,36 +468,72 @@ SLAPI void SmReset(void *smId)
 
 // Get a stack item, 0 = stack, 1 = altstack,  pass a buffer at least 520 bytes in size
 // returns length of the item or -1 if no item.  0 is the stack top
-SLAPI void SmSetStackItem(void *smId, unsigned int stack, int index, const unsigned char *value, unsigned int valsize)
+SLAPI void SmSetStackItem(void *smId,
+    unsigned int stack,
+    int index,
+    StackElementType t,
+    const unsigned char *value,
+    unsigned int valsize)
 {
     ScriptMachineData *smd = (ScriptMachineData *)smId;
 
-    const std::vector<StackDataType> &stk = (stack == 0) ? smd->sm->getStack() : smd->sm->getAltStack();
+    const std::vector<StackItem> &stk = (stack == 0) ? smd->sm->getStack() : smd->sm->getAltStack();
     if (((int)stk.size()) <= index)
         return;
+
+    StackItem si;
+    if (t == StackElementType::VCH)
+    {
+        si = StackItem(value, value + valsize);
+    }
+    else if (t == StackElementType::BIGNUM)
+    {
+        BigNum bn;
+        bn.deserialize(value, valsize);
+        si = StackItem(bn);
+    }
+    else
+    {
+        return;
+    }
+
     if (stack == 0)
     {
-        smd->sm->setStackItem(index, StackDataType(value, value + valsize));
+        smd->sm->setStackItem(index, si);
     }
     else if (stack == 1)
     {
-        smd->sm->setAltStackItem(index, StackDataType(value, value + valsize));
+        smd->sm->setAltStackItem(index, si);
     }
 }
 
 // Get a stack item, 0 = stack, 1 = altstack,  pass a buffer at least 520 bytes in size
 // returns length of the item or -1 if no item.  0 is the stack top
-SLAPI int SmGetStackItem(void *smId, unsigned int stack, unsigned int index, unsigned char *result)
+SLAPI int SmGetStackItem(void *smId, unsigned int stack, unsigned int index, StackElementType *t, unsigned char *result)
 {
     ScriptMachineData *smd = (ScriptMachineData *)smId;
 
-    const std::vector<StackDataType> &stk = (stack == 0) ? smd->sm->getStack() : smd->sm->getAltStack();
+    const std::vector<StackItem> &stk = (stack == 0) ? smd->sm->getStack() : smd->sm->getAltStack();
     if (stk.size() <= index)
         return -1;
     index = stk.size() - index - 1; // reverse it so 0 is stack top
-    int sz = stk[index].size();
-    memcpy(result, stk[index].data(), sz);
-    return sz;
+
+    const StackItem &item = stk[index];
+
+    *t = item.type;
+    if (item.type == StackElementType::VCH)
+    {
+        int sz = stk[index].size();
+        memcpy(result, stk[index].data().data(), sz);
+        return sz;
+    }
+    else if (item.type == StackElementType::BIGNUM)
+    {
+        int sz = item.num().serialize(result, 512);
+        return (sz);
+    }
+    else
+        return 0;
 }
 
 // Returns the last error generated during script evaluation (if any)
@@ -804,6 +850,7 @@ extern "C" JNIEXPORT jbyteArray JNICALL Java_bitcoinunlimited_libbitcoincash_Wal
     jint flags,
     jint tweak)
 {
+    jclass byteArrayClass = env->FindClass("[B");
     size_t len = env->GetArrayLength(arg);
     if (capacity < 10)
         capacity = 10; // sanity check the capacity
@@ -818,8 +865,19 @@ extern "C" JNIEXPORT jbyteArray JNICALL Java_bitcoinunlimited_libbitcoincash_Wal
 
     for (size_t i = 0; i < len; i++)
     {
-        jbyteArray elem = (jbyteArray)env->GetObjectArrayElement(arg, i);
+        jobject obj = env->GetObjectArrayElement(arg, i);
+        if (!env->IsInstanceOf(obj, byteArrayClass))
+        {
+            triggerJavaIllegalStateException(env, "incorrect element data type (must be ByteArray)");
+            return nullptr;
+        }
+        jbyteArray elem = (jbyteArray)obj;
         jbyte *elemData = env->GetByteArrayElements(elem, 0);
+        if (elemData == NULL)
+        {
+            triggerJavaIllegalStateException(env, "incorrect element data type (must be ByteArray)");
+            return nullptr;
+        }
         size_t elemLen = env->GetArrayLength(elem);
         bloom.insert(std::vector<unsigned char>(elemData, elemData + elemLen));
         env->ReleaseByteArrayElements(elem, elemData, 0);
@@ -831,9 +889,11 @@ extern "C" JNIEXPORT jbyteArray JNICALL Java_bitcoinunlimited_libbitcoincash_Wal
         (unsigned int)bloom.vDataSize(), (unsigned int)serializer.size(), (unsigned int)len);
     jbyteArray ret = env->NewByteArray(serializer.size());
     jbyte *retData = env->GetByteArrayElements(ret, 0);
+
     if (!retData)
         return ret; // failed
     memcpy(retData, serializer.data(), serializer.size());
+
     env->ReleaseByteArrayElements(ret, retData, 0);
     return ret;
 }

@@ -42,8 +42,11 @@ static bool Verify(const CScript &scriptSig, const CScript &scriptPubKey, bool f
     txTo.vin[0].scriptSig = scriptSig;
     txTo.vout[0].nValue = 1;
 
-    return VerifyScript(scriptSig, scriptPubKey, fStrict ? SCRIPT_VERIFY_P2SH : SCRIPT_VERIFY_NONE, MAX_OPS_PER_SCRIPT,
-        MutableTransactionSignatureChecker(&txTo, 0, txFrom.vout[0].nValue), &err);
+    MutableTransactionSignatureChecker tsc(&txTo, 0, txFrom.vout[0].nValue);
+    ScriptImportedState sis(&tsc, MakeTransactionRef(txTo), 0, txFrom.vout[0].nValue);
+
+    return VerifyScript(
+        scriptSig, scriptPubKey, fStrict ? SCRIPT_VERIFY_P2SH : SCRIPT_VERIFY_NONE, MAX_OPS_PER_SCRIPT, sis, &err);
 }
 
 

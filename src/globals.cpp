@@ -62,6 +62,9 @@
 
 using namespace std;
 
+uint32_t enforceOpGroupStartHeight = 0;
+bool miningForkOpGroup = false;
+
 #ifdef DEBUG_LOCKORDER
 std::atomic<bool> lockdataDestructed{false};
 LockData lockdata;
@@ -261,6 +264,7 @@ std::queue<CTxInputData> txDeferQ GUARDED_BY(csTxInQ);
 // Transactions that have been validated and are waiting to be committed into the mempool
 CWaitableCriticalSection csCommitQ;
 CConditionVariable cvCommitQ GUARDED_BY(csCommitQ);
+// CConditionVariable cvCommitted GUARDED_BY(csCommitQ);
 std::map<uint256, CTxCommitData> *txCommitQ GUARDED_BY(csCommitQ) = nullptr;
 
 // Control the execution of the parallel tx validation and serial mempool commit phases
@@ -333,6 +337,14 @@ CTweakRef<uint64_t> miningForkTime("consensus.forkMay2021Time",
     "setting of 1 will turn on the fork at the appropriate time.",
     &nMiningForkTime,
     &ForkTimeValidator); // Saturday May 15 12:00:00 UTC 2021
+
+CTweakRef<uint32_t> miningEnforceOpGroup("mining.opgroup",
+    "Enable enforcement of the OP_GROUP opcode at this block height",
+    &enforceOpGroupStartHeight);
+
+CTweakRef<bool> miningForkOpGroupTweak("mining.forkOpgroup",
+    "Enable enforcement of the OP_GROUP opcode at the fork point",
+    &miningForkOpGroup);
 
 CTweak<uint64_t> maxScriptOps("consensus.maxScriptOps",
     strprintf("Maximum number of script operations allowed.  Stack pushes are excepted (default: %ld)",

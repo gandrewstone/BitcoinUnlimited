@@ -833,6 +833,103 @@ public:
 
 static CScaleNetParams scaleNetParams;
 
+class CNextChainParams : public CChainParams
+{
+public:
+    CNextChainParams()
+    {
+        strNetworkID = NEXTCHAIN_TICKER;
+
+        genesis = CreateGenesisBlock(CScript() << 0 << CScriptNum(7227),
+            "Innovations enabling viral uses create a virtuous adoption cycle that overwhelms legacy systems",
+            CScript() << OP_1, 1614891148, 1774176, 0x1f000fff, 536870912, 0 * COIN);
+        consensus.hashGenesisBlock = genesis.GetHash();
+        assert(
+            consensus.hashGenesisBlock == uint256S("a73e8992af2a3b498c5114a6144b03bc41de938b39643fd82030f9721c0f8f1e"));
+
+        consensus.nSubsidyHalvingInterval = 210000 * 5; // 2 minute blocks rather than 10 min -> * 5
+        consensus.BIP16Height = 0;
+        consensus.BIP34Height = 0;
+        consensus.BIP34Hash = consensus.hashGenesisBlock;
+        consensus.BIP65Height = 0;
+        consensus.BIP66Height = 0;
+        consensus.BIP68Height = 0;
+        consensus.powLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // (unused in nextchain)
+        consensus.nPowTargetSpacing = 2 * 60;
+        consensus.fPowAllowMinDifficultyBlocks = false;
+        consensus.fPowNoRetargeting = false;
+        consensus.powAlgorithm = 1;
+        consensus.initialSubsidy = 10 * COIN;
+        // The half life for the ASERT DAA. For every (nASERTHalfLife) seconds behind schedule the blockchain gets,
+        // difficulty is cut in half. Doubled if blocks are ahead of schedule.
+        // Two days (in seconds)
+        consensus.nASERTHalfLife = 2 * 24 * 60 * 60;
+
+        /**
+         * The message start string is designed to be unlikely to occur in normal data.
+         * The characters are rarely used upper ASCII, not valid as UTF-8, and produce
+         * a large 32-bit integer with any alignment.
+         */
+        pchMessageStart[0] = 0xf9;
+        pchMessageStart[1] = 0xbe;
+        pchMessageStart[2] = 0xb4;
+        pchMessageStart[3] = 0xd9;
+        pchCashMessageStart[0] = 0x72;
+        pchCashMessageStart[1] = 0x27;
+        pchCashMessageStart[2] = 0x12;
+        pchCashMessageStart[3] = 0x21;
+        nDefaultPort = 7228;
+        nPruneAfterHeight = 100000;
+
+        nDefaultExcessiveBlockSize = 1024000000;
+        nMinMaxBlockSize = MIN_EXCESSIVE_BLOCK_SIZE;
+        nDefaultMaxBlockMiningSize = 1024000000;
+
+        // Aug, 1 2017 hard fork
+        consensus.uahfHeight = 0;
+        // Nov, 13 hard fork
+        consensus.daaHeight = consensus.DifficultyAdjustmentInterval();
+        // May, 15 2018 hard fork
+        consensus.may2018Height = 0;
+        // Nov, 15 2018 hard fork
+        consensus.nov2018Height = 0;
+        // May, 15 2019 hard fork
+        consensus.may2019Height = 0;
+        // Nov, 2010 12:00:00 UTC protocol upgrade
+        consensus.nov2019Height = 0;
+        // May 15, 2020 actication height
+        consensus.may2020Height = 0;
+        // Nov, 15 2019 12:00:00 UTC fork is always activated.
+        consensus.nov2020ActivationTime = 0;
+
+        vFixedSeeds.clear();
+        vSeeds.clear();
+        vSeeds.push_back(CDNSSeedData("nextchain.cash", "seed.nextchain.cash", true));
+
+        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1, 25); // P2PKH addresses begin with B
+        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1, 68); // P2SH  addresses begin with U
+        base58Prefixes[SECRET_KEY] = std::vector<unsigned char>(1, 35); // WIF   format begins with 2B or 2C
+        base58Prefixes[EXT_PUBLIC_KEY] =
+            boost::assign::list_of(0x42)(0x69)(0x67)(0x20).convert_to_container<std::vector<unsigned char> >();
+        base58Prefixes[EXT_SECRET_KEY] =
+            boost::assign::list_of(0x42)(0x6c)(0x6b)(0x73).convert_to_container<std::vector<unsigned char> >();
+        cashaddrPrefix = strNetworkID;
+
+        vFixedSeeds = std::vector<SeedSpec6>();
+
+        fMiningRequiresPeers = true;
+        fDefaultConsistencyChecks = false;
+        fRequireStandard = true;
+        fMineBlocksOnDemand = false;
+        fTestnetToBeDeprecatedFieldRPC = false;
+
+        checkpointData = CCheckpointData();
+    }
+};
+
+CNextChainParams nextChainParams;
+
 CChainParams *pCurrentParams = 0;
 
 const CChainParams &Params()
@@ -855,6 +952,8 @@ CChainParams &Params(const std::string &chain)
         return regTestParams;
     else if (chain == CBaseChainParams::UNL)
         return unlParams;
+    else if (chain == CBaseChainParams::NEXTCHAIN)
+        return nextChainParams;
     else
         throw std::runtime_error(strprintf("%s: Unknown chain %s.", __func__, chain));
 }

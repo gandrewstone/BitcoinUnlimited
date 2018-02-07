@@ -13,7 +13,6 @@
 #include "uint256.h"
 #include "util.h"
 #include "validation/forks.h"
-
 static std::atomic<const CBlockIndex *> cachedAnchor{nullptr};
 
 void ResetASERTAnchorBlockCache() noexcept { cachedAnchor = nullptr; }
@@ -55,6 +54,23 @@ static const CBlockIndex *GetASERTAnchorBlock(const CBlockIndex *const pindex, c
     }
     // Slow path: walk back until we find the first ancestor for which IsNov2020Activated() == true.
     const CBlockIndex *anchor = pindex;
+
+    if (params.powAlgorithm == 1) // NextChain, skip back to the genesis block
+    {
+        while (anchor->pprev)
+        {
+            if (anchor->pskip != nullptr)
+            {
+                anchor = anchor->pskip;
+                continue;
+            }
+            anchor = anchor->pprev;
+        }
+
+        // Return rather than else so the while is not indented, simplifying NextChain merges.
+        cachedAnchor = anchor; // Anchor is nextchain genesis block
+        return anchor;
+    }
 
     while (anchor->pprev)
     {
@@ -123,6 +139,8 @@ uint32_t GetNextASERTWorkRequired(const CBlockIndex *pindexPrev,
     // as per the absolute formulation of ASERT.
     // This is somewhat counterintuitive since it is referred to as the anchor timestamp, but
     // as per the formula the timestamp of block M-1 must be used if the anchor is M.
+    if (pindexPrev->pprev == nullptr)
+        return powLimit.GetCompact(); // Start at very low difficulty
     assert(pindexPrev->pprev != nullptr);
     // Note: time difference is to parent of anchor block (or to anchor block itself iff anchor is genesis).
     //       (according to absolute formulation of ASERT)
@@ -151,11 +169,13 @@ arith_uint256 CalculateASERT(const arith_uint256 &refTarget,
     const int64_t nHalfLife) noexcept
 {
     // Input target must never be zero nor exceed powLimit.
-    assert(refTarget > 0 && refTarget <= powLimit);
+    assert(refTarget > 0);
+    assert(refTarget <= powLimit);
 
     // We need some leading zero bits in powLimit in order to have room to handle
     // overflows easily. 32 leading zero bits is more than enough.
-    assert((powLimit >> 224) == 0);
+    // (broken if starting from genesis block with more difficult POW, so using 20 leading 0 bits)
+    assert((powLimit >> 236) == 0);
 
     // Height diff should NOT be negative.
     assert(nHeightDiff >= 0);
@@ -232,6 +252,9 @@ arith_uint256 CalculateASERT(const arith_uint256 &refTarget,
     return nextTarget;
 }
 
+
+#include "crypto/sha256.h"
+#include "key.h"
 
 /**
  * Compute the next required proof of work using the legacy Bitcoin difficulty
@@ -368,11 +391,41 @@ uint32_t CalculateNextWorkRequired(const CBlockIndex *pindexLast,
     return bnNew.GetCompact();
 }
 
+static uint256 sha256(uint256 data)
+{
+    uint256 ret;
+    CSHA256 sha;
+    sha.Write(data.begin(), 256 / 8);
+    sha.Finalize(ret.begin());
+    return ret;
+}
+
 bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params &params)
 {
     bool fNegative;
     bool fOverflow;
     arith_uint256 bnTarget;
+
+    if (params.powAlgorithm == 1)
+    {
+        // This algorithm uses the hash as a priv key to sign sha256(hash) using deterministic k.
+        // This means that any hardware optimization will need to implement signature generation.
+        // What we really want is signature validation to be implemented in hardware, so more thought needs to
+        // happen.
+        uint256 h1 = sha256(hash);
+        CKey k; // Use hash as a private key
+        k.Set(hash.begin(), hash.end(), false);
+        if (!k.IsValid())
+            return false; // If we can't POW fails
+        std::vector<uint8_t> vchSig;
+        if (!k.SignSchnorr(h1, vchSig))
+            return false; // Sign sha256(hash) with hash
+
+        // sha256 the signed data to get back to 32 bytes
+        CSHA256 sha;
+        sha.Write(&vchSig[0], vchSig.size());
+        sha.Finalize(hash.begin());
+    }
 
     bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
 

@@ -105,6 +105,11 @@ const char *ScriptErrorString(const ScriptError serror)
         return "Non-minimally encoded script number";
     case SIGCHECKS_LIMIT_EXCEEDED:
         return "Validation resources exceeded (SigChecks)";
+    case SCRIPT_ERR_BAD_OPERATION_ON_TYPE:
+        return "Bad operation on type";
+    case SCRIPT_ERR_DATA_REQUIRED:
+        return "Transaction data not provided";
+
     case SCRIPT_ERR_UNKNOWN_ERROR:
     case SCRIPT_ERR_ERROR_COUNT:
     default:

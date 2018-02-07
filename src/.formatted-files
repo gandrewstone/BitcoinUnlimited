@@ -125,6 +125,7 @@ merkleblock.cpp
 merkleblock.h
 miner.cpp
 miner.h
+nextchain.cpp
 netaddress.cpp
 netaddress.h
 netbase.cpp
@@ -359,6 +360,7 @@ test/pmt_tests.cpp
 test/policyestimator_tests.cpp
 test/pow_tests.cpp
 test/prevector_tests.cpp
+test/pushtxstate_tests.cpp
 test/requestmanager_tests.cpp
 test/reverselock_tests.cpp
 test/rpc_tests.cpp
@@ -385,6 +387,7 @@ test/thinblock_data_tests.cpp
 test/thinblock_tests.cpp
 test/thinblock_util_tests.cpp
 test/timedata_tests.cpp
+test/grouptoken_tests.cpp
 test/transaction_tests.cpp
 test/txlookup_tests.cpp
 test/txvalidationcache_tests.cpp
@@ -404,6 +407,8 @@ wallet/db.h
 wallet/rpcdump.cpp
 wallet/rpcwallet.cpp
 wallet/rpcwallet.h
+wallet/grouptokenwallet.cpp
+wallet/grouptokenwallet.h
 wallet/wallet.cpp
 wallet/walletdb.cpp
 wallet/walletdb.h
@@ -416,15 +421,20 @@ zmq/zmqnotificationinterface.cpp
 zmq/zmqnotificationinterface.h
 zmq/zmqpublishnotifier.cpp
 zmq/zmqpublishnotifier.h
+script/bignum.cpp
+script/bignum.h
 script/bitcoinconsensus.cpp
 script/bitcoinconsensus.h
 script/bitfield.cpp
 script/bitfield.h
+script/pushtxstate.cpp
+script/pushtxstate.h
 script/interpreter.cpp
 script/interpreter.h
 script/ismine.cpp
 script/ismine.h
 script/script.cpp
+script/scriptattributes.cpp
 script/script_error.cpp
 script/script_error.h
 script/script.h
@@ -433,6 +443,8 @@ script/sigcache.h
 script/sigcommon.cpp
 script/sign.cpp
 script/sign.h
+script/stackitem.cpp
+script/stackitem.h
 script/standard.cpp
 script/standard.h
 respend/respendaction.h
@@ -500,4 +512,6 @@ consensus/params.h
 consensus/tx_verify.cpp
 consensus/tx_verify.h
 consensus/validation.h
+consensus/grouptokens.h
+consensus/grouptokens.cpp
 cashlib/cashlib.cpp

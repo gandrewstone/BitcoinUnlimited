@@ -33,7 +33,7 @@ if ENABLE_JAVACASHLIB
 JNI_CXXFLAGS = -I$(JAVA_HOME)/include/linux -I$(JAVA_HOME)/include -DJAVA
 endif
 
-EXTRA_LIBRARIES =
+EXTRA_LIBRARIES = libgmp.a
 
 BITCOIN_CONFIG_INCLUDES=-I$(builddir)/config
 BITCOIN_INCLUDES=-I$(builddir) -I$(builddir)/obj $(BDB_CPPFLAGS) $(BOOST_CPPFLAGS) $(LEVELDB_CPPFLAGS) $(CRYPTO_CFLAGS) $(SSL_CFLAGS)
@@ -149,6 +149,7 @@ BITCOIN_CORE_H = \
   config.h \
   connmgr.h \
   consensus/consensus.h \
+  consensus/grouptokens.h \
   consensus/tx_verify.h \
   core_io.h \
   core_memusage.h \
@@ -209,10 +210,14 @@ BITCOIN_CORE_H = \
   respend/respendlogger.h \
   respend/respendrelayer.h \
   respend/respenddetector.h \
+  script/bignum.h \
+  script/pushtxstate.h \
   script/sigcache.h \
   script/sign.h \
   script/standard.h \
   script/ismine.h \
+  script/scripttemplate.h \
+  script/stackitem.h \
   streams.h \
   support/allocators/secure.h \
   support/allocators/zeroafterfree.h \
@@ -251,6 +256,7 @@ BITCOIN_CORE_H = \
   wallet/rpcwallet.h \
   wallet/wallet.h \
   wallet/walletdb.h \
+  wallet/grouptokenwallet.h \
   zmq/zmqabstractnotifier.h \
   zmq/zmqconfig.h\
   zmq/zmqnotificationinterface.h \
@@ -287,6 +293,7 @@ libbitcoin_server_a_SOURCES = \
   chain.cpp \
   checkpoints.cpp \
   connmgr.cpp \
+  consensus/grouptokens.cpp \
   consensus/tx_verify.cpp \
   DoubleSpendProof.cpp \
   DoubleSpendProofStorage.cpp \
@@ -308,6 +315,7 @@ libbitcoin_server_a_SOURCES = \
   miner.cpp \
   net.cpp \
   net_processing.cpp \
+  nextchain.cpp \
   nodestate.cpp \
   noui.cpp \
   policy/fees.cpp \
@@ -327,6 +335,7 @@ libbitcoin_server_a_SOURCES = \
   respend/respenddetector.cpp \
   script/sigcache.cpp \
   script/ismine.cpp \
+  script/scriptattributes.cpp \
   timedata.cpp \
   torcontrol.cpp \
   txadmission.cpp \
@@ -366,6 +375,7 @@ libbitcoin_wallet_a_SOURCES = \
   wallet/coinselection.cpp \
   wallet/crypter.cpp \
   wallet/db.cpp \
+  wallet/grouptokenwallet.cpp \
   wallet/rpcdump.cpp \
   wallet/rpcwallet.cpp \
   wallet/wallet.cpp \
@@ -401,12 +411,20 @@ libbitcoincash_a_SOURCES = \
   random.h \
   script/bitfield.cpp \
   script/bitfield.h \
+  script/pushtxstate.cpp \
+  script/pushtxstate.h \
   script/interpreter.cpp \
   script/interpreter.h \
+  script/bignum.cpp \
+  script/bignun.h \
   script/standard.cpp \
   script/standard.h \
+  script/stackitem.cpp \
+  script/stackitem.h \
   script/script.cpp \
   script/script.h \
+  script/scriptattributes.cpp \
+  script/scripttemplate.cpp \
   script/sign.cpp \
   script/sign.h \
   support/pagelocker.cpp \
@@ -494,16 +512,24 @@ libbitcoin_consensus_a_SOURCES = \
   primitives/transaction.h \
   pubkey.cpp \
   pubkey.h \
+  script/scriptattributes.cpp \
   script/bitcoinconsensus.cpp \
   script/bitfield.cpp \
   script/bitfield.h \
+  script/bignum.cpp \
+  script/bignum.h \
+  script/pushtxstate.cpp \
+  script/pushtxstate.h \
   script/interpreter.cpp \
   script/interpreter.h \
+  script/stackitem.cpp \
+  script/stackitem.h \
   script/sigcommon.cpp \
   script/script.cpp \
   script/script.h \
   script/script_error.cpp \
   script/script_error.h \
+  script/scripttemplate.cpp \
   script/sighashtype.h \
   serialize.h \
   tinyformat.h \
@@ -660,8 +686,11 @@ bitcoin_tx_LDADD += $(BOOST_LIBS) $(CRYPTO_LIBS)
 
 # bitcoin-miner binary #
 bitcoin_miner_SOURCES = bitcoin-miner.cpp \
+  pow.cpp \
   arith_uint256.cpp \
   arith_uint256.h \
+  validation/forks.cpp \
+  validation/forks.h \
   uint256.cpp \
   uint256.h
 
@@ -677,11 +706,14 @@ endif
 bitcoin_miner_LDADD = \
   $(LIBBITCOIN_CLI) \
   $(LIBUNIVALUE) \
+  $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_UTIL) \
+  $(LIBBITCOIN_CONSENSUS) \
   $(LIBBITCOIN_CRYPTO) \
   $(LIBBITCOIN_CRYPTO_SSE41) \
   $(LIBBITCOIN_CRYPTO_AVX2) \
-  $(LIBRSM)
+  $(LIBRSM) \
+  $(LIBSECP256K1)
 
 bitcoin_miner_LDADD += $(BOOST_LIBS) $(SSL_LIBS) $(CRYPTO_LIBS) $(EVENT_LIBS)
 #

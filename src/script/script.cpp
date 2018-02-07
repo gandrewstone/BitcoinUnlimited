@@ -7,10 +7,13 @@
 #include "script.h"
 #include "interpreter.h"
 
+#include "consensus/grouptokens.h"
 #include "tinyformat.h"
 #include "utilstrencodings.h"
 
 #include <algorithm>
+
+extern bool IsScriptGrouped(const CScript &script, CScript::const_iterator *pcin, CGroupTokenInfo *grp);
 
 using namespace std;
 
@@ -263,6 +266,20 @@ const char *GetOpName(opcodetype opcode)
     case OP_REVERSEBYTES:
         return "OP_REVERSEBYTES";
 
+    case OP_PLACE:
+        return "OP_PLACE";
+    case OP_PUSH_TX_STATE:
+        return "OP_PUSH_TX_STATE";
+    case OP_BIN2BIGNUM:
+        return "OP_BIN2BIGNUM";
+    case OP_SETBMD:
+        return "OP_SETBMD";
+    case OP_GROUP:
+        return "OP_GROUP";
+    case OP_EXEC:
+        return "OP_EXEC";
+    case OP_TEMPLATE:
+        return "OP_TEMPLATE";
 
     case OP_INVALIDOPCODE:
         return "OP_INVALIDOPCODE";
@@ -438,7 +455,7 @@ unsigned int CScript::GetSigOpCount(const uint32_t flags, const CScript &scriptS
     // get the last item that the scriptSig
     // pushes onto the stack:
     const_iterator pc = scriptSig.begin();
-    vector<unsigned char> data;
+    StackItem data;
     while (pc < scriptSig.end())
     {
         opcodetype opcode;
@@ -449,14 +466,27 @@ unsigned int CScript::GetSigOpCount(const uint32_t flags, const CScript &scriptS
     }
 
     /// ... and return its opcount:
-    CScript subscript(data.begin(), data.end());
+    CScript subscript(data);
     return subscript.GetSigOpCount(flags, true);
 }
 
-bool CScript::IsPayToScriptHash() const
+bool CScript::IsPayToScriptHash(vector<unsigned char> *hashBytes) const
 {
+    CScript::const_iterator pc = begin();
+    IsScriptGrouped(*this, &pc);
+    unsigned int offset = &pc[0] - &begin()[0];
     // Extra-fast test for pay-to-script-hash CScripts:
-    return (this->size() == 23 && (*this)[0] == OP_HASH160 && (*this)[1] == 0x14 && (*this)[22] == OP_EQUAL);
+    if (this->size() == offset + 23 && (*this)[offset] == OP_HASH160 && (*this)[offset + 1] == 0x14 &&
+        (*this)[offset + 22] == OP_EQUAL)
+    {
+        if (hashBytes)
+        {
+            hashBytes->reserve(20);
+            copy(begin() + offset + 2, begin() + offset + 22, back_inserter(*hashBytes));
+        }
+        return true;
+    }
+    return false;
 }
 
 // A witness program is any valid CScript that consists of a 1-byte push opcode

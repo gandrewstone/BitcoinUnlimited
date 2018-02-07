@@ -249,7 +249,9 @@ static void addChainSelectionOptions(AllowedArgs &allowedArgs)
         .addArg("scalenet", optionalBool, _("Use the scaling test chain"))
         .addDebugArg("regtest", optionalBool,
             "Enter regression test mode, which uses a special chain in which blocks can be solved instantly. "
-            "This is intended for regression testing tools and app development.");
+            "This is intended for regression testing tools and app development.")
+        .addArg("nextchain", optionalBool, _("Use NextChain"))
+        .addArg("bch", optionalBool, _("Use Bitcoin Cash mainnet"));
 }
 
 static void addConfigurationLocationOptions(AllowedArgs &allowedArgs)

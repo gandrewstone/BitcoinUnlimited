@@ -146,7 +146,9 @@ bool IsMay2021Enabled(const Consensus::Params &consensusparams, const CBlockInde
     {
         return false;
     }
-    return pindexTip->IsforkActiveOnNextBlock(miningForkTime.Value());
+    if (consensusparams.nov2020ActivationTime == 0)
+        return true; // For nextchain activate it from GB
+    return pindexTip->IsforkActiveOnNextBlock(nMiningForkTime);
 }
 
 bool IsMay2021Next(const Consensus::Params &consensusparams, const CBlockIndex *pindexTip)
@@ -155,5 +157,7 @@ bool IsMay2021Next(const Consensus::Params &consensusparams, const CBlockIndex *
     {
         return false;
     }
-    return pindexTip->forkAtNextBlock(miningForkTime.Value());
+    if (consensusparams.nov2020ActivationTime == 0)
+        return false; // For nextchain active since GB
+    return pindexTip->forkAtNextBlock(nMiningForkTime);
 }

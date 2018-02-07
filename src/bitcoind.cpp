@@ -120,6 +120,7 @@ bool AppInit(int argc, char *argv[])
         ss << NetworkDeploymentInfoCSV(CBaseChainParams::UNL);
         ss << NetworkDeploymentInfoCSV(CBaseChainParams::TESTNET);
         ss << NetworkDeploymentInfoCSV(CBaseChainParams::REGTEST);
+        ss << NetworkDeploymentInfoCSV(CBaseChainParams::NEXTCHAIN);
         std::cout << ss.str();
         return true;
     }

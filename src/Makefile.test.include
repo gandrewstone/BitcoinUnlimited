@@ -51,6 +51,7 @@ BITCOIN_TEST_SUITE = \
 BITCOIN_TESTS =\
   respend/test/respendrelayer_tests.cpp \
   respend/test/respenddetector_tests.cpp \
+  test/grouptoken_tests.cpp \
   test/uahf_test.cpp \
   test/fork_tests.cpp \
   test/excessiveblock_test.cpp \
@@ -120,6 +121,7 @@ BITCOIN_TESTS =\
   test/policyestimator_tests.cpp \
   test/pow_tests.cpp \
   test/prevector_tests.cpp \
+  test/pushtxstate_tests.cpp \
   test/random_tests.cpp \
   test/requestmanager_tests.cpp \
   test/reverselock_tests.cpp \
@@ -131,6 +133,7 @@ BITCOIN_TESTS =\
   test/script_standard_tests.cpp \
   test/script_tests.cpp \
   test/scriptnum_tests.cpp \
+  test/scripttemplate_tests.cpp \
   test/serialize_tests.cpp \
   test/sigencoding_tests.cpp \
   test/sighash_tests.cpp \

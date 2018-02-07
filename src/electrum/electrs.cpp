@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include "electrum/electrs.h"
+#include "chainparamsbase.h"
 #include "extversionkeys.h"
 #include "extversionmessage.h"
 #include "netaddress.h"
@@ -22,8 +23,8 @@ static std::string monitoring_host() { return GetArg("-electrum.monitoring.host"
 static std::string rpc_host() { return GetArg("-electrum.host", "0.0.0.0"); }
 static std::string rpc_port(const std::string &network)
 {
-    const std::map<std::string, std::string> portmap = {
-        {"main", "50001"}, {"test", "60001"}, {"regtest", "60401"}, {"test4", "62001"}, {"scale", "63001"}};
+    std::map<std::string, std::string> portmap = {{"main", "50001"}, {"test", "60001"}, {"regtest", "60401"},
+        {"test4", "62001"}, {"scale", "63001"}, {CBaseChainParams::NEXTCHAIN, "7229"}};
 
     auto defaultPort = portmap.find(network);
     if (defaultPort == end(portmap))
@@ -38,8 +39,8 @@ static std::string rpc_port(const std::string &network)
 static std::string ws_host() { return GetArg("-electrum.ws.host", "0.0.0.0"); }
 static std::string ws_port(const std::string &network)
 {
-    const std::map<std::string, std::string> portmap = {
-        {"main", "50003"}, {"test", "60003"}, {"regtest", "60403"}, {"test4", "62003"}, {"scale", "63003"}};
+    const std::map<std::string, std::string> portmap = {{"main", "50003"}, {"test", "60003"}, {"regtest", "60403"},
+        {"test4", "62003"}, {"scale", "63003"}, {CBaseChainParams::NEXTCHAIN, "7230"}};
 
     auto defaultPort = portmap.find(network);
     if (defaultPort == end(portmap))
@@ -179,8 +180,8 @@ std::vector<std::string> electrs_args(int rpcport, const std::string &network)
     args.push_back("--db-dir=" + GetArg("-electrum.dir", defaultDir));
 
     // Tell electrs what network we're on
-    const std::map<std::string, std::string> netmapping = {
-        {"main", "bitcoin"}, {"test", "testnet"}, {"regtest", "regtest"}, {"test4", "testnet4"}, {"scale", "scalenet"}};
+    const std::map<std::string, std::string> netmapping = {{"main", "bitcoin"}, {"test", "testnet"},
+        {"regtest", "regtest"}, {"test4", "testnet4"}, {"scale", "scalenet"}, {CBaseChainParams::NEXTCHAIN, "testnet"}};
     if (!netmapping.count(network))
     {
         std::stringstream ss;
@@ -193,6 +194,15 @@ std::vector<std::string> electrs_args(int rpcport, const std::string &network)
     if (!GetArg("-rpcpassword", "").empty())
     {
         args.push_back("--cookie=" + GetArg("-rpcuser", "") + ":" + GetArg("-rpcpassword", ""));
+    }
+    else
+    {
+        // This explicit code ought to work for any network, but it is only needed for nextchain because electrs
+        // guesses "testnet3" since we told it testnet was being used.
+        if (network == CBaseChainParams::NEXTCHAIN)
+        {
+            args.push_back("--cookie-file=" + (GetDataDir() / ".cookie").string());
+        }
     }
 
     for (auto &a : mapMultiArgs["-electrum.rawarg"])

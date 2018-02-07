@@ -216,14 +216,17 @@ class MyTest (BitcoinTestFramework):
         """Tests issuing a bunch of conflicting transactions.  Expects that you give it a wallet with lots of free UTXO, and nothing in the mempool
         """
         logging.info("conflict test")
-        assert(self.nodes[0].getmempoolinfo()["size"] == 0)  # Expects a clean mempool
+        self.nodes[0].log("mempool", "on")
+        assert self.nodes[0].getmempoolinfo()["size"] == 0  # Expects a clean mempool
         if 1:  # test many conflicts
             NTX = 50
             i = 0
             for c in range(NTX):
                 source = wallet.pop()
                 txs = createConflictingTx(dests0, source, c)
-
+                # print("Conflicts: ")
+                # for t in txs:
+                #     print("  %s" % hex(t.getHash()))
                 for t in txs:
                     n = self.nodes[i % len(self.nodes)]
                     n.enqueuerawtransaction(t.toHex())
@@ -254,6 +257,7 @@ class MyTest (BitcoinTestFramework):
             rpc_u, rpc_p = rpc_auth_pair(0)
             gtx = zip(gtx2, gtx3)
             for g in gtx:
+                # print("tx conflict: %s %s" % (hex(g[0].getHash()), hex(g[1].getHash())))
                 # send first tx
                 # if datadir is not provided, it assumes ~/.bitcoin so this code may sort of work if you
                 # happen to have a ~/.bitcoin since relevant parameters are overloaded.  But that's ugly,

@@ -7,6 +7,8 @@
 #ifndef BITCOIN_CONSENSUS_PARAMS_H
 #define BITCOIN_CONSENSUS_PARAMS_H
 
+#include "amount.h"
+#include "amount.h"
 #include "clientversion.h"
 #include "uint256.h"
 
@@ -89,6 +91,11 @@ struct ForkDeployment
  */
 struct Params
 {
+    /** what pow algorithm to use (nextchain's = 1 or BTC/BCH = 0) */
+    unsigned int powAlgorithm = 0;
+    /** Initial subsidy */
+    CAmount initialSubsidy = 50 * COIN;
+
     uint256 hashGenesisBlock;
     int nSubsidyHalvingInterval;
     /** Block height at which BIP16 becomes active */

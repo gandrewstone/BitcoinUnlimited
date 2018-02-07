@@ -23,6 +23,7 @@ void RegisterRawTransactionRPCCommands(CRPCTable &tableRPC);
 /** Register Bitcoin Unlimited's RPC commands */
 void RegisterUnlimitedRPCCommands(CRPCTable &tableRPC);
 void RegisterElectrumRPC(CRPCTable &tableRPC);
+void RegisterNextChainRPCCommands(CRPCTable &table);
 
 static inline void RegisterAllCoreRPCCommands(CRPCTable &tableRPC)
 {
@@ -33,6 +34,7 @@ static inline void RegisterAllCoreRPCCommands(CRPCTable &tableRPC)
     RegisterRawTransactionRPCCommands(tableRPC);
     RegisterUnlimitedRPCCommands(tableRPC);
     RegisterElectrumRPC(tableRPC);
+    RegisterNextChainRPCCommands(tableRPC);
 }
 
 #endif // BITCOIN_RPC_REGISTER_H
