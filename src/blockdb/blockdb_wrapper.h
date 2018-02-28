@@ -16,12 +16,12 @@ enum FlushStateMode
 
 enum BlockDBMode
 {
-    SEQUENTIAL_BLOCK_FILES, //0 
-    LEVELDB_BLOCK_STORAGE, //1 
-    LEVELDB_AND_SEQUENTIAL // 2
+    SEQUENTIAL_BLOCK_FILES, //0
+    DB_BLOCK_STORAGE, //1
+    HYBRID_STORAGE // 2
 };
 
-static const BlockDBMode DEFAULT_BLOCK_DB_MODE = LEVELDB_BLOCK_STORAGE;
+static const BlockDBMode DEFAULT_BLOCK_DB_MODE = DB_BLOCK_STORAGE;
 extern BlockDBMode BLOCK_DB_MODE;
 
 /** Catch leveldb up with sequential block files */

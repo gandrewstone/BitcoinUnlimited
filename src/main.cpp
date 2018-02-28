@@ -209,9 +209,6 @@ std::unique_ptr<CRollingBloomFilter> txn_recently_in_block GUARDED_BY(cs_recentR
 /** Number of preferable block download peers. */
 std::atomic<int> nPreferredDownload{0};
 
-/** Dirty block file entries. */
-std::set<int> setDirtyFileInfo GUARDED_BY(cs_main);
-
 } // anon namespace
 
 /** All pairs A->B, where A (or one of its ancestors) misses transactions, but B has transactions.
@@ -226,7 +223,7 @@ std::multimap<CBlockIndex *, CBlockIndex *> mapBlocksUnlinked;
 bool fCheckForPruning = false;
 
 /** Dirty block file entries. */
-std::set<int> setDirtyFileInfo;
+std::set<int> setDirtyFileInfo GUARDED_BY(cs_main);
 
 std::vector<CBlockFileInfo> vinfoBlockFile;
 int nLastBlockFile = 0;
@@ -1380,7 +1377,7 @@ bool UndoWriteToDisk(const CBlockUndo &blockundo,
     const CMessageHeader::MessageStartChars &messageStart)
 {
     // No need for writing undo to disk of we are only using leveldb for block storage.
-    if (BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
+    if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
         return true;
 
     // Open history file to append
@@ -1415,7 +1412,7 @@ bool UndoWriteToDisk(const CBlockUndo &blockundo,
 bool UndoReadFromDisk(CBlockUndo &blockundo, const CDiskBlockPos &pos, const uint256 &hashBlock)
 {
     // No need for reading undo from disk of we are only using leveldb for block storage.
-    if (BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
+    if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
         return true;
 
     // Open history file to read
@@ -2119,7 +2116,7 @@ bool ConnectBlock(const CBlock &block,
     // Write undo information to disk
     if (pindex->GetUndoPos().IsNull() || !pindex->IsValid(BLOCK_VALID_SCRIPTS))
     {
-        if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
+        if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES || BLOCK_DB_MODE == HYBRID_STORAGE)
         {
             if (pindex->GetUndoPos().IsNull())
             {
@@ -2195,7 +2192,6 @@ bool ConnectBlock(const CBlock &block,
             setUnVerifiedOrphanTxHash.erase(hash);
         }
     }
-
     return true;
 }
 
@@ -3153,7 +3149,7 @@ bool FindBlockPos(CValidationState &state,
     bool fKnown = false)
 {
     // No need for finding block pos if we're only using leveldb for block storage.
-    if (BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
+    if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
         return true;
 
     LOCK(cs_LastBlockFile);
@@ -3695,6 +3691,12 @@ bool ProcessNewBlock(CValidationState &state,
             return false;
     }
 
+    // if we arent set to sequential, update the best block using the tip for leveldb storage after activating it
+    if(BLOCK_DB_MODE != SEQUENTIAL_BLOCK_FILES)
+    {
+        pcoinsdbview->WriteBestBlockDb(chainActive.Tip()->GetBlockHash());
+    }
+
     int64_t end = GetTimeMicros();
 
     if (Logging::LogAcceptCategory(Logging::BENCH))
@@ -3882,7 +3884,7 @@ bool static LoadBlockIndexDB()
             pindexBestHeader = pindex;
     }
 
-    if (BLOCK_DB_MODE != LEVELDB_BLOCK_STORAGE)
+    if (BLOCK_DB_MODE != DB_BLOCK_STORAGE)
     {
         // Check presence of blk files
 
@@ -4134,9 +4136,7 @@ bool InitBlockIndex(const CChainParams &chainparams)
 
     // Check whether we're already initialized
     if (chainActive.Genesis() != nullptr)
-    {
         return true;
-    }
 
     // Use the provided setting for -txindex in the new database
     fTxIndex = GetBoolArg("-txindex", DEFAULT_TXINDEX);

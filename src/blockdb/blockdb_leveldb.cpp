@@ -20,7 +20,7 @@
 
 CFullBlockDB *pblockfull = NULL;
 
-CFullBlockDB::CFullBlockDB(size_t nCacheSize, bool fMemory, bool fWipe) : CDBWrapper(GetDataDir() / "blocks" / "blocks", nCacheSize, fMemory, fWipe)
+CFullBlockDB::CFullBlockDB(size_t nCacheSize, bool fMemory, bool fWipe) : CDBWrapper(GetDataDir() / "blocks" / "blockdb", nCacheSize, fMemory, fWipe)
 {
 }
 

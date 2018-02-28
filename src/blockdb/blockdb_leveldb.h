@@ -67,7 +67,7 @@ bool WriteBlockToDiskLevelDB(const CBlock &block);
 bool ReadBlockFromDiskLevelDB(const CBlockIndex *pindex, BlockDBValue &value);
 uint64_t FindFilesToPruneLevelDB(uint64_t nLastBlockWeCanPrune);
 
-/** Access to the block database (blocks/index/) */
+/** Access to the block database (blocks/blockdb/) */
 class CFullBlockDB : public CDBWrapper
 {
 public:
