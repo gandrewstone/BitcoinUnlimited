@@ -20,148 +20,6 @@
 
 CFullBlockDB *pblockfull = NULL;
 
-
-/**
-  * Config param to determine what DB type we are using
-  */
-BlockDBMode DEFAULT_BLOCK_DB_MODE = LEVELDB_BLOCK_STORAGE;
-BlockDBMode BLOCK_DB_MODE = DEFAULT_BLOCK_DB_MODE;
-
-
-bool WriteBlockToDisk(const CBlock &block, CDiskBlockPos &pos, const CMessageHeader::MessageStartChars &messageStart)
-{
-    if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
-    {
-        // Open history file to append
-        CAutoFile fileout(OpenBlockFile(pos), SER_DISK, CLIENT_VERSION);
-        if (fileout.IsNull())
-            return error("WriteBlockToDisk: OpenBlockFile failed");
-
-        // Write index header
-        unsigned int nSize = GetSerializeSize(fileout, block);
-        fileout << FLATDATA(messageStart) << nSize;
-
-        // Write block
-        long fileOutPos = ftell(fileout.Get());
-        if (fileOutPos < 0)
-            return error("WriteBlockToDisk: ftell failed");
-        pos.nPos = (unsigned int)fileOutPos;
-        fileout << block;
-    }
-    else if(BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
-    {
-        BlockDBValue value(block);
-        return pblockfull->Write(block.GetHash(), value);
-    }
-    else if(BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
-    {
-        // Open history file to append
-        CAutoFile fileout(OpenBlockFile(pos), SER_DISK, CLIENT_VERSION);
-        if (fileout.IsNull())
-            return error("WriteBlockToDisk: OpenBlockFile failed");
-
-        // Write index header
-        unsigned int nSize = GetSerializeSize(fileout, block);
-        fileout << FLATDATA(messageStart) << nSize;
-
-        // Write block
-        long fileOutPos = ftell(fileout.Get());
-        if (fileOutPos < 0)
-            return error("WriteBlockToDisk: ftell failed");
-        pos.nPos = (unsigned int)fileOutPos;
-        fileout << block;
-
-        BlockDBValue value(block);
-        return pblockfull->Write(block.GetHash(), value);
-    }
-
-    return true;
-}
-
-bool ReadBlockFromDisk(CBlock &block, const CDiskBlockPos &pos, const Consensus::Params &consensusParams)
-{
-    block.SetNull();
-    // Open history file to read
-    CAutoFile filein(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION);
-    if (filein.IsNull())
-    {
-        return error("ReadBlockFromDisk: OpenBlockFile failed for %s", pos.ToString());
-    }
-
-    // Read block
-    try
-    {
-        filein >> block;
-    }
-    catch (const std::exception &e)
-    {
-        return error("%s: Deserialize or I/O error - %s at %s", __func__, e.what(), pos.ToString());
-    }
-
-    // Check the header
-    if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
-    {
-        return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
-    }
-    return true;
-}
-
-bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus::Params &consensusParams)
-{
-    if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
-    {
-        if (!ReadBlockFromDisk(block, pindex->GetBlockPos(), consensusParams))
-        {
-            return false;
-        }
-        if (block.GetHash() != pindex->GetBlockHash())
-        {
-            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos().ToString());
-        }
-    }
-    else if (BLOCK_DB_MODE == LEVELDB_BLOCK_STORAGE)
-    {
-        block.SetNull();
-        BlockDBValue value;
-        if(!pblockfull->ReadBlock(pindex->GetBlockHash(), value))
-        {
-            return false;
-        }
-        if(value.block.GetHash() != pindex->GetBlockHash())
-        {
-            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos().ToString());
-        }
-        block = value.block;
-    }
-    else if (BLOCK_DB_MODE == LEVELDB_AND_SEQUENTIAL)
-    {
-        /// run both to verify both databases match, we will only return
-        if (!ReadBlockFromDisk(block, pindex->GetBlockPos(), consensusParams))
-        {
-            return false;
-        }
-        if (block.GetHash() != pindex->GetBlockHash())
-        {
-            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos().ToString());
-        }
-        BlockDBValue value;
-        if(!pblockfull->ReadBlock(pindex->GetBlockHash(), value))
-        {
-            return false;
-        }
-        if(value.block.GetHash() != pindex->GetBlockHash())
-        {
-            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s", pindex->ToString(), pindex->GetBlockPos().ToString());
-        }
-        if(block.GetHash() != value.block.GetHash())
-        {
-            return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match for both database types. THERE IS A CRITICAL ERROR SOMEWHERE \n");
-        }
-    }
-    return true;
-}
-
-
 CFullBlockDB::CFullBlockDB(size_t nCacheSize, bool fMemory, bool fWipe) : CDBWrapper(GetDataDir() / "blocks" / "blocks", nCacheSize, fMemory, fWipe)
 {
 }
@@ -191,4 +49,58 @@ bool CFullBlockDB::WriteBlock(const uint256 &hash, const BlockDBValue &value)
 bool CFullBlockDB::EraseBlock(const uint256 &hash)
 {
     return Erase(hash);
+}
+
+
+
+bool WriteBlockToDiskLevelDB(const CBlock &block)
+{
+    BlockDBValue value(block);
+    return pblockfull->Write(block.GetHash(), value);
+}
+
+bool ReadBlockFromDiskLevelDB(const CBlockIndex *pindex, BlockDBValue &value)
+{
+    return pblockfull->ReadBlock(pindex->GetBlockHash(), value);
+}
+
+uint64_t FindFilesToPruneLevelDB(uint64_t nLastBlockWeCanPrune)
+{
+    std::vector<uint256> hashesToPrune;
+    /// just remove the to be pruned blocks here in the case of leveldb storage
+    boost::scoped_ptr<CDBIterator> pcursor(pblockfull->NewIterator());
+    pcursor->Seek(uint256());
+    // Load mapBlockIndex
+    while (pcursor->Valid())
+    {
+        boost::this_thread::interruption_point();
+        std::pair<char, uint256> key;
+        if (pcursor->GetKey(key))
+        {
+            BlockDBValue diskblock;
+            if (pcursor->GetValue(diskblock))
+            {
+                if(diskblock.blockHeight <= nLastBlockWeCanPrune)
+                {
+                    /// unsafe to alter a set of data as we iterate through it so store hashes to be deleted in a
+                    hashesToPrune.push_back(diskblock.block.GetHash());
+                }
+                pcursor->Next();
+            }
+            else
+            {
+                return 0; // error("FindFilesToPrune() : failed to read value");
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
+    /// this should prune all blocks from the DB that are old enough to prune
+    for(std::vector<uint256>::iterator iter = hashesToPrune.begin(); iter != hashesToPrune.end(); ++iter)
+    {
+        pblockfull->EraseBlock(*iter);
+    }
+    return hashesToPrune.size();
 }

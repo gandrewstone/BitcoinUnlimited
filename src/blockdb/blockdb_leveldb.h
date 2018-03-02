@@ -20,14 +20,6 @@ class CBlockFileInfo;
 class CBlockIndex;
 class uint256;
 
-enum BlockDBMode
-{
-    SEQUENTIAL_BLOCK_FILES,
-    LEVELDB_BLOCK_STORAGE,
-    LEVELDB_AND_SEQUENTIAL
-};
-
-
 struct BlockDBValue
 {
     int32_t blockVersion;
@@ -71,6 +63,10 @@ struct BlockDBValue
     }
 };
 
+bool WriteBlockToDiskLevelDB(const CBlock &block);
+bool ReadBlockFromDiskLevelDB(const CBlockIndex *pindex, BlockDBValue &value);
+uint64_t FindFilesToPruneLevelDB(uint64_t nLastBlockWeCanPrune);
+
 /** Access to the block database (blocks/index/) */
 class CFullBlockDB : public CDBWrapper
 {
@@ -89,7 +85,5 @@ public:
 };
 
 extern CFullBlockDB *pblockfull;
-extern BlockDBMode BLOCK_DB_MODE;
-
 
 #endif // BLOCKDB_H

@@ -7,16 +7,14 @@
 #ifndef BLOCKDB_SEQUENTIAL_H
 #define BLOCKDB_SEQUENTIAL_H
 
+#include "net.h"
 #include "txdb.h"
 #include "validationinterface.h"
 
-enum FlushStateMode
-{
-    FLUSH_STATE_NONE,
-    FLUSH_STATE_IF_NEEDED,
-    FLUSH_STATE_PERIODIC,
-    FLUSH_STATE_ALWAYS
-};
+#include <set>
+#include <stdint.h>
+
+
 
 /** Open a block file (blk?????.dat) */
 FILE *OpenBlockFile(const CDiskBlockPos &pos, bool fReadOnly = false);
@@ -27,11 +25,15 @@ fs::path GetBlockPosFilename(const CDiskBlockPos &pos, const char *prefix);
 
 void FlushBlockFile(bool fFinalize = false);
 
-/** Flush all state, indexes and buffers to disk. */
-bool FlushStateToDisk(CValidationState &state, FlushStateMode mode);
-void FlushStateToDisk();
-/** Prune block files and flush state to disk. */
-void PruneAndFlush();
+/**
+ *  Actually unlink the specified files
+ */
+void UnlinkPrunedFiles(std::set<int> &setFilesToPrune);
+
+bool WriteBlockToDiskSequential(const CBlock &block, CDiskBlockPos &pos, const CMessageHeader::MessageStartChars &messageStart);
+bool ReadBlockFromDiskSequential(CBlock &block, const CDiskBlockPos &pos, const Consensus::Params &consensusParams);
+void FindFilesToPruneSequential(std::set<int> &setFilesToPrune, uint64_t nPruneAfterHeight);
+
 
 
 #endif // BLOCKDB_SEQUENTIAL_H

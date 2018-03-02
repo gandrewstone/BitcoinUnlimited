@@ -4,11 +4,33 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef PRUNING_H
-#define PRUNING_H
+#include "main.h"
 
-#include <set>
-#include <stdint.h>
+enum FlushStateMode
+{
+    FLUSH_STATE_NONE,
+    FLUSH_STATE_IF_NEEDED,
+    FLUSH_STATE_PERIODIC,
+    FLUSH_STATE_ALWAYS
+};
+
+enum BlockDBMode
+{
+    SEQUENTIAL_BLOCK_FILES, //0 
+    LEVELDB_BLOCK_STORAGE, //1 
+    LEVELDB_AND_SEQUENTIAL // 2
+};
+
+static const BlockDBMode DEFAULT_BLOCK_DB_MODE = LEVELDB_BLOCK_STORAGE;
+extern BlockDBMode BLOCK_DB_MODE;
+
+/** Catch leveldb up with sequential block files */
+void SyncDBForDualMode(const CChainParams &chainparams);
+
+/** Functions for disk access for blocks */
+bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus::Params &consensusParams);
+bool WriteBlockToDisk(const CBlock &block, CDiskBlockPos &pos, const CMessageHeader::MessageStartChars &messageStart);
+
 
 /**
  * Prune block and undo files (blk???.dat and undo???.dat) so that the disk space used is less than a user-defined
@@ -29,10 +51,12 @@
  */
 void FindFilesToPrune(std::set<int> &setFilesToPrune, uint64_t nPruneAfterHeight);
 
-/**
- *  Actually unlink the specified files
- */
-void UnlinkPrunedFiles(std::set<int> &setFilesToPrune);
+/** Flush all state, indexes and buffers to disk. */
+bool FlushStateToDisk(CValidationState &state, FlushStateMode mode);
+void FlushStateToDisk();
+/** Prune block files and flush state to disk. */
+void PruneAndFlush();
 
 
-#endif // PRUNING_H
+
+extern BlockDBMode BLOCK_DB_MODE;

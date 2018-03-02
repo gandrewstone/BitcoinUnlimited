@@ -4,7 +4,7 @@
 
 #include "parallel.h"
 
-#include "blockdb/blockdb_sequential.h"
+#include "blockdb/blockdb_wrapper.h"
 #include "chainparams.h"
 #include "dosman.h"
 #include "net.h"
