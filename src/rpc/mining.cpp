@@ -438,7 +438,7 @@ UniValue mkblocktemplate(const UniValue &params, CBlock *pblockOut)
     if (!unsafeGetBlockTemplate.value)
     {
         if (vNodes.empty())
-            throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Bitcoin is not connected!");
+            throw JSONRPCError(RPC_CLIENT_NOT_CONNECTED, "Bitcoin is not connected to other peers!");
 
         if (IsInitialBlockDownload())
             throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Bitcoin is downloading blocks...");
