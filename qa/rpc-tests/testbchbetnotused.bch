@@ -1,0 +1,38 @@
+
+//def parseData(date, match, winner, @data) -> (result)
+//{
+//  OP_SPLIT(@data, 8) -> (@signedDate, @rest)
+//  OP_EQUALVERIFY(@signedDate, date)
+//  OP_SPLIT(@rest, 5) -> (@signedMatch, @signedWinner)
+//  OP_EQUALVERIFY(@signedMatch, match)
+//  OP_EQUAL(@signedWinner, winner)
+//}
+
+
+def bet(oracleAddr, addr1, addr2, decider, @data, @sig)
+{
+  OP_DATASIGVERIFY(@data, @sig, oracleAddr) -> (@data)
+  decider(@data)
+  OP_IF
+    p2pkh(addr1)
+  OP_ELSE
+    p2pkh(addr2)
+  OP_ENDIF
+}
+
+def makeBet(oracle, date, match, winner, addrCorrect, addrIncorrect)
+{
+  bet(oracle, addrCorrect, addrIncorrect, parseData(date, match, winner))
+}
+
+//def betWithEscape(oracle, date, match, winner, addrCorrect, addrIncorrect, @escape)
+//{
+//  if(@escape)
+//  {
+//    multisig(2, 2, addrCorret, addrIncorrect)
+//  }
+//  else
+//  {
+//    makeBet(oracle, date, match, winner, addrCorrect, addrIncorrect)
+//  }
+//}

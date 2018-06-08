@@ -1,0 +1,11 @@
+
+
+def betSimple(addr1, addr2, decider)
+{
+  decider
+  OP_IF
+    p2pkh(addr1)
+  OP_ELSE
+    p2pkh(addr2)
+  OP_ENDIF
+}
