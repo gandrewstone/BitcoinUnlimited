@@ -2040,34 +2040,29 @@ bool ConnectBlock(const CBlock &block,
     // Write undo information to disk
     if (pindex->GetUndoPos().IsNull() || !pindex->IsValid(BLOCK_VALID_SCRIPTS))
     {
-        if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
+        if (pindex->GetUndoPos().IsNull())
         {
-            if (pindex->GetUndoPos().IsNull())
+            CDiskBlockPos pos;
+            if (!FindUndoPos(state, pindex->nFile, pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 40))
             {
-                CDiskBlockPos pos;
-                if (!FindUndoPos(state, pindex->nFile, pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 40))
-                {
-                    return error("ConnectBlock(): FindUndoPos failed");
-                }
-
-
-                uint256 prevHash;
-                if (pindex->pprev) // genesis block prev hash is 0
-                {
-                    prevHash = pindex->pprev->GetBlockHash();
-                }
-                else
-                {
-                    prevHash.SetNull();
-                }
-                if (!UndoWriteToDisk(blockundo, pos, prevHash, chainparams.MessageStart()))
-                {
-                    return AbortNode(state, "Failed to write undo data");
-                }
-                // update nUndoPos in block index
-                pindex->nUndoPos = pos.nPos;
-                pindex->nStatus |= BLOCK_HAVE_UNDO;
+                return error("ConnectBlock(): FindUndoPos failed");
             }
+            uint256 prevHash;
+            if (pindex->pprev) // genesis block prev hash is 0
+            {
+                prevHash = pindex->pprev->GetBlockHash();
+            }
+            else
+            {
+                prevHash.SetNull();
+            }
+            if (!UndoWriteToDisk(blockundo, pos, prevHash, chainparams.MessageStart()))
+            {
+                return AbortNode(state, "Failed to write undo data");
+            }
+            // update nUndoPos in block index
+            pindex->nUndoPos = pos.nPos;
+            pindex->nStatus |= BLOCK_HAVE_UNDO;
         }
 
         pindex->RaiseValidity(BLOCK_VALID_SCRIPTS);
@@ -3145,6 +3140,11 @@ bool FindBlockPos(CValidationState &state,
 
 bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigned int nAddSize)
 {
+    if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+    {
+        return true;
+    }
+
     pos.nFile = nFile;
 
     LOCK(cs_LastBlockFile);
@@ -3890,7 +3890,7 @@ bool static LoadBlockIndexDB()
 
     // Load pointer to end of best chain
     uint256 bestblockhash;
-    uint256 bestHashSeq = pcoinsTip->GetBestBlock();
+    uint256 bestHashSeq = pcoinsdbview->GetBestBlockSeq();
     uint256 bestHashLev = pcoinsdbview->GetBestBlockDb();
 
     CBlockIndex bestIndexSeq;
