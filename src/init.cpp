@@ -12,9 +12,8 @@
 
 #include "addrman.h"
 #include "amount.h"
-#include "blockdb/blockdb_leveldb.h"
-#include "blockdb/blockdb_sequential.h"
-#include "blockdb/blockdb_wrapper.h"
+#include "blockdb/sequential_files.h"
+#include "blockdb/wrapper.h"
 #include "chain.h"
 #include "chainparams.h"
 #include "checkpoints.h"
@@ -243,8 +242,10 @@ void Shutdown()
         pcoinsdbview = NULL;
         delete pblocktree;
         pblocktree = NULL;
-        delete pblockfull;
-        pblockfull = NULL;
+        delete pblockdb;
+        pblockdb = NULL;
+        delete pblockundodb;
+        pblockundodb = NULL;
     }
 #ifdef ENABLE_WALLET
     if (pwalletMain)
@@ -944,7 +945,7 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
     fReindex = GetBoolArg("-reindex", DEFAULT_REINDEX);
     int64_t requested_block_mode = GetArg("-blockdbtype", 1);
     // if invalid param, set to default setting,
-    if(requested_block_mode > 2 || requested_block_mode < 0)
+    if(requested_block_mode > 1 || requested_block_mode < 0)
     {
         BLOCK_DB_MODE = DEFAULT_BLOCK_DB_MODE;
     }
@@ -956,10 +957,6 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
     else if(requested_block_mode == 1)
     {
         BLOCK_DB_MODE = DB_BLOCK_STORAGE;
-    }
-    else if(requested_block_mode == 2)
-    {
-        BLOCK_DB_MODE = HYBRID_STORAGE;
     }
 
 
@@ -1023,11 +1020,13 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
                 delete pcoinsdbview;
                 delete pcoinscatcher;
                 delete pblocktree;
-                delete pblockfull;
+                delete pblockdb;
+                delete pblockundodb;
 
                 uiInterface.InitMessage(_("Opening Block database..."));
                 pblocktree = new CBlockTreeDB(nBlockTreeDBCache, false, fReindex);
-                pblockfull = new CFullBlockDB(nBlockTreeDBCache, false, false);
+                pblockdb = new CBlockDB("blocks", nBlockTreeDBCache, false, false);
+                pblockdb = new CBlockDB("undo", nBlockTreeDBCache, false, false);
                 uiInterface.InitMessage(_("Opening UTXO database..."));
                 pcoinsdbview = new CCoinsViewDB(nCoinDBCache, false, fReindex);
                 pcoinscatcher = new CCoinsViewErrorCatcher(pcoinsdbview);
