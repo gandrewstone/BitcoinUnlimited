@@ -1506,10 +1506,6 @@ static DisconnectResult DisconnectBlock(const CBlock &block, const CBlockIndex *
     return fClean ? DISCONNECT_OK : DISCONNECT_UNCLEAN;
 }
 
-
-bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigned int nAddSize);
-
-
 //
 // Called periodically asynchronously; alerts if it smells like
 // we're being fed a bad chain (blocks being generated much
