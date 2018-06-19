@@ -388,11 +388,11 @@ public:
         READWRITE(VARINT(nStatus));
         READWRITE(VARINT(nTx));
         if (nStatus & (BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO))
-            READWRITE(nFile);
+            READWRITE(VARINT(nFile));
         if (nStatus & BLOCK_HAVE_DATA)
-            READWRITE(nDataPos);
+            READWRITE(VARINT(nDataPos));
         if (nStatus & BLOCK_HAVE_UNDO)
-            READWRITE(nUndoPos);
+            READWRITE(VARINT(nUndoPos));
 
         // block header
         READWRITE(this->nVersion);
