@@ -2998,7 +2998,7 @@ CBlockIndex *AddToBlockIndex(const CBlockHeader &block)
 bool ReceivedBlockTransactions(const CBlock &block,
     CValidationState &state,
     CBlockIndex *pindexNew,
-    CDiskBlockPos &pos)
+    const CDiskBlockPos &pos)
 {
     pindexNew->nTx = block.vtx.size();
     pindexNew->nChainTx = 0;
@@ -3738,19 +3738,14 @@ bool static LoadBlockIndexDB()
         return false;
     }
 
-    LOGA("loaded block index guts \n");
-
     /** This sync method will break on pruned nodes so we cant use if pruned*/
     // Check whether we have ever pruned block & undo files
     pblocktree->ReadFlag("prunedblockfiles", fHavePruned);
-
     if(!fHavePruned)
     {
-        LOGA("blocks arent pruned, trying to sync between storage methods\n");
+        LOG(PRUNE, "blocks arent pruned, trying to sync between storage methods\n");
         // by default we want to sync off disk instead of network if possible
         bool syncBlocks = true;
-        // we should always sync if we are using hybrid mode
-        LOGA("about to determine storage sync \n");
         if(!DetermineStorageSync())
         {
             syncBlocks = false;
@@ -3759,12 +3754,9 @@ bool static LoadBlockIndexDB()
         {
             // run a db sync here to sync storage methods
             // may increase startup time significantly but is faster than network sync
-            LOGA("about to sync storage \n");
             SyncStorage(chainparams);
         }
     }
-
-    LOGA("done syncing between storage methods\n");
 
     boost::this_thread::interruption_point();
 
@@ -3839,12 +3831,6 @@ bool static LoadBlockIndexDB()
         LOGA("Checking all blk files are present...\n");
         for (std::set<int>::iterator it = setBlkDataFiles.begin(); it != setBlkDataFiles.end(); it++)
         {
-            if((*it) < 0 )
-            {
-                // a negative file means the block is in the blockdb not a sequential file
-                // continue to prevent checking for a file we know doesnt exist
-                continue;
-            }
             CDiskBlockPos pos(*it, 0);
             fs::path path = GetBlockPosFilename(pos, "blk");
             if (!fs::exists(path))
@@ -3902,10 +3888,8 @@ bool static LoadBlockIndexDB()
         bestblockhash = pcoinsdbview->GetBestBlockDb();
     }
     BlockMap::iterator it = mapBlockIndex.find(bestblockhash);
-    LOGA("best block hash of %s was found \n", bestblockhash.GetHex().c_str());
     if (it == mapBlockIndex.end())
     {
-        LOGA("couldnt find the best block hash in mapblockindex, returning true \n");
         return true;
     }
     chainActive.SetTip(it->second);
