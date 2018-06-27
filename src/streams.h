@@ -242,28 +242,6 @@ public:
         nReadPos = nReadPosNext;
     }
 
-    void readtovoid(void *pch, size_t nSize)
-    {
-        if (nSize == 0)
-            return;
-
-        // Read from the beginning of the buffer
-        unsigned int nReadPosNext = nReadPos + nSize;
-        if (nReadPosNext >= vch.size())
-        {
-            if (nReadPosNext > vch.size())
-            {
-                throw std::ios_base::failure("CDataStream::read(): end of data");
-            }
-            memcpy(pch, &vch[nReadPos], nSize);
-            nReadPos = 0;
-            vch.clear();
-            return;
-        }
-        memcpy(pch, &vch[nReadPos], nSize);
-        nReadPos = nReadPosNext;
-    }
-
     void ignore(int nSize)
     {
         // Ignore from the beginning of the buffer

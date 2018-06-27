@@ -47,9 +47,16 @@ struct BlockDBValue
     template <typename Stream>
     void Serialize(Stream &s) const
     {
-        s << nVersion;
-        s << blockHeight;
+        // CSerActionSerialize() ser_action();
+        ::SerReadWriteMany(s, CSerActionSerialize(), nVersion);
+        ::SerReadWriteMany(s, CSerActionSerialize(), blockHeight);
         s << *block;
+    }
+
+    template <typename Stream>
+    void Unserialize(Stream &s, CBlock& _block) const
+    {
+        s >> _block;
     }
 
 };
@@ -80,6 +87,14 @@ struct UndoDBValue
         s << FLATDATA(hashChecksum);
         s << FLATDATA(hashBlock);
         s << *blockundo;
+    }
+
+    template <typename Stream>
+    void Unserialize(Stream &s, CBlockUndo& _block) const
+    {
+        s >> FLATDATA(hashChecksum);
+        s >> FLATDATA(hashBlock);
+        s >> _block;
     }
 };
 
@@ -118,9 +133,9 @@ public:
         {
             CDataStream ssValue(strValue.data(), strValue.data() + strValue.size(), SER_DISK, CLIENT_VERSION);
             ssValue.Xor(obfuscate_key);
-            ssValue.readtovoid(&value.nVersion, sizeof(int32_t));
-            ssValue.readtovoid(&value.blockHeight, sizeof(uint64_t));
-            ssValue.readtovoid(&block, ssValue.size());
+            ssValue.read((char *)&value.nVersion, sizeof(uint32_t));
+            ssValue.read((char *)&value.blockHeight, sizeof(uint64_t));
+            value.Unserialize(ssValue, block);
         }
         catch (const std::exception &)
         {
@@ -150,9 +165,7 @@ public:
         {
             CDataStream ssValue(strValue.data(), strValue.data() + strValue.size(), SER_DISK, CLIENT_VERSION);
             ssValue.Xor(obfuscate_key);
-            ssValue.readtovoid(&value.hashChecksum, 32); // 32 is number of bytes in uint256
-            ssValue.readtovoid(&value.hashBlock, 32); // 32 is number of bytes in uint256
-            ssValue.readtovoid(&blockundo, ssValue.size());
+            value.Unserialize(ssValue, blockundo);
         }
         catch (const std::exception &)
         {
