@@ -11,55 +11,72 @@
 #include "primitives/block.h"
 #include "undo.h"
 
+// current version of the blockdb data structure
+const int32_t CURRENT_VERSION = 1;
+
+/**
+ * A note on BlockDBValue and UndoDBValue
+ *
+ * we use a pointer for serialization and a special method for deserialization
+ * in order to prevent extra needless copies of large chunks of blockdata or
+ * undo data which hinders performance
+ */
 struct BlockDBValue
 {
-    int32_t blockVersion;
+    int32_t nVersion;
     uint64_t blockHeight;
-    CBlock block;
+    const CBlock* block;
+    // only used for pruning
+    CBlock blocktemp;
 
     BlockDBValue()
     {
-        SetNull();
-    }
-
-    BlockDBValue(const CBlock &_block)
-    {
-        assert(_block.IsNull() == false);
-        this->block = _block;
-        this->blockVersion = this->block.nVersion;
-        this->blockHeight = this->block.GetHeight();
-    }
-
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream &s, Operation ser_action)
-    {
-        READWRITE(blockVersion);
-        READWRITE(blockHeight);
-        READWRITE(block);
-    }
-
-    void SetNull()
-    {
-        blockVersion = 0;
+        nVersion = 0;
         blockHeight = 0;
-        block.SetNull();
+        block = nullptr;
     }
+
+    BlockDBValue(const CBlock* _block)
+    {
+        assert(_block->IsNull() == false);
+        this->block = _block;
+        this->nVersion = CURRENT_VERSION;
+        this->blockHeight = this->block->GetHeight();
+    }
+
+    template <typename Stream>
+    void Serialize(Stream &s) const
+    {
+        s << nVersion;
+        s << blockHeight;
+        s << *block;
+    }
+
+    // this is only used to get the height for pruning
+    template <typename Stream>
+    void Unserialize(Stream &s)
+    {
+        s >> nVersion;
+        s >> blockHeight;
+        s >> blocktemp;
+    }
+
 };
 
 struct UndoDBValue
 {
     uint256 hashChecksum;
     uint256 hashBlock;
-    CBlockUndo blockundo;
+    const CBlockUndo* blockundo;
 
     UndoDBValue()
     {
-        SetNull();
+        hashChecksum.SetNull();
+        hashBlock.SetNull();
+        blockundo = nullptr;
     }
 
-    UndoDBValue(const uint256 &_hashChecksum, const uint256 &_hashBlock, const CBlockUndo &_blockundo)
+    UndoDBValue(const uint256 &_hashChecksum, const uint256 &_hashBlock, const CBlockUndo* _blockundo)
     {
         this->hashChecksum = _hashChecksum;
         this->hashBlock = _hashBlock;
@@ -71,23 +88,17 @@ struct UndoDBValue
     {
         s << FLATDATA(hashChecksum);
         s << FLATDATA(hashBlock);
-        s << blockundo;
+        s << *blockundo;
     }
-
+/*
     template <typename Stream>
-    void Unserialize(Stream &s)
+    void Unserialize(Stream &s, CBlockUndo& _blockundo)
     {
         s >> FLATDATA(hashChecksum);
         s >> FLATDATA(hashBlock);
-        s >> blockundo;
+        s >> _blockundo;
     }
-
-    void SetNull()
-    {
-        hashChecksum.SetNull();
-        hashBlock.SetNull();
-        blockundo.vtxundo.clear();
-    }
+*/
 };
 
 /** Access to the block database (blocks/ * /) */
@@ -173,7 +184,7 @@ extern CBlockDB *pblockdb;
 extern CBlockDB *pblockundodb;
 
 bool WriteBlockToDB(const CBlock &block);
-bool ReadBlockFromDB(const CBlockIndex *pindex, BlockDBValue &value);
+bool ReadBlockFromDB(const CBlockIndex *pindex, BlockDBValue &value, CBlock &block);
 
 bool UndoWriteToDB(const CBlockUndo &blockundo, const uint256 &hashBlock, const int64_t nBlockTime);
 bool UndoReadFromDB(CBlockUndo &blockundo, const uint256 &hashBlock, const int64_t nBlockTime);

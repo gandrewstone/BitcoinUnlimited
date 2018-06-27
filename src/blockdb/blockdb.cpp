@@ -19,7 +19,7 @@ bool CBlockDB::WriteBatchSync(const std::vector<CBlock> &blocks)
     CDBBatch batch(*this);
     for (const CBlock &it : blocks)
     {
-        batch.Write(it.GetHash(), BlockDBValue(it));
+        batch.Write(it.GetHash(), BlockDBValue(&it));
     }
     return WriteBatch(batch, true);
 }
@@ -32,11 +32,11 @@ bool WriteBlockToDB(const CBlock &block)
     std::ostringstream key;
     key << block.GetBlockTime() << ":" << block.GetHash().ToString();
 
-    BlockDBValue value(block);
+    BlockDBValue value(&block);
     return pblockdb->Write(key.str(), value);
 }
 
-bool ReadBlockFromDB(const CBlockIndex *pindex, BlockDBValue &value)
+bool ReadBlockFromDB(const CBlockIndex *pindex, BlockDBValue &value, CBlock &block)
 {
     // Create a key which will sort the database by the blocktime.  This is needed to prevent unnecessary
     // compactions which hamper performance. Will a key sorted by time the only files that need to undergo
@@ -44,7 +44,7 @@ bool ReadBlockFromDB(const CBlockIndex *pindex, BlockDBValue &value)
     std::ostringstream key;
     key << pindex->GetBlockTime() << ":" << pindex->GetBlockHash().ToString();
 
-    return pblockdb->Read(key.str(), value);
+    return pblockdb->ReadBlock(key.str(), value, block);
 }
 
 bool UndoWriteToDB(const CBlockUndo &blockundo, const uint256 &hashBlock, const int64_t nBlockTime)
@@ -59,7 +59,7 @@ bool UndoWriteToDB(const CBlockUndo &blockundo, const uint256 &hashBlock, const 
     CHashWriter hasher(SER_GETHASH, PROTOCOL_VERSION);
     hasher << hashBlock;
     hasher << blockundo;
-    UndoDBValue value(hasher.GetHash(), hashBlock, blockundo);
+    UndoDBValue value(hasher.GetHash(), hashBlock, &blockundo);
     return pblockundodb->Write(key.str(), value);
 }
 
@@ -73,19 +73,18 @@ bool UndoReadFromDB(CBlockUndo &blockundo, const uint256 &hashBlock, const int64
 
     // Read block
     UndoDBValue value;
-    if(!pblockundodb->Read(key.str(), value))
+    if(!pblockundodb->ReadUndo(key.str(), value, blockundo))
     {
         return error("%s: failure to read undoblock from db", __func__);
     }
     CHashWriter hasher(SER_GETHASH, PROTOCOL_VERSION);
     hasher << value.hashBlock;
-    hasher << value.blockundo;
+    hasher << blockundo;
     // Verify checksum
     if (value.hashChecksum != hasher.GetHash())
     {
         return error("%s: Checksum mismatch", __func__);
     }
-    blockundo = value.blockundo;
     return true;
 }
 
@@ -108,7 +107,7 @@ uint64_t FindFilesToPruneLevelDB(uint64_t nLastBlockWeCanPrune)
                 if(diskblock.blockHeight <= nLastBlockWeCanPrune)
                 {
                     /// unsafe to alter a set of data as we iterate through it so store hashes to be deleted in a
-                    hashesToPrune.push_back(diskblock.block.GetHash());
+                    //hashesToPrune.push_back(diskblock.block.GetHash());
                 }
                 pcursor->Next();
             }
