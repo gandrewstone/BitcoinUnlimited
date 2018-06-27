@@ -52,15 +52,6 @@ struct BlockDBValue
         s << *block;
     }
 
-    // this is only used to get the height for pruning
-    template <typename Stream>
-    void Unserialize(Stream &s)
-    {
-        s >> nVersion;
-        s >> blockHeight;
-        s >> blocktemp;
-    }
-
 };
 
 struct UndoDBValue
@@ -90,15 +81,6 @@ struct UndoDBValue
         s << FLATDATA(hashBlock);
         s << *blockundo;
     }
-/*
-    template <typename Stream>
-    void Unserialize(Stream &s, CBlockUndo& _blockundo)
-    {
-        s >> FLATDATA(hashChecksum);
-        s >> FLATDATA(hashBlock);
-        s >> _blockundo;
-    }
-*/
 };
 
 /** Access to the block database (blocks/ * /) */

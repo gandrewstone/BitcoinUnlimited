@@ -4,6 +4,7 @@
 
 
 #include "blockdb.h"
+#include "main.h"
 #include "hash.h"
 
 CBlockDB *pblockdb = nullptr;
@@ -91,35 +92,20 @@ bool UndoReadFromDB(CBlockUndo &blockundo, const uint256 &hashBlock, const int64
 uint64_t FindFilesToPruneLevelDB(uint64_t nLastBlockWeCanPrune)
 {
     std::vector<uint256> hashesToPrune;
-    /// just remove the to be pruned blocks here in the case of leveldb storage
-    boost::scoped_ptr<CDBIterator> pcursor(pblockdb->NewIterator());
-    pcursor->Seek(uint256());
-    // Load mapBlockIndex
-    while (pcursor->Valid())
+    BlockMap::iterator iter;
+    iter = mapBlockIndex.find(chainActive.Tip()->GetBlockHash());
+    if(iter == mapBlockIndex.end())
     {
-        boost::this_thread::interruption_point();
-        std::pair<char, uint256> key;
-        if (pcursor->GetKey(key))
+        return 0;
+    }
+    CBlockIndex* pindex = iter->second;
+    while(pindex->pprev)
+    {
+        if(pindex->nHeight < nLastBlockWeCanPrune)
         {
-            BlockDBValue diskblock;
-            if (pcursor->GetValue(diskblock))
-            {
-                if(diskblock.blockHeight <= nLastBlockWeCanPrune)
-                {
-                    /// unsafe to alter a set of data as we iterate through it so store hashes to be deleted in a
-                    //hashesToPrune.push_back(diskblock.block.GetHash());
-                }
-                pcursor->Next();
-            }
-            else
-            {
-                return 0; // error("FindFilesToPrune() : failed to read value");
-            }
+            hashesToPrune.push_back(pindex->GetBlockHash());
         }
-        else
-        {
-            break;
-        }
+        pindex = pindex->pprev;
     }
     /// this should prune all blocks from the DB that are old enough to prune
     for(std::vector<uint256>::iterator iter = hashesToPrune.begin(); iter != hashesToPrune.end(); ++iter)
