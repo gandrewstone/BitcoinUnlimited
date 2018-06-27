@@ -1449,7 +1449,7 @@ static DisconnectResult DisconnectBlock(const CBlock &block, const CBlockIndex *
         error("DisconnectBlock(): no undo data available");
         return DISCONNECT_FAILED;
     }
-    if (!UndoReadFromDisk(blockUndo, pos, pindex->pprev->GetBlockHash(), pindex->GetBlockTime()))
+    if (!UndoReadFromDisk(blockUndo, pos, pindex->pprev))
     {
         error("DisconnectBlock(): failure reading undo data");
         return DISCONNECT_FAILED;
@@ -2045,16 +2045,7 @@ bool ConnectBlock(const CBlock &block,
             {
                 return error("ConnectBlock(): FindUndoPos failed");
             }
-            uint256 prevHash;
-            if (pindex->pprev) // genesis block prev hash is 0
-            {
-                prevHash = pindex->pprev->GetBlockHash();
-            }
-            else
-            {
-                prevHash.SetNull();
-            }
-            if (!UndoWriteToDisk(blockundo, pos, prevHash, pindex->GetBlockTime(), chainparams.MessageStart()))
+            if (!UndoWriteToDisk(blockundo, pos, pindex->pprev, chainparams.MessageStart()))
             {
                 return AbortNode(state, "Failed to write undo data");
             }
@@ -3953,7 +3944,7 @@ bool CVerifyDB::VerifyDB(const CChainParams &chainparams, CCoinsView *coinsview,
             CDiskBlockPos pos = pindex->GetUndoPos();
             if (!pos.IsNull())
             {
-                if (!UndoReadFromDisk(undo, pos, pindex->pprev->GetBlockHash(), pindex->GetBlockTime()))
+                if (!UndoReadFromDisk(undo, pos, pindex->pprev))
                     return error("VerifyDB(): *** found bad undo data at %d, hash=%s\n", pindex->nHeight,
                         pindex->GetBlockHash().ToString());
             }
