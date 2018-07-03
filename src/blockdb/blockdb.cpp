@@ -59,7 +59,7 @@ bool UndoWriteToDB(const CBlockUndo &blockundo, const CBlockIndex* pindex)
     if(pindex)
     {
         hashBlock = pindex->GetBlockHash();
-        pindex->GetBlockTime();
+        nBlockTime = pindex->GetBlockTime();
     }
     else
     {
@@ -86,7 +86,7 @@ bool UndoReadFromDB(CBlockUndo &blockundo, const CBlockIndex* pindex)
     if(pindex)
     {
         hashBlock = pindex->GetBlockHash();
-        pindex->GetBlockTime();
+        nBlockTime = pindex->GetBlockTime();
     }
     else
     {
