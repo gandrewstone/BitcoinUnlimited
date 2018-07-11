@@ -241,9 +241,7 @@ void Shutdown()
         delete pcoinsdbview;
         pcoinsdbview = NULL;
         delete pblocktree;
-        pblocktree = NULL;
-        delete pblocktreeother;
-        pblocktreeother = NULL;
+        pblocktree = nullptr;
         delete pblockdb;
         pblockdb = NULL;
         delete pblockundodb;
@@ -950,7 +948,6 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
     {
         BLOCK_DB_MODE = SEQUENTIAL_BLOCK_FILES;
     }
-
 
     // Upgrading to 0.8; hard-link the old blknnnn.dat files into /blocks/
     if(BLOCK_DB_MODE != DB_BLOCK_STORAGE)
