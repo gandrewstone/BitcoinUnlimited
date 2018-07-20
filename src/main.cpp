@@ -304,6 +304,8 @@ void FinalizeNode(NodeId nodeid)
 // Requires cs_main
 bool PeerHasHeader(CNodeState *state, CBlockIndex *pindex)
 {
+    if (pindex == nullptr)
+        return false;
     if (state->pindexBestKnownBlock && pindex == state->pindexBestKnownBlock->GetAncestor(pindex->nHeight))
         return true;
     if (state->pindexBestHeaderSent && pindex == state->pindexBestHeaderSent->GetAncestor(pindex->nHeight))
@@ -1859,7 +1861,7 @@ bool ConnectBlock(const CBlock &block,
     // Begin Section for Boost Scope Guard
     {
         // Scope guard to make sure cs_main is set and resources released if we encounter an exception.
-        BOOST_SCOPE_EXIT(&PV, &fParallel) { PV->SetLocks(fParallel); }
+        BOOST_SCOPE_EXIT(&fParallel) { PV->SetLocks(fParallel); }
         BOOST_SCOPE_EXIT_END
 
 
@@ -2042,17 +2044,17 @@ bool ConnectBlock(const CBlock &block,
     {
         if (pindex->GetUndoPos().IsNull())
         {
-            CDiskBlockPos pos;
-            if (!FindUndoPos(state, pindex->nFile, pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 40))
+            CDiskBlockPos _pos;
+            if (!FindUndoPos(state, pindex->nFile, _pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 40))
             {
                 return error("ConnectBlock(): FindUndoPos failed");
             }
-            if (!UndoWriteToDisk(blockundo, pos, pindex->pprev, chainparams.MessageStart()))
+            if (!UndoWriteToDisk(blockundo, _pos, pindex->pprev, chainparams.MessageStart()))
             {
                 return AbortNode(state, "Failed to write undo data");
             }
             // update nUndoPos in block index
-            pindex->nUndoPos = pos.nPos;
+            pindex->nUndoPos = _pos.nPos;
             pindex->nStatus |= BLOCK_HAVE_UNDO;
         }
 
@@ -3308,7 +3310,7 @@ bool ContextualCheckBlockHeader(const CBlockHeader &block, CValidationState &sta
     if (block.nBits != expectedNbits)
     {
         return state.DoS(100, error("%s: incorrect proof of work. Height %d, Block nBits 0x%x, expected 0x%x", __func__,
-                                  pindexPrev->nHeight, block.nBits, expectedNbits),
+                                  nHeight, block.nBits, expectedNbits),
             REJECT_INVALID, "bad-diffbits");
     }
 
@@ -3635,7 +3637,7 @@ bool ProcessNewBlock(CValidationState &state,
 
     if (Logging::LogAcceptCategory(Logging::BENCH))
     {
-        uint64_t maxTxSize = 0;
+        uint64_t maxTxSizeLocal = 0;
         uint64_t maxVin = 0;
         uint64_t maxVout = 0;
         CTransaction txIn;
@@ -3655,9 +3657,9 @@ bool ProcessNewBlock(CValidationState &state,
                 txOut = *pblock->vtx[i];
             }
             uint64_t len = ::GetSerializeSize(pblock->vtx[i], SER_NETWORK, PROTOCOL_VERSION);
-            if (len > maxTxSize)
+            if (len > maxTxSizeLocal)
             {
-                maxTxSize = len;
+                maxTxSizeLocal = len;
                 txLen = *pblock->vtx[i];
             }
         }
@@ -3665,7 +3667,7 @@ bool ProcessNewBlock(CValidationState &state,
         LOG(BENCH,
             "ProcessNewBlock, time: %d, block: %s, len: %d, numTx: %d, maxVin: %llu, maxVout: %llu, maxTx:%llu\n",
             end - start, pblock->GetHash().ToString(), pblock->GetBlockSize(), pblock->vtx.size(), maxVin, maxVout,
-            maxTxSize);
+            maxTxSizeLocal);
         LOG(BENCH, "tx: %s, vin: %llu, vout: %llu, len: %d\n", txIn.GetHash().ToString(), txIn.vin.size(),
             txIn.vout.size(), ::GetSerializeSize(txIn, SER_NETWORK, PROTOCOL_VERSION));
         LOG(BENCH, "tx: %s, vin: %llu, vout: %llu, len: %d\n", txOut.GetHash().ToString(), txOut.vin.size(),
@@ -3710,7 +3712,6 @@ bool TestBlockValidity(CValidationState &state,
 
     return true;
 }
-
 
 bool CheckDiskSpace(uint64_t nAdditionalBytes)
 {

@@ -145,7 +145,7 @@ bool CThinBlock::process(CNode *pfrom, int nSizeThinBlock)
     pfrom->thinBlock.hashPrevBlock = header.hashPrevBlock;
     pfrom->thinBlockHashes = vTxHashes;
 
-    // Check that the merkleroot matches the merkelroot calculated from the hashes provided.
+    // Check that the merkleroot matches the merkleroot calculated from the hashes provided.
     bool mutated;
     uint256 merkleroot = ComputeMerkleRoot(vTxHashes, &mutated);
     if (header.hashMerkleRoot != merkleroot || mutated)
@@ -358,7 +358,7 @@ bool CXThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
         pfrom->GetLogName());
 
     // At this point we should have all the full hashes in the block. Check that the merkle
-    // root in the block header matches the merkel root calculated from the hashes provided.
+    // root in the block header matches the merkleroot calculated from the hashes provided.
     bool mutated;
     uint256 merkleroot = ComputeMerkleRoot(pfrom->thinBlockHashes, &mutated);
     if (pfrom->thinBlock.hashMerkleRoot != merkleroot || mutated)
@@ -406,7 +406,7 @@ bool CXThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
     else
     {
         // We have all the transactions now that are in this block: try to reassemble and process.
-        CInv inv(CInv(MSG_BLOCK, thinBlockTx.blockhash));
+        CInv inv2(CInv(MSG_BLOCK, thinBlockTx.blockhash));
 
         // for compression statistics, we have to add up the size of xthinblock and the re-requested thinBlockTx.
         int nSizeThinBlockTx = msgSize;
@@ -424,7 +424,7 @@ bool CXThinBlockTx::HandleMessage(CDataStream &vRecv, CNode *pfrom)
 
         // create a non-deleting shared pointer to wrap pfrom->thinBlock.  We know that thinBlock will outlast the
         // thread because the thread has a node reference.
-        PV->HandleBlockMessage(pfrom, strCommand, MakeBlockRef(pfrom->thinBlock), inv);
+        PV->HandleBlockMessage(pfrom, strCommand, MakeBlockRef(pfrom->thinBlock), inv2);
     }
 
     return true;
@@ -692,7 +692,7 @@ bool CXThinBlock::process(CNode *pfrom,
     // for a collision.
     int missingCount = 0;
     int unnecessaryCount = 0;
-    bool collision = false;
+    bool _collision = false;
     std::map<uint64_t, uint256> mapPartialTxHash;
     std::vector<uint256> memPoolHashes;
     std::set<uint64_t> setHashesToRequest;
@@ -705,7 +705,7 @@ bool CXThinBlock::process(CNode *pfrom,
         {
             uint64_t cheapHash = mi.first.GetCheapHash();
             if (mapPartialTxHash.count(cheapHash)) // Check for collisions
-                collision = true;
+                _collision = true;
             mapPartialTxHash[cheapHash] = mi.first;
         }
 
@@ -716,7 +716,7 @@ bool CXThinBlock::process(CNode *pfrom,
         {
             uint64_t cheapHash = memPoolHashes[i].GetCheapHash();
             if (mapPartialTxHash.count(cheapHash)) // Check for collisions
-                collision = true;
+                _collision = true;
             mapPartialTxHash[cheapHash] = memPoolHashes[i];
         }
         for (auto &mi : pfrom->mapMissingTx)
@@ -733,13 +733,13 @@ bool CXThinBlock::process(CNode *pfrom,
                 // Check if it really is a cheap hash collision and not just the same transaction
                 if (existingHash != mi.second->GetHash())
                 {
-                    collision = true;
+                    _collision = true;
                 }
             }
             mapPartialTxHash[cheapHash] = mi.second->GetHash();
         }
 
-        if (!collision)
+        if (!_collision)
         {
             // Start gathering the full tx hashes. If some are not available then add them to setHashesToRequest.
             uint256 nullhash;
@@ -782,7 +782,7 @@ bool CXThinBlock::process(CNode *pfrom,
     // a full thinblock if a mismatch occurs.
     // Also, there is a remote possiblity of a Tx hash collision therefore if it occurs we re-request a normal
     // thinblock which has the full Tx hash data rather than just the truncated hash.
-    if (collision || !fMerkleRootCorrect)
+    if (_collision || !fMerkleRootCorrect)
     {
         std::vector<CInv> vGetData;
         vGetData.push_back(CInv(MSG_THINBLOCK, header.GetHash()));
@@ -849,8 +849,8 @@ static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, 
 {
     AssertLockHeld(cs_xval);
 
-    // We must have all the full tx hashes by this point.  We first check for any repeating
-    // sequences in transaction id's.  This is a possible attack vector and has been used in the past.
+    // We must have all the full tx hashes by this point.  We first check for any duplicate
+    // transaction ids.  This is a possible attack vector and has been used in the past.
     {
         std::set<uint256> setHashes(pfrom->thinBlockHashes.begin(), pfrom->thinBlockHashes.end());
         if (setHashes.size() != pfrom->thinBlockHashes.size())
@@ -858,7 +858,7 @@ static bool ReconstructBlock(CNode *pfrom, const bool fXVal, int &missingCount, 
             thindata.ClearThinBlockData(pfrom, pfrom->thinBlock.GetBlockHeader().GetHash());
 
             dosMan.Misbehaving(pfrom, 10);
-            return error("Repeating Transaction Id sequence, peer=%s", pfrom->GetLogName());
+            return error("Duplicate transaction ids, peer=%s", pfrom->GetLogName());
         }
     }
 
@@ -1501,7 +1501,7 @@ void AddThinBlockInFlight(CNode *pfrom, uint256 hash)
         std::pair<uint256, CNode::CThinBlockInFlight>(hash, CNode::CThinBlockInFlight()));
 }
 
-void SendXThinBlock(CBlockRef pblock, CNode *pfrom, const CInv &inv)
+void SendXThinBlock(ConstCBlockRef pblock, CNode *pfrom, const CInv &inv)
 {
     if (inv.type == MSG_XTHINBLOCK)
     {

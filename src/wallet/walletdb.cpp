@@ -625,6 +625,16 @@ bool ReadKeyValue(CWallet *pwallet,
                 return false;
             }
         }
+        else if (strType == "hdchain")
+        {
+            CHDChain chain;
+            ssValue >> chain;
+            if (!pwallet->SetHDChain(chain, true))
+            {
+                strErr = "Error reading wallet database: SetHDChain failed";
+                return false;
+            }
+        }
     }
     catch (...)
     {
@@ -757,9 +767,9 @@ DBErrors CWalletDB::FindWalletTx(CWallet *pwallet, vector<uint256> &vTxHash, vec
     bool fNoncriticalErrors = false;
     DBErrors result = DB_LOAD_OK;
 
+    LOCK(pwallet->cs_wallet);
     try
     {
-        LOCK(pwallet->cs_wallet);
         int nMinVersion = 0;
         if (Read((string) "minversion", nMinVersion))
         {
@@ -927,8 +937,8 @@ void ThreadFlushWalletDB(const string &strFile)
                 if (nRefCount == 0)
                 {
                     boost::this_thread::interruption_point();
-                    map<string, int>::iterator mi = bitdb.mapFileUseCount.find(strFile);
-                    if (mi != bitdb.mapFileUseCount.end())
+                    map<string, int>::iterator mi2 = bitdb.mapFileUseCount.find(strFile);
+                    if (mi2 != bitdb.mapFileUseCount.end())
                     {
                         LOG(DBASE, "Flushing wallet.dat\n");
                         nLastFlushed = nWalletDBUpdated;
@@ -938,7 +948,7 @@ void ThreadFlushWalletDB(const string &strFile)
                         bitdb.CloseDb(strFile);
                         bitdb.CheckpointLSN(strFile);
 
-                        bitdb.mapFileUseCount.erase(mi++);
+                        bitdb.mapFileUseCount.erase(mi2++);
                         LOG(DBASE, "Flushed wallet.dat %dms\n", GetTimeMillis() - nStart);
                     }
                 }
@@ -1118,4 +1128,11 @@ bool CWalletDB::EraseDestData(const CTxDestination &address, const std::string &
 
     nWalletDBUpdated++;
     return Erase(std::make_pair(std::string("destdata"), std::make_pair(EncodeLegacyAddr(address, Params()), key)));
+}
+
+
+bool CWalletDB::WriteHDChain(const CHDChain &chain)
+{
+    nWalletDBUpdated++;
+    return Write(std::string("hdchain"), chain);
 }

@@ -190,6 +190,8 @@ testScripts = [ RpcTest(t) for t in [
     'validateblocktemplate',
     'parallel',
     'wallet',
+    'wallet-hd',
+    'wallet-dump',
     'excessive',
     Disabled('uahf', 'temporary disable while waiting, to use as a template for future tests'),
     'listtransactions',
@@ -505,7 +507,7 @@ class RPCTestHandler:
                     stderr_filtered = re.sub(r"Error: Unable to bind to 0.0.0.0:[0-9]+ on this computer\. Bitcoin Unlimited Cash Edition is probably already running\.",
                                              "", stderr_filtered)
                     stderr_filtered = stderr_filtered.replace("Error: Failed to listen on any port. Use -listen=0 if you want this.", "")
-
+                    stderr_filtered = stderr_filtered.replace("Error: Failed to listen on all P2P ports. Failing as requested by -bindallorfail.", "")
                     stderr_filtered = stderr_filtered.replace(" ", "")
                     stderr_filtered = stderr_filtered.replace("\n", "")
 
