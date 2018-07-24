@@ -614,8 +614,10 @@ void TableViewLastColumnResizingFixer::on_geometriesChanged()
  */
 TableViewLastColumnResizingFixer::TableViewLastColumnResizingFixer(QTableView *table,
     int lastColMinimumWidth,
-    int allColsMinimumWidth)
-    : tableView(table), lastColumnMinimumWidth(lastColMinimumWidth), allColumnsMinimumWidth(allColsMinimumWidth)
+    int allColsMinimumWidth,
+    QObject *parent)
+    : QObject(parent), tableView(table), lastColumnMinimumWidth(lastColMinimumWidth),
+      allColumnsMinimumWidth(allColsMinimumWidth)
 {
     columnCount = tableView->horizontalHeader()->count();
     lastColumnIndex = columnCount - 1;
@@ -892,9 +894,9 @@ void restoreWindowGeometry(const QString &strSetting, const QSize &defaultSize, 
 
     if (!pos.x() && !pos.y())
     {
-        QRect screen = QApplication::desktop()->screenGeometry();
-        pos.setX((screen.width() - size.width()) / 2);
-        pos.setY((screen.height() - size.height()) / 2);
+        QRect _screen = QApplication::desktop()->screenGeometry();
+        pos.setX((_screen.width() - size.width()) / 2);
+        pos.setY((_screen.height() - size.height()) / 2);
     }
 
     parent->resize(size);
@@ -961,6 +963,9 @@ QString formatServicesStr(quint64 mask)
                 break;
             case NODE_BITCOIN_CASH:
                 strList.append("CASH");
+                break;
+            case NODE_GRAPHENE:
+                strList.append("GRAPH");
                 break;
             default:
                 strList.append(QString("%1[%2]").arg("UNKNOWN").arg(check));

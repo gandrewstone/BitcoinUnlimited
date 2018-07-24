@@ -3452,7 +3452,7 @@ bool CWallet::InitLoadWallet()
 
     RegisterValidationInterface(walletInstance);
 
-    CBlockIndex *pindexRescan = chainActive.Tip();
+    CBlockIndex *pindexRescan = nullptr;
     if (GetBoolArg("-rescan", false))
         pindexRescan = chainActive.Genesis();
     else

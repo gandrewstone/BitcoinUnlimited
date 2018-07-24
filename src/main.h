@@ -141,6 +141,7 @@ static const unsigned int MAX_BLOCKS_TO_ANNOUNCE = 8;
 
 static const bool DEFAULT_PEERBLOOMFILTERS = true;
 static const bool DEFAULT_USE_THINBLOCKS = true;
+static const bool DEFAULT_USE_GRAPHENE_BLOCKS = false;
 
 static const bool DEFAULT_REINDEX = false;
 static const bool DEFAULT_DISCOVER = true;
@@ -348,7 +349,7 @@ bool AcceptToMemoryPool(CTxMemPool &pool,
 /** Convert CValidationState to a human-readable message for logging */
 std::string FormatStateMessage(const CValidationState &state);
 
-/** Get the BIP9 state for a given deployment at the current tip. */
+/** Get the BIP135 state for a given deployment at the current tip. */
 ThresholdState VersionBitsTipState(const Consensus::Params &params, Consensus::DeploymentPos pos);
 
 struct CNodeStateStats

@@ -161,6 +161,12 @@ void LogInit()
     uint64_t catg = Logging::NONE;
     const vector<string> &categories = mapMultiArgs["-debug"];
 
+    // enable all when given -debug=1 or -debug
+    if (categories.size() == 1 && (categories[0] == "" || categories[0] == "1"))
+    {
+        Logging::LogToggleCategory(Logging::ALL, true);
+        return;
+    }
     for (string const &cat : categories)
     {
         category = boost::algorithm::to_lower_copy(cat);
@@ -176,7 +182,7 @@ void LogInit()
 
 const char *const BITCOIN_CONF_FILENAME = "bitcoin.conf";
 const char *const BITCOIN_PID_FILENAME = "bitcoind.pid";
-
+const char *const FORKS_CSV_FILENAME = "forks.csv"; // bip135 added
 
 map<string, string> mapArgs;
 map<string, vector<string> > mapMultiArgs;
@@ -601,6 +607,19 @@ fs::path GetConfigFile(const std::string &confPath)
         pathConfigFile = GetDataDir(false) / pathConfigFile;
 
     return pathConfigFile;
+}
+
+// bip135 added
+/**
+ * Function to return expected path of FORKS_CSV_FILENAME
+ */
+fs::path GetForksCsvFile()
+{
+    fs::path pathCsvFile(GetArg("-forks", FORKS_CSV_FILENAME));
+    if (!pathCsvFile.is_complete())
+        pathCsvFile = GetDataDir(false) / pathCsvFile;
+
+    return pathCsvFile;
 }
 
 void ReadConfigFile(map<string, string> &mapSettingsRet,

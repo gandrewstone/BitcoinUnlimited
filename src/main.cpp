@@ -20,6 +20,7 @@
 #include "consensus/validation.h"
 #include "dosman.h"
 #include "expedited.h"
+#include "graphene.h"
 #include "hash.h"
 #include "init.h"
 #include "merkleblock.h"
@@ -1590,42 +1591,29 @@ int32_t ComputeBlockVersion(const CBlockIndex *pindexPrev, const Consensus::Para
     LOCK(cs_main);
     int32_t nVersion = VERSIONBITS_TOP_BITS;
 
-    for (int i = 0; i < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; i++)
+    for (int i = 0; i < Consensus::MAX_VERSION_BITS_DEPLOYMENTS; i++)
     {
-        ThresholdState state = VersionBitsState(pindexPrev, params, (Consensus::DeploymentPos)i, versionbitscache);
-        if (state == THRESHOLD_LOCKED_IN || state == THRESHOLD_STARTED)
+        // bip135 begin
+        // guard this because not all deployments have window/threshold
+        if (IsConfiguredDeployment(params, i))
         {
-            nVersion |= VersionBitsMask(params, (Consensus::DeploymentPos)i);
+            ThresholdState state = VersionBitsState(pindexPrev, params, (Consensus::DeploymentPos)i, versionbitscache);
+            // activate the bits that are STARTED or LOCKED_IN according to their deployments
+            if (state == THRESHOLD_LOCKED_IN || state == THRESHOLD_STARTED)
+            {
+                nVersion |= VersionBitsMask(params, (Consensus::DeploymentPos)i);
+            }
         }
+        // bip135 end
     }
 
     return nVersion;
 }
 
-/**
- * Threshold condition checker that triggers when unknown versionbits are seen on the network.
- */
-class WarningBitsConditionChecker : public AbstractThresholdConditionChecker
-{
-private:
-    int bit;
-
-public:
-    WarningBitsConditionChecker(int bitIn) : bit(bitIn) {}
-    int64_t BeginTime(const Consensus::Params &params) const { return 0; }
-    int64_t EndTime(const Consensus::Params &params) const { return std::numeric_limits<int64_t>::max(); }
-    int Period(const Consensus::Params &params) const { return params.nMinerConfirmationWindow; }
-    int Threshold(const Consensus::Params &params) const { return params.nRuleChangeActivationThreshold; }
-    bool Condition(const CBlockIndex *pindex, const Consensus::Params &params) const
-    {
-        return ((pindex->nVersion & VERSIONBITS_TOP_MASK) == VERSIONBITS_TOP_BITS) &&
-               ((pindex->nVersion >> bit) & 1) != 0 &&
-               ((UnlimitedComputeBlockVersion(pindex->pprev, params, pindex->nTime) >> bit) & 1) == 0;
-    }
-};
+// bip135 : removed WarningBitsConditionChecker - no longer needed
 
 // Protected by cs_main
-static ThresholdConditionCache warningcache[VERSIONBITS_NUM_BITS];
+static ThresholdConditionCache warningcache[Consensus::MAX_VERSION_BITS_DEPLOYMENTS];
 
 static uint32_t GetBlockScriptFlags(const CBlockIndex *pindex, const Consensus::Params &consensusparams)
 {
@@ -1684,6 +1672,23 @@ static uint32_t GetBlockScriptFlags(const CBlockIndex *pindex, const Consensus::
 
     return flags;
 }
+
+// bip135 begin
+// keep track of count over last 100
+struct UnknownForkData
+{
+    int UnknownForkSignalStrength{0};
+    bool UnknownForkSignalFirstDetected{false};
+    bool UnknownForkSignalLost{false};
+    bool UnknownForkSignalAt25Percent{false};
+    bool UnknownForkSignalAt50Percent{false};
+    bool UnknownForkSignalAt70Percent{false};
+    bool UnknownForkSignalAt90Percent{false};
+    bool UnknownForkSignalAt95Percent{false};
+};
+
+static UnknownForkData unknownFork[Consensus::MAX_VERSION_BITS_DEPLOYMENTS];
+// bip135 end
 
 static int64_t nTimeCheck = 0;
 static int64_t nTimeForks = 0;
@@ -2145,71 +2150,11 @@ void static UpdateTip(CBlockIndex *pindexNew)
 
     cvBlockChange.notify_all();
 
-    // Check the version of the last 100 blocks to see if we need to upgrade:
-    static bool fWarned = false;
     if (!IsInitialBlockDownload())
     {
-        int nUpgraded = 0;
-        const CBlockIndex *pindex = chainActive.Tip();
-        for (int bit = 0; bit < VERSIONBITS_NUM_BITS; bit++)
-        {
-            WarningBitsConditionChecker checker(bit);
-            ThresholdState state = checker.GetStateFor(pindex, chainParams.GetConsensus(), warningcache[bit]);
-            if (state == THRESHOLD_ACTIVE || state == THRESHOLD_LOCKED_IN)
-            {
-                if (state == THRESHOLD_ACTIVE)
-                {
-                    strMiscWarning = strprintf(_("Warning: unknown new rules activated (versionbit %i)"), bit);
-                    if (!fWarned)
-                    {
-                        AlertNotify(strMiscWarning);
-                        fWarned = true;
-                    }
-                }
-                else
-                {
-                    LOGA("%s: unknown new rules are about to activate (versionbit %i)\n", __func__, bit);
-                }
-            }
-        }
-        int32_t anUnexpectedVersion = 0;
-        for (int i = 0; i < 100 && pindex != NULL; i++)
-        {
-            int32_t nExpectedVersion =
-                UnlimitedComputeBlockVersion(pindex->pprev, chainParams.GetConsensus(), pindex->nTime);
-            if (pindex->nVersion > VERSIONBITS_LAST_OLD_BLOCK_VERSION && (pindex->nVersion & ~nExpectedVersion) != 0)
-            {
-                anUnexpectedVersion = pindex->nVersion;
-                ++nUpgraded;
-            }
-            pindex = pindex->pprev;
-        }
-        if (nUpgraded > 0)
-            LOGA("%s: %d of last 100 blocks have unexpected version. One example: 0x%x\n", __func__, nUpgraded,
-                anUnexpectedVersion);
-        if (nUpgraded > 100 / 2)
-        {
-            // strMiscWarning is read by GetWarnings(), called by Qt and the JSON-RPC( code to warn the user:
-            strMiscWarning =
-                _("Warning: Unknown block versions being mined! It's possible unknown rules are in effect");
-            if (!fWarned)
-            {
-                AlertNotify(strMiscWarning);
-                fWarned = true;
-            }
-        }
-        else
-        {
-            // clear warning in case unknown block version descrease under 50% of the last 100 mined blocks
-            if (fWarned &&
-                strMiscWarning ==
-                    _("Warning: Unknown block versions being mined! It's possible unknown rules are in effect"))
-            {
-                strMiscWarning = "";
-                AlertNotify(strMiscWarning);
-                fWarned = false;
-            }
-        }
+        // Check the version of the last 100 blocks,
+        // alert if significant signaling changes.
+        CheckAndAlertUnknownVersionbits(chainParams, chainActive.Tip());
     }
 }
 
@@ -4069,7 +4014,7 @@ void UnloadBlockIndex()
     setDirtyFileInfo.clear();
     mapNodeState.clear();
     versionbitscache.Clear();
-    for (int b = 0; b < VERSIONBITS_NUM_BITS; b++)
+    for (int b = 0; b < Consensus::MAX_VERSION_BITS_DEPLOYMENTS; b++)
     {
         warningcache[b].clear();
     }
@@ -4686,17 +4631,15 @@ void static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
             boost::this_thread::interruption_point();
             it++;
 
-            // BUIP010 Xtreme Thinblocks: if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK)
-            if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK || inv.type == MSG_THINBLOCK ||
-                inv.type == MSG_XTHINBLOCK)
+            if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK || inv.type == MSG_THINBLOCK)
             {
-                bool send = false;
+                bool fSend = false;
                 BlockMap::iterator mi = mapBlockIndex.find(inv.hash);
                 if (mi != mapBlockIndex.end())
                 {
                     if (chainActive.Contains(mi->second))
                     {
-                        send = true;
+                        fSend = true;
                     }
                     else
                     {
@@ -4704,11 +4647,11 @@ void static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
                         // To prevent fingerprinting attacks, only send blocks outside of the active
                         // chain if they are valid, and no more than a month older (both in time, and in
                         // best equivalent proof of work) than the best header chain we know about.
-                        send = mi->second->IsValid(BLOCK_VALID_SCRIPTS) && (pindexBestHeader != NULL) &&
-                               (pindexBestHeader->GetBlockTime() - mi->second->GetBlockTime() < nOneMonth) &&
-                               (GetBlockProofEquivalentTime(
-                                    *pindexBestHeader, *mi->second, *pindexBestHeader, consensusParams) < nOneMonth);
-                        if (!send)
+                        fSend = mi->second->IsValid(BLOCK_VALID_SCRIPTS) && (pindexBestHeader != NULL) &&
+                                (pindexBestHeader->GetBlockTime() - mi->second->GetBlockTime() < nOneMonth) &&
+                                (GetBlockProofEquivalentTime(
+                                     *pindexBestHeader, *mi->second, *pindexBestHeader, consensusParams) < nOneMonth);
+                        if (!fSend)
                         {
                             LOGA("%s: ignoring request from peer=%i for old block that isn't in the main chain\n",
                                 __func__, pfrom->GetId());
@@ -4716,8 +4659,8 @@ void static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
                         else
                         { // BU: don't relay excessive blocks
                             if (mi->second->nStatus & BLOCK_EXCESSIVE)
-                                send = false;
-                            if (!send)
+                                fSend = false;
+                            if (!fSend)
                                 LOGA("%s: ignoring request from peer=%i for excessive block of height %d not on "
                                      "the main chain\n",
                                     __func__, pfrom->GetId(), mi->second->nHeight);
@@ -4729,7 +4672,7 @@ void static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
                 // disconnect node in case we have reached the outbound limit for serving historical blocks
                 // never disconnect whitelisted nodes
                 static const int nOneWeek = 7 * 24 * 60 * 60; // assume > 1 week = historical
-                if (send && CNode::OutboundTargetReached(true) &&
+                if (fSend && CNode::OutboundTargetReached(true) &&
                     (((pindexBestHeader != NULL) &&
                          (pindexBestHeader->GetBlockTime() - mi->second->GetBlockTime() > nOneWeek)) ||
                         inv.type == MSG_FILTERED_BLOCK) &&
@@ -4739,11 +4682,11 @@ void static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
 
                     // disconnect node
                     pfrom->fDisconnect = true;
-                    send = false;
+                    fSend = false;
                 }
                 // Pruned nodes may have deleted the block, so check whether
                 // it's available before trying to send.
-                if (send && (mi->second->nStatus & BLOCK_HAVE_DATA))
+                if (fSend && (mi->second->nStatus & BLOCK_HAVE_DATA))
                 {
                     // Send block from disk
                     CBlock block;
@@ -4761,15 +4704,11 @@ void static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
                             pfrom->blocksSent += 1;
                             pfrom->PushMessage(NetMsgType::BLOCK, block);
                         }
-
-                        // BUIP010 Xtreme Thinblocks: begin section
-                        else if (inv.type == MSG_THINBLOCK || inv.type == MSG_XTHINBLOCK)
+                        else if (inv.type == MSG_THINBLOCK)
                         {
-                            LOG(THIN, "Sending xthin by INV queue getdata message\n");
+                            LOG(THIN, "Sending thinblock by INV queue getdata message\n");
                             SendXThinBlock(MakeBlockRef(block), pfrom, inv);
                         }
-                        // BUIP010 Xtreme Thinblocks: end section
-
                         else // MSG_FILTERED_BLOCK)
                         {
                             LOCK(pfrom->cs_filter);
@@ -4814,7 +4753,7 @@ void static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
             else if (inv.IsKnownType())
             {
                 // Send stream from relay memory
-                bool pushed = false;
+                bool fPushed = false;
                 {
                     CDataStream cd(0, 0);
                     if (1)
@@ -4826,15 +4765,15 @@ void static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
                         if (mi != mapRelay.end())
                         {
                             cd = (*mi).second; // I have to copy, because .second may be deleted once lock is released
-                            pushed = true;
+                            fPushed = true;
                         }
                     }
-                    if (pushed)
+                    if (fPushed)
                     {
                         pfrom->PushMessage(inv.GetCommand(), cd);
                     }
                 }
-                if (!pushed && inv.type == MSG_TX)
+                if (!fPushed && inv.type == MSG_TX)
                 {
                     CTxMemPoolEntry txe;
                     if (mempool.lookup(inv.hash, txe))
@@ -4846,12 +4785,12 @@ void static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
                             ss.reserve(1000);
                             ss << txe.GetTx();
                             pfrom->PushMessage(NetMsgType::TX, ss);
-                            pushed = true;
+                            fPushed = true;
                             pfrom->txsSent += 1;
                         }
                     }
                 }
-                if (!pushed)
+                if (!fPushed)
                 {
                     vNotFound.push_back(inv);
                 }
@@ -4860,9 +4799,11 @@ void static ProcessGetData(CNode *pfrom, const Consensus::Params &consensusParam
             // Track requests for our stuff.
             GetMainSignals().Inventory(inv.hash);
 
-            // BUIP010 Xtreme Thinblocks: if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK)
-            if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK || inv.type == MSG_THINBLOCK ||
-                inv.type == MSG_XTHINBLOCK)
+            // We only want to process one of these message types before returning. These are high
+            // priority messages and we don't want to sit here processing a large number of messages
+            // while we hold the cs_main lock, but rather allow these messages to be sent first and
+            // process the return message before potentially reading from the queue again.
+            if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK || inv.type == MSG_THINBLOCK)
                 break;
         }
     }
@@ -5092,7 +5033,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         }
 
         // Tell the peer what maximum xthin bloom filter size we will consider acceptable.
-        if (pfrom->ThinBlockCapable())
+        if (pfrom->ThinBlockCapable() && IsThinBlocksEnabled())
         {
             pfrom->PushMessage(NetMsgType::FILTERSIZEXTHIN, nXthinBloomFilterSize);
         }
@@ -6072,6 +6013,33 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
     }
     // BUIP010 Xtreme Thinblocks: end section
 
+    // BUIPXXX Graphene blocks: begin section
+    else if (strCommand == NetMsgType::GET_GRAPHENE && !fImporting && !fReindex && IsGrapheneBlockEnabled())
+    {
+        return HandleGrapheneBlockRequest(vRecv, pfrom, chainparams);
+    }
+
+    else if (strCommand == NetMsgType::GRAPHENEBLOCK && !fImporting && !fReindex && !IsInitialBlockDownload() &&
+             IsGrapheneBlockEnabled())
+    {
+        return CGrapheneBlock::HandleMessage(vRecv, pfrom, strCommand, 0);
+    }
+
+
+    else if (strCommand == NetMsgType::GET_GRAPHENETX && !fImporting && !fReindex && !IsInitialBlockDownload() &&
+             IsGrapheneBlockEnabled())
+    {
+        return CRequestGrapheneBlockTx::HandleMessage(vRecv, pfrom);
+    }
+
+
+    else if (strCommand == NetMsgType::GRAPHENETX && !fImporting && !fReindex && !IsInitialBlockDownload() &&
+             IsGrapheneBlockEnabled())
+    {
+        return CGrapheneBlockTx::HandleMessage(vRecv, pfrom);
+    }
+    // BUIPXXX Graphene blocks: end section
+
 
     else if (strCommand == NetMsgType::BLOCK && !fImporting && !fReindex) // Ignore blocks received while importing
     {
@@ -6545,6 +6513,22 @@ bool ProcessMessages(CNode *pfrom)
     return fOk;
 }
 
+static bool CheckForDownloadTimeout(CNode *pto, bool fReceived, int64_t &nRequestTime)
+{
+    // Use a timeout of 6 times the retry inverval before disconnecting.  This way only a max of 6
+    // re-requested thinblocks or graphene blocks could be in memory at any one time.
+    if (!fReceived && (GetTime() - nRequestTime) > 6 * blkReqRetryInterval / 1000000)
+    {
+        if (!pto->fWhitelisted && Params().NetworkIDString() != "regtest")
+        {
+            LOG(THIN, "ERROR: Disconnecting peer %s due to thinblock download timeout exceeded (%d secs)\n",
+                pto->GetLogName(), (GetTime() - nRequestTime));
+            pto->fDisconnect = true;
+            return true;
+        }
+    }
+    return false;
+}
 
 bool SendMessages(CNode *pto)
 {
@@ -6609,31 +6593,26 @@ bool SendMessages(CNode *pto)
             }
         }
 
-        // Check to see if there are any thinblocks in flight that have gone beyond the timeout interval.
-        // If so then we need to disconnect them so that the thinblock data is nullified.  We coud null
-        // the thinblock data here but that would possible cause a node to be baneed later if the thinblock
-        // finally did show up. Better to just disconnect this slow node instead.
-        if (pto->mapThinBlocksInFlight.size() > 0)
+        // Check to see if there are any thinblocks or graphene blocks in flight that have gone beyond the
+        // timeout interval. If so then we need to disconnect them so that the thinblock data is nullified.
+        // We could null the associated data here but that would possibly cause a node to be banned later if
+        // the thinblock or graphene block finally did show up, so instead we just disconnect this slow node.
+        if (!pto->mapThinBlocksInFlight.empty())
         {
             LOCK(pto->cs_mapthinblocksinflight);
-            std::map<uint256, CNode::CThinBlockInFlight>::iterator iter = pto->mapThinBlocksInFlight.begin();
-            while (iter != pto->mapThinBlocksInFlight.end())
+            for (auto &item : pto->mapThinBlocksInFlight)
             {
-                // Use a timeout of 6 times the retry inverval before disconnecting.  This way only a max of 6
-                // re-requested thinblocks could be in memory at any one time.
-                if (!(*iter).second.fReceived &&
-                    (GetTime() - (*iter).second.nRequestTime) > 6 * blkReqRetryInterval / 1000000)
-                {
-                    if (!pto->fWhitelisted && Params().NetworkIDString() != "regtest")
-                    {
-                        LOG(THIN, "ERROR: Disconnecting peer %s due to thinblock download timeout exceeded "
-                                  "(%d secs)\n",
-                            pto->GetLogName(), (GetTime() - (*iter).second.nRequestTime));
-                        pto->fDisconnect = true;
-                        break;
-                    }
-                }
-                iter++;
+                if (CheckForDownloadTimeout(pto, item.second.fReceived, item.second.nRequestTime))
+                    break;
+            }
+        }
+        if (!pto->mapGrapheneBlocksInFlight.empty())
+        {
+            LOCK(pto->cs_mapgrapheneblocksinflight);
+            for (auto &item : pto->mapGrapheneBlocksInFlight)
+            {
+                if (CheckForDownloadTimeout(pto, item.second.fReceived, item.second.nRequestTime))
+                    break;
             }
         }
 

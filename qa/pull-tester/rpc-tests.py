@@ -181,6 +181,7 @@ if ENABLE_ZMQ:
 #Tests
 testScripts = [ RpcTest(t) for t in [
     'miningtest',
+    'grapheneblocks',
     'cashlibtest',
     'tweak',
     'notify',
@@ -242,6 +243,9 @@ testScriptsExt = [ RpcTest(t) for t in [
     'bip68-sequence',
     'bipdersig-p2p',
     'bipdersig',
+    'bip135-grace',
+    'bip135-grace-failed',
+    'bip135-threshold',
     'getblocktemplate_longpoll',
     'getblocktemplate_proposals',
     'txn_doublespend',

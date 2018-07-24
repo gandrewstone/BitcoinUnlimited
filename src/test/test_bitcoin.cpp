@@ -101,7 +101,8 @@ CBlock TestChain100Setup::CreateAndProcessBlock(const std::vector<CMutableTransa
     const CScript &scriptPubKey)
 {
     const CChainParams &chainparams = Params();
-    CBlockTemplate *pblocktemplate = BlockAssembler(chainparams).CreateNewBlock(scriptPubKey);
+    std::unique_ptr<CBlockTemplate> pblocktemplate(new CBlockTemplate());
+    pblocktemplate = BlockAssembler(chainparams).CreateNewBlock(scriptPubKey);
     CBlock &block = pblocktemplate->block;
 
     // Replace mempool-selected txns with just coinbase plus passed-in txns:
@@ -120,7 +121,6 @@ CBlock TestChain100Setup::CreateAndProcessBlock(const std::vector<CMutableTransa
     ProcessNewBlock(state, chainparams, NULL, &block, true, NULL, false);
 
     CBlock result = block;
-    delete pblocktemplate;
     return result;
 }
 
@@ -172,6 +172,10 @@ struct StartupShutdown
             std::string s = opts["log_bitcoin"].as<std::string>();
             if (s == "console")
             {
+                /* To enable this, add
+                   -- --log_bitcoin console
+                   to the end of the test_bitcoin argument list. */
+                Logging::LogToggleCategory(Logging::ALL, true);
                 fPrintToConsole = true;
                 fPrintToDebugLog = false;
             }
@@ -186,3 +190,9 @@ struct StartupShutdown
 };
 
 BOOST_GLOBAL_FIXTURE(StartupShutdown);
+
+std::ostream &operator<<(std::ostream &os, const uint256 &num)
+{
+    os << num.ToString();
+    return os;
+}
