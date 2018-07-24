@@ -89,7 +89,7 @@ bool fCheckBlockIndex = false;
 bool fCheckpointsEnabled = DEFAULT_CHECKPOINTS_ENABLED;
 uint64_t nPruneTarget = 0;
 uint64_t nDBUsedSpace = 0;
-std::vector< std::pair<uint256, uint64_t> > vDbBlockSizes;
+std::vector<std::pair<uint256, uint64_t> > vDbBlockSizes;
 uint32_t nXthinBloomFilterSize = SMALLEST_MAX_BLOOM_FILTER_SIZE;
 
 // The allowed size of the in memory UTXO cache
@@ -3219,7 +3219,7 @@ bool FindBlockPos(CValidationState &state,
 bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigned int nAddSize)
 {
     // nUndoPos for blockdb is a flag, set it to 1 to inidicate we have the data
-    if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+    if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
     {
         pos.nPos = 1;
         if (!CheckDiskSpace(nAddSize))
@@ -3506,7 +3506,9 @@ bool AcceptBlockHeader(const CBlockHeader &block,
         pindexPrev = (*mi).second;
         assert(pindexPrev);
         if (pindexPrev->nStatus & BLOCK_FAILED_MASK)
-            return state.DoS(100, error("%s: previous block %s is invalid", __func__, pindexPrev->GetBlockHash().GetHex().c_str()), REJECT_INVALID, "bad-prevblk");
+            return state.DoS(100,
+                error("%s: previous block %s is invalid", __func__, pindexPrev->GetBlockHash().GetHex().c_str()),
+                REJECT_INVALID, "bad-prevblk");
 
         // If the parent block belongs to the set of checkpointed blocks but it has a mismatched hash,
         // then we are on the wrong fork so ignore
@@ -3605,7 +3607,7 @@ static bool AcceptBlock(const CBlock &block,
         {
             return error("AcceptBlock(): FindBlockPos failed");
         }
-        if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+        if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
         {
             vDbBlockSizes.emplace_back(std::make_pair(block.GetHash(), nBlockSize + 8));
         }
@@ -3825,15 +3827,15 @@ bool static LoadBlockIndexDB()
     /** This sync method will break on pruned nodes so we cant use if pruned*/
     // Check whether we have ever pruned block & undo files
     pblocktree->ReadFlag("prunedblockfiles", fHavePruned);
-    if(!fHavePruned)
+    if (!fHavePruned)
     {
         // by default we want to sync from disk instead of network if possible
         bool syncBlocks = true;
-        if(!DetermineStorageSync())
+        if (!DetermineStorageSync())
         {
             syncBlocks = false;
         }
-        if(syncBlocks)
+        if (syncBlocks)
         {
             // run a db sync here to sync storage methods
             // may increase startup time significantly but is faster than network sync
@@ -3845,7 +3847,7 @@ bool static LoadBlockIndexDB()
 
     delete pblocktreeother;
     pblocktreeother = nullptr;
-    if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
+    if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
     {
         fs::remove_all(GetDataDir() / "blockdb");
     }
@@ -3975,11 +3977,11 @@ bool static LoadBlockIndexDB()
 
     // Load pointer to end of best chain
     uint256 bestblockhash;
-    if(BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
+    if (BLOCK_DB_MODE == SEQUENTIAL_BLOCK_FILES)
     {
         bestblockhash = pcoinsdbview->GetBestBlockSeq();
     }
-    if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+    if (BLOCK_DB_MODE == DB_BLOCK_STORAGE)
     {
         bestblockhash = pcoinsdbview->GetBestBlockDb();
     }
