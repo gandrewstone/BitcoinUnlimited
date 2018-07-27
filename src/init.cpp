@@ -12,6 +12,8 @@
 
 #include "addrman.h"
 #include "amount.h"
+#include "blockdb/sequential_files.h"
+#include "blockdb/wrapper.h"
 #include "chain.h"
 #include "chainparams.h"
 #include "checkpoints.h"
@@ -240,7 +242,11 @@ void Shutdown()
         delete pcoinsdbview;
         pcoinsdbview = NULL;
         delete pblocktree;
-        pblocktree = NULL;
+        pblocktree = nullptr;
+        delete pblockdb;
+        pblockdb = NULL;
+        delete pblockundodb;
+        pblockundodb = NULL;
     }
 #ifdef ENABLE_WALLET
     if (pwalletMain)
@@ -985,44 +991,60 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
     // ********************************************************* Step 6: load block chain
 
     fReindex = GetBoolArg("-reindex", DEFAULT_REINDEX);
+    int64_t requested_block_mode = GetArg("-useblockdb", DEFAULT_BLOCK_DB_MODE);
+    if(requested_block_mode == 0)
+    {
+        BLOCK_DB_MODE = SEQUENTIAL_BLOCK_FILES;
+    }
+    else
+    {
+        BLOCK_DB_MODE = DB_BLOCK_STORAGE;
+    }
 
     // Upgrading to 0.8; hard-link the old blknnnn.dat files into /blocks/
-    fs::path blocksDir = GetDataDir() / "blocks";
-    if (!fs::exists(blocksDir))
+    if(BLOCK_DB_MODE != DB_BLOCK_STORAGE)
     {
-        fs::create_directories(blocksDir);
-        bool linked = false;
-        for (unsigned int i = 1; i < 10000; i++)
+        fs::path blocksDir = GetDataDir() / "blocks";
+        if (!fs::exists(blocksDir))
         {
-            fs::path source = GetDataDir() / strprintf("blk%04u.dat", i);
-            if (!fs::exists(source))
-                break;
-            fs::path dest = blocksDir / strprintf("blk%05u.dat", i - 1);
-            try
+            fs::create_directories(blocksDir);
+            bool linked = false;
+            for (unsigned int i = 1; i < 10000; i++)
             {
-                fs::create_hard_link(source, dest);
-                LOGA("Hardlinked %s -> %s\n", source.string(), dest.string());
-                linked = true;
-            }
-            catch (const fs::filesystem_error &e)
-            {
+                fs::path source = GetDataDir() / strprintf("blk%04u.dat", i);
+                if (!fs::exists(source))
+                    break;
+                fs::path dest = blocksDir / strprintf("blk%05u.dat", i - 1);
+                try
+                {
+                    fs::create_hard_link(source, dest);
+                    LOGA("Hardlinked %s -> %s\n", source.string(), dest.string());
+                    linked = true;
+                }
+                catch (const fs::filesystem_error &e)
+                {
                 // Note: hardlink creation failing is not a disaster, it just means
                 // blocks will get re-downloaded from peers.
-                LOGA("Error hardlinking blk%04u.dat: %s\n", i, e.what());
-                break;
+                    LOGA("Error hardlinking blk%04u.dat: %s\n", i, e.what());
+                    break;
+                }
             }
-        }
-        if (linked)
-        {
-            fReindex = true;
+            if (linked)
+            {
+                fReindex = true;
+            }
         }
     }
 
     // Return the initial values for the various in memory caches.
+    int64_t nBlockDBCache = 0;
+    int64_t nBlockUndoDBCache = 0;
     int64_t nBlockTreeDBCache = 0;
     int64_t nCoinDBCache = 0;
-    GetCacheConfiguration(nBlockTreeDBCache, nCoinDBCache, nCoinCacheMaxSize);
+    GetCacheConfiguration(nBlockDBCache, nBlockUndoDBCache, nBlockTreeDBCache, nCoinDBCache, nCoinCacheMaxSize);
     LOGA("Cache configuration:\n");
+    LOGA("* Using %.1fMiB for block database\n", nBlockDBCache * (1.0 / 1024 / 1024));
+    LOGA("* Using %.1fMiB for block undo database\n", nBlockUndoDBCache * (1.0 / 1024 / 1024));
     LOGA("* Using %.1fMiB for block index database\n", nBlockTreeDBCache * (1.0 / 1024 / 1024));
     LOGA("* Using %.1fMiB for chain state database\n", nCoinDBCache * (1.0 / 1024 / 1024));
     LOGA("* Using %.1fMiB for in-memory UTXO set\n", nCoinCacheMaxSize * (1.0 / 1024 / 1024));
@@ -1043,9 +1065,45 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
                 delete pcoinsdbview;
                 delete pcoinscatcher;
                 delete pblocktree;
+                delete pblocktreeother;
+                delete pblockdb;
+                delete pblockundodb;
 
                 uiInterface.InitMessage(_("Opening Block database..."));
-                pblocktree = new CBlockTreeDB(nBlockTreeDBCache, false, fReindex);
+                if(BLOCK_DB_MODE == DB_BLOCK_STORAGE)
+                {
+                    pblocktree = new CBlockTreeDB(nBlockTreeDBCache, "blockdb", false, fReindex);
+                    pblocktreeother = new CBlockTreeDB(nBlockTreeDBCache, "blocks", false, fReindex);
+                    if (boost::filesystem::exists(GetDataDir() / "blockdb" / "blocks"))
+                    {
+                        for(fs::recursive_directory_iterator it(GetDataDir() / "blockdb" / "blocks"); it!=fs::recursive_directory_iterator(); ++it)
+                        {
+                            if(!fs::is_directory(*it))
+                            {
+                                nDBUsedSpace+=fs::file_size(*it);
+                            }
+                        }
+                    }
+                    pblocktree->ReadBlockSizeData(vDbBlockSizes);
+                }
+                else
+                {
+                    pblocktree = new CBlockTreeDB(nBlockTreeDBCache, "blocks", false, fReindex);
+                    pblocktreeother = new CBlockTreeDB(nBlockTreeDBCache, "blockdb", false, fReindex);
+                }
+
+                // we want to have much larger file sizes for the blocks db so override the default.
+                COverrideOptions override;
+                override.max_file_size = nBlockDBCache / 2;
+                pblockdb = new CBlockDB("blocks", nBlockDBCache, false, false, false, &override);
+
+                // Make the undo file max size larger than the default and also configure the write buffer
+                // to be a larger proportion of the overall cache since we don't really need a big read buffer
+                // for undo files.
+                override.max_file_size = nBlockUndoDBCache;
+                override.write_buffer_size = nBlockUndoDBCache / 1.8;
+                pblockundodb = new CBlockDB("undo", nBlockUndoDBCache, false, false, false, &override);
+
                 uiInterface.InitMessage(_("Opening UTXO database..."));
                 pcoinsdbview = new CCoinsViewDB(nCoinDBCache, false, fReindex);
                 pcoinscatcher = new CCoinsViewErrorCatcher(pcoinsdbview);
@@ -1123,7 +1181,6 @@ bool AppInit2(Config &config, boost::thread_group &threadGroup, CScheduler &sche
                         break;
                     }
                 }
-
                 if (!CVerifyDB().VerifyDB(chainparams, pcoinsdbview, GetArg("-checklevel", DEFAULT_CHECKLEVEL),
                         GetArg("-checkblocks", DEFAULT_CHECKBLOCKS)))
                 {
