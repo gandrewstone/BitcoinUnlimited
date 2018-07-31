@@ -18,6 +18,7 @@
 #include "dstencode.h"
 #include "init.h"
 #include "main.h" // For minRelayTxFee
+#include "policy/policy.h"
 #include "wallet/wallet.h"
 
 #include <boost/assign/list_of.hpp> // for 'map_list_of()'
@@ -37,8 +38,8 @@ QList<CAmount> CoinControlDialog::payAmounts;
 CCoinControl *CoinControlDialog::coinControl = new CCoinControl();
 bool CoinControlDialog::fSubtractFeeFromAmount = false;
 
-CoinControlDialog::CoinControlDialog(const PlatformStyle *platformStyle, QWidget *parent)
-    : QDialog(parent), ui(new Ui::CoinControlDialog), model(0), platformStyle(platformStyle)
+CoinControlDialog::CoinControlDialog(const PlatformStyle *_platformStyle, QWidget *parent)
+    : QDialog(parent), ui(new Ui::CoinControlDialog), model(0), platformStyle(_platformStyle)
 {
     ui->setupUi(this);
 
@@ -480,7 +481,7 @@ void CoinControlDialog::updateLabels(WalletModel *model, QDialog *dialog)
         {
             CTxOut txout(amount, (CScript)std::vector<unsigned char>(24, 0));
             txDummy.vout.push_back(txout);
-            if (txout.IsDust(::minRelayTxFee))
+            if (txout.IsDust())
                 fDust = true;
         }
     }
@@ -503,7 +504,7 @@ void CoinControlDialog::updateLabels(WalletModel *model, QDialog *dialog)
     coinControl->ListSelected(vCoinControl);
     model->getOutputs(vCoinControl, vOutputs);
 
-    BOOST_FOREACH (const COutput &out, vOutputs)
+    for (const COutput &out : vOutputs)
     {
         // unselect already spent, very unlikely scenario, this could happen
         // when selected are spent elsewhere, like rpc or another computer
@@ -588,10 +589,10 @@ void CoinControlDialog::updateLabels(WalletModel *model, QDialog *dialog)
             if (nChange > 0 && nChange < MIN_CHANGE)
             {
                 CTxOut txout(nChange, (CScript)std::vector<unsigned char>(24, 0));
-                if (txout.IsDust(::minRelayTxFee))
+                if (txout.IsDust())
                 {
                     if (CoinControlDialog::fSubtractFeeFromAmount) // dust-change will be raised until no dust
-                        nChange = txout.GetDustThreshold(::minRelayTxFee);
+                        nChange = txout.GetDustThreshold();
                     else
                     {
                         nPayFee += nChange;
@@ -720,7 +721,7 @@ void CoinControlDialog::updateView()
     std::map<QString, std::vector<COutput> > mapCoins;
     model->listCoins(mapCoins);
 
-    BOOST_FOREACH (const PAIRTYPE(QString, std::vector<COutput>) & coins, mapCoins)
+    for (const PAIRTYPE(QString, std::vector<COutput>) & coins : mapCoins)
     {
         QTreeWidgetItem *itemWalletAddress = new QTreeWidgetItem();
         itemWalletAddress->setCheckState(COLUMN_CHECKBOX, Qt::Unchecked);
@@ -748,7 +749,7 @@ void CoinControlDialog::updateView()
         double dPrioritySum = 0;
         int nChildren = 0;
         int nInputSum = 0;
-        BOOST_FOREACH (const COutput &out, coins.second)
+        for (const COutput &out : coins.second)
         {
             int nInputSize = 0;
             nSum += out.tx->vout[out.i].nValue;

@@ -300,10 +300,6 @@ static void addConnectionOptions(AllowedArgs &allowedArgs)
             strprintf(_("Time to wait before requesting a block from a different peer, in microseconds (default: %u)"),
                     DEFAULT_MIN_BLK_REQUEST_RETRY_INTERVAL))
         .addArg("connect=<ip>", optionalStr, _("Connect only to the specified node(s)"))
-        .addArg("connect-thinblock=<ip:port>", requiredStr,
-            _("Connect to a thinblock node(s). Blocks will only be downloaded from a thinblock peer.  If no "
-              "connections "
-              "are possible then regular blocks will then be downloaded form any other connected peers"))
         .addArg("discover", optionalBool,
             _("Discover own IP addresses (default: 1 when listening and no -externalip or -proxy)"))
         .addArg("dns", optionalBool, _("Allow DNS lookups for -addnode, -seednode and -connect") + " " +
@@ -543,8 +539,6 @@ static void addDebuggingOptions(AllowedArgs &allowedArgs, HelpMessageMode mode)
         .addDebugArg("printpriority", optionalBool,
             strprintf("Log transaction priority and fee per kB when mining blocks (default: %u)",
                          DEFAULT_PRINTPRIORITY))
-        .addDebugArg("connect-thinblock-force", optionalBool,
-            strprintf("Force download of thinblocks from connect-thinblock peers (default: %u)", false))
 #ifdef ENABLE_WALLET
         .addDebugArg("privdb", optionalBool,
             strprintf("Sets the DB_PRIVATE flag in the wallet db environment (default: %u)", DEFAULT_WALLET_PRIVDB))
@@ -566,6 +560,10 @@ static void addNodeRelayOptions(AllowedArgs &allowedArgs)
         .addArg("datacarriersize=<n>", requiredInt,
             strprintf(_("Maximum size of data in data carrier transactions we relay and mine (default: %u)"),
                     MAX_OP_RETURN_RELAY))
+        .addArg("dustthreshold=<amt>", requiredAmount,
+            strprintf(_("Dust Threshold (in satoshis) defines the minimum quantity an output may contain for the "
+                        "transaction to be considered standard, and therefore relayable. (default: %s)"),
+                    DEFAULT_DUST_THRESHOLD))
         .addArg("excessiveacceptdepth=<n>", requiredInt,
             strprintf(_("Excessive blocks are accepted if this many blocks are mined on top of them (default: %u)"),
                     DEFAULT_EXCESSIVE_ACCEPT_DEPTH))
@@ -610,7 +608,8 @@ static void addNodeRelayOptions(AllowedArgs &allowedArgs)
         .addArg("use-bloom-filter-targeting", optionalBool,
             _("Enable thin block bloom filter targeting which helps to keep the size of bloom filters to a minumum "
               "although it can impact performance. (default: 0)"))
-        .addArg("use-grapheneblocks", optionalBool, _("Enable graphene to speed up the relay of blocks (default: 1)"));
+        .addArg("use-grapheneblocks", optionalBool,
+            strprintf(_("Enable graphene to speed up the relay of blocks (default: %d)"), DEFAULT_USE_GRAPHENE_BLOCKS));
 }
 
 static void addBlockCreationOptions(AllowedArgs &allowedArgs)

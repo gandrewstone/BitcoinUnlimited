@@ -1600,7 +1600,7 @@ static void DNSAddressSeed()
     LOGA("%d addresses found from DNS seeds\n", found);
 }
 
-// BITCOINUNLIMITED START
+#if 0 // Disabled until a Bitcoin Cash compatible "bitnodes" site becomes available
 static void BitnodesAddressSeed()
 {
     // Get nodes from websites offering Bitnodes API
@@ -1639,7 +1639,7 @@ static void BitnodesAddressSeed()
 
     LOGA("%d addresses found from Bitnodes API\n", vAdd.size());
 }
-// BITCOINUNLIMITED END
+#endif
 
 void ThreadAddressSeeding()
 {
@@ -1725,9 +1725,6 @@ void ThreadOpenConnections()
             MilliSleep(500);
         }
     }
-
-    // Connect to all "connect-thinblock" peers
-    ConnectToThinBlockNodes();
 
     // NOTE: If we are in the block above, then no seeding should occur as "-connect" and "-connect-thinblock"
     // are intended as "only make outbound connections to the configured nodes".

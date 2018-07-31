@@ -30,6 +30,9 @@ SOFTWARE.
 #include <utility>
 
 static const size_t N_HASHCHECK = 11;
+// It's extremely unlikely that an IBLT will decode with fewer
+// than 1 cell for every 10 items.
+static const float MIN_OVERHEAD = 0.1;
 
 // mask that can be reduced to reduce the number of checksum bits in the IBLT
 // -- ANY VALUE OTHER THAN 0xffffffff IS FOR TESTING ONLY! --
@@ -87,8 +90,12 @@ CIblt::CIblt()
     version = 0;
 }
 
-CIblt::CIblt(size_t _expectedNumEntries) : is_modified(false), version(0) { CIblt::resize(_expectedNumEntries); }
-CIblt::CIblt(const CIblt &other) : is_modified(false), version(0)
+CIblt::CIblt(size_t _expectedNumEntries) : version(0), n_hash(0), is_modified(false)
+{
+    CIblt::resize(_expectedNumEntries);
+}
+
+CIblt::CIblt(const CIblt &other) : version(0), n_hash(0), is_modified(false)
 {
     n_hash = other.n_hash;
     hashTable = other.hashTable;
@@ -103,7 +110,7 @@ void CIblt::reset()
     is_modified = false;
 }
 
-size_t CIblt::size() { return hashTable.size(); }
+uint64_t CIblt::size() { return hashTable.size(); }
 void CIblt::resize(size_t _expectedNumEntries)
 {
     assert(is_modified == false);
@@ -230,6 +237,7 @@ bool CIblt::listEntries(std::set<std::pair<uint64_t, std::vector<uint8_t> > > &p
     CIblt peeled = *this;
 
     size_t nErased = 0;
+    size_t nTotalErased = 0;
     do
     {
         nErased = 0;
@@ -252,7 +260,8 @@ bool CIblt::listEntries(std::set<std::pair<uint64_t, std::vector<uint8_t> > > &p
                 ++nErased;
             }
         }
-    } while (nErased > 0);
+        nTotalErased += nErased;
+    } while (nErased > 0 && nTotalErased < peeled.hashTable.size() / MIN_OVERHEAD);
 
     if (!n_hash)
         return false;

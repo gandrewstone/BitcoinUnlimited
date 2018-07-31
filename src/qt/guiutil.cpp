@@ -16,6 +16,7 @@
 #include "fs.h"
 #include "init.h"
 #include "main.h" // For minRelayTxFee
+#include "policy/policy.h"
 #include "primitives/transaction.h"
 #include "protocol.h"
 #include "script/script.h"
@@ -287,7 +288,7 @@ bool isDust(const QString &address, const CAmount &amount)
     CTxDestination dest = DecodeDestination(address.toStdString());
     CScript script = GetScriptForDestination(dest);
     CTxOut txOut(amount, script);
-    return txOut.IsDust(::minRelayTxFee);
+    return txOut.IsDust();
 }
 
 QString HtmlEscape(const QString &str, bool fMultiLine)
@@ -487,8 +488,8 @@ void SubstituteFonts(const QString &language)
 #endif
 }
 
-ToolTipToRichTextFilter::ToolTipToRichTextFilter(int size_threshold, QObject *parent)
-    : QObject(parent), size_threshold(size_threshold)
+ToolTipToRichTextFilter::ToolTipToRichTextFilter(int _size_threshold, QObject *parent)
+    : QObject(parent), size_threshold(_size_threshold)
 {
 }
 

@@ -30,7 +30,6 @@
 #include <boost/accumulators/statistics/mean.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
 #include <boost/accumulators/statistics/variance.hpp>
-#include <boost/foreach.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/thread.hpp>
 #include <inttypes.h>
@@ -496,7 +495,7 @@ bool CRequestManager::RequestBlock(CNode *pfrom, CInv obj)
         (IsThinBlocksEnabled() && IsChainNearlySyncd() && IsGrapheneBlockEnabled() &&
             !graphenedata.CheckGrapheneBlockTimer(obj.hash)))
     {
-        if (HaveConnectThinblockNodes() || (HaveThinblockNodes() && thindata.CheckThinblockTimer(obj.hash)))
+        if (HaveThinblockNodes() && thindata.CheckThinblockTimer(obj.hash))
         {
             // Must download an xthinblock from a XTHIN peer.
             // We can only request one xthinblock per peer at a time.
