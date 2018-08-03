@@ -12,6 +12,12 @@
 
 BOOST_FIXTURE_TEST_SUITE(tokengroup_tests, BasicTestingSetup)
 
+CAmount authorityFlags(GroupControllerFlags f, uint64_t amt=0)
+{
+    amt &= ~((uint64_t) GroupControllerFlags::ALL_BITS);
+    return (CAmount) (((uint64_t) f) | amt);
+}
+
 // create a group pay to public key hash script
 CScript gp2pkh(const CTokenGroupID &group, const CKeyID &dest, CAmount amt)
 {
@@ -335,6 +341,142 @@ CTransaction tx1x2(const CTransaction &prevtx,
 }
 
 
+class InputData
+{
+public:
+    const CTransaction &prevtx;
+    int prevout;
+    CKey key;
+    bool p2pkh;
+    InputData (const CTransaction &prevTx, int prevout, const CKey &key,bool p2pkh = true):prevtx(prevTx),prevout(prevout),key(key),p2pkh(p2pkh)
+    {
+        
+    }
+};
+
+class InputDataCopy:public InputData
+{
+public:
+    CTransaction prevtxStorage;
+    InputDataCopy(const CTransaction &prevTx, int prevout, const CKey &key,bool p2pkh = true):InputData(prevtxStorage, prevout, key, p2pkh), prevtxStorage(prevTx)
+    {
+        
+    }
+};
+
+typedef std::pair<CScript, CAmount>  OutputData;
+
+CTransaction tx(const std::vector<InputData> in, const std::vector<OutputData> out)
+{
+    CMutableTransaction tx;
+    tx.vin.resize(in.size());
+    int idx = 0;
+    for (auto i : in)
+    {
+        tx.vin[idx].prevout = COutPoint(i.prevtx.GetHash(), i.prevout);
+        tx.vin[idx].scriptSig = CScript();
+        idx++;
+    }
+
+    tx.vout.resize(out.size());
+    idx = 0;
+    for (auto o : out)
+    {
+        tx.vout[idx].scriptPubKey = o.first;
+        tx.vout[idx].nValue = o.second;
+        idx++;
+    }
+
+    tx.nLockTime = 0;
+
+    unsigned int sighashType = SIGHASH_ALL | SIGHASH_FORKID;
+
+    idx = 0;
+    for (auto i : in)
+    {
+        std::vector<unsigned char> vchSig;
+        uint256 hash = SignatureHash(
+            i.prevtx.vout[i.prevout].scriptPubKey, tx, idx, sighashType, i.prevtx.vout[i.prevout].nValue, 0);
+        if (!i.key.Sign(hash, vchSig))
+        {
+            assert(0);
+        }
+        vchSig.push_back((unsigned char)sighashType);
+        tx.vin[idx].scriptSig << vchSig;
+        if (i.p2pkh)
+        {
+            tx.vin[idx].scriptSig << ToByteVector(i.key.GetPubKey());
+        }
+        idx++;
+    }
+
+    return tx;
+}
+
+
+CTransaction tx2x2(const InputData& in1, const InputData& in2,
+    const CScript &txo0,
+    CAmount amt0,
+    const CScript &txo1,
+    CAmount amt1)
+{
+    CMutableTransaction tx;
+    tx.vin.resize(2);
+    tx.vin[0].prevout = COutPoint(in1.prevtx.GetHash(), in1.prevout);
+    tx.vin[0].scriptSig = CScript();
+    tx.vin[1].prevout = COutPoint(in2.prevtx.GetHash(), in2.prevout);
+    tx.vin[1].scriptSig = CScript();
+
+    tx.vout.resize(2);
+    tx.vout[0].scriptPubKey = txo0;
+    tx.vout[0].nValue = amt0;
+    tx.vout[1].scriptPubKey = txo1;
+    tx.vout[1].nValue = amt1;
+
+    tx.nLockTime = 0;
+
+    
+    unsigned int sighashType = SIGHASH_ALL | SIGHASH_FORKID;
+    std::vector<unsigned char> vchSig;
+    uint256 hash = SignatureHash(in1.prevtx.vout[in1.prevout].scriptPubKey, tx, 0, sighashType, in1.prevtx.vout[in1.prevout].nValue, 0);
+    if (!in1.key.Sign(hash, vchSig))
+    {
+        assert(0);
+    }
+    vchSig.push_back((unsigned char)sighashType);
+    tx.vin[0].scriptSig << vchSig;
+    if (in1.p2pkh)
+    {
+        tx.vin[0].scriptSig << ToByteVector(in1.key.GetPubKey());
+    }
+
+    std::vector<unsigned char> vchSig2;
+    hash = SignatureHash(in2.prevtx.vout[in2.prevout].scriptPubKey, tx, 1, sighashType, in2.prevtx.vout[in2.prevout].nValue, 0);
+    if (!in2.key.Sign(hash, vchSig2))
+    {
+        assert(0);
+    }
+    vchSig2.push_back((unsigned char)sighashType);
+
+    tx.vin[0].scriptSig << vchSig;
+    if (in1.p2pkh)
+    {
+        tx.vin[0].scriptSig << ToByteVector(in1.key.GetPubKey());
+    }
+    
+    tx.vin[1].scriptSig << vchSig2;
+    if (in2.p2pkh)
+    {
+        tx.vin[1].scriptSig << ToByteVector(in2.key.GetPubKey());
+    }
+
+    
+
+    return tx;
+}
+
+
+
 CTransaction tx2x1(const COutPoint &utxo1, const COutPoint &utxo2, const CScript &txo, CAmount amt)
 {
     CMutableTransaction tx;
@@ -412,65 +554,67 @@ BOOST_AUTO_TEST_CASE(tokengroup_basicfunctions)
         CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
                                    << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CTokenGroupInfo ret(script);
-        BOOST_CHECK(ret == CTokenGroupInfo(NoGroup, CTokenGroupID(addr)));
+        BOOST_CHECK(ret.isInvalid());
     }
     { // check incorrect group length
         std::vector<unsigned char> fakeGrp(19);
         CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
                                    << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CTokenGroupInfo ret(script);
-        BOOST_CHECK(ret == CTokenGroupInfo(NoGroup, CTokenGroupID(addr)));
+        BOOST_CHECK(ret.isInvalid());
     }
     { // check incorrect group length
         std::vector<unsigned char> fakeGrp(1);
         CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
                                    << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CTokenGroupInfo ret(script);
-        BOOST_CHECK(ret == CTokenGroupInfo(NoGroup, CTokenGroupID(addr)));
+        BOOST_CHECK(ret.isInvalid());
     }
     { // check incorrect group length
         std::vector<unsigned char> fakeGrp(33);
         CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
                                    << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CTokenGroupInfo ret(script);
-        BOOST_CHECK(ret == CTokenGroupInfo(NoGroup, CTokenGroupID(addr)));
+        BOOST_CHECK(ret.isInvalid());
     }
 
-    { // check correct group length
+    { // check incorrect group length
         std::vector<unsigned char> fakeGrp(20);
         CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
                                    << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CTokenGroupInfo ret(script);
-        BOOST_CHECK(ret == CTokenGroupInfo(CTokenGroupID(fakeGrp), CTokenGroupID(addr)));
+        BOOST_CHECK(ret.isInvalid());
     }
     { // check correct group length
         std::vector<unsigned char> fakeGrp(32);
         CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
                                    << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CTokenGroupInfo ret(script);
-        BOOST_CHECK(ret == CTokenGroupInfo(CTokenGroupID(fakeGrp), CTokenGroupID(addr)));
+        BOOST_CHECK(!ret.isInvalid());
+        BOOST_CHECK(ret == CTokenGroupInfo(CTokenGroupID(fakeGrp), GroupControllerFlags::NONE));
     }
 
     { // check P2PKH
         CScript script = CScript() << OP_DUP << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CTokenGroupInfo ret(script);
-        BOOST_CHECK(ret == CTokenGroupInfo(NoGroup, CTokenGroupID(addr)));
+        BOOST_CHECK(!ret.isInvalid());
+        BOOST_CHECK(ret == CTokenGroupInfo(NoGroup, GroupControllerFlags::NONE));
     }
 
     CKey grpSecret;
     CPubKey grpPubkey;
-    CKeyID grpAddr;
-    uint256 eGrpAddr;
+    uint256 grpAddr;
+    //uint256 eGrpAddr;
     grpSecret.MakeNewKey(true);
     grpPubkey = secret.GetPubKey();
-    grpAddr = pubkey.GetID();
-    eGrpAddr = pubkey.GetHash();
+    //grpAddr = pubkey.GetID();
+    //eGrpAddr = pubkey.GetHash();
 
     { // check GP2PKH
         CScript script = CScript() << ToByteVector(grpAddr) << SerializeAmount(1) << OP_GROUP << OP_DROP << OP_DROP
                                    << OP_DUP << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CTokenGroupInfo ret(script);
-        BOOST_CHECK(ret == CTokenGroupInfo(grpAddr, addr, 1));
+        BOOST_CHECK(ret == CTokenGroupInfo(grpAddr, GroupControllerFlags::NONE, 1));
         CTxDestination resultAddr;
         bool worked = ExtractDestination(script, resultAddr);
         BOOST_CHECK(worked && (resultAddr == CTxDestination(addr)));
@@ -479,7 +623,7 @@ BOOST_AUTO_TEST_CASE(tokengroup_basicfunctions)
     { // check P2SH
         CScript script = CScript() << OP_HASH160 << ToByteVector(addr) << OP_EQUAL;
         CTokenGroupInfo ret(script);
-        CTokenGroupInfo correct = CTokenGroupInfo(NoGroup, addr);
+        CTokenGroupInfo correct = CTokenGroupInfo(NoGroup, GroupControllerFlags::NONE);
         BOOST_CHECK(ret == correct);
     }
 
@@ -489,30 +633,29 @@ BOOST_AUTO_TEST_CASE(tokengroup_basicfunctions)
         CScript script = CScript() << ToByteVector(grpAddr) << SerializeAmount(1000000000UL) << OP_GROUP << OP_DROP
                                    << OP_DROP << OP_HASH160 << ToByteVector(addr) << OP_EQUAL;
         CTokenGroupInfo ret(script);
-        BOOST_CHECK(ret == CTokenGroupInfo(grpAddr, addr, 1000000000UL));
+        BOOST_CHECK(ret == CTokenGroupInfo(grpAddr, GroupControllerFlags::NONE, 1000000000UL));
         CTxDestination resultAddr;
         bool worked = ExtractDestination(script, resultAddr);
         BOOST_CHECK(worked && (resultAddr == CTxDestination(CScriptID(addr))));
     }
 
-#if 0 // Skip the larger hash version of P2SH until this script format is deployed
-    { // check P2SH2
+    { // check P2TSH  Pay to template script hash
         CScript script = CScript() << OP_HASH256 << ToByteVector(eAddr) << OP_EQUAL;
         CTokenGroupInfo ret(script);
-        // TODO BOOST_CHECK(ret == CTokenGroupInfo(NoGroup, eAddr));
+        BOOST_CHECK(ret == CTokenGroupInfo(NoGroup, GroupControllerFlags::NONE));
     }
 
-    { // check GP2SH2
-        CScript script = CScript() << ToByteVector(eGrpAddr) << OP_GROUP << OP_DROP << OP_HASH256 << ToByteVector(eAddr) << OP_EQUAL;
+    { // check GP2TSH
+        CScript script = CScript() << ToByteVector(grpAddr) << SerializeAmount(1234567UL) << OP_GROUP << OP_DROP << OP_HASH256 << ToByteVector(eAddr) << OP_EQUAL;
         CTokenGroupInfo ret(script);
-        // TODO BOOST_CHECK(ret == CTokenGroupInfo(eGrpAddr, eAddr));
+        BOOST_CHECK(ret == CTokenGroupInfo(grpAddr, GroupControllerFlags::NONE, 1234567));
     }
-#endif
 
     // Now test transaction balances
     {
-        QuickAddress grp1;
-        QuickAddress grp2;
+        CTokenGroupID grp1(1); 
+        CTokenGroupID grp2(2);
+        CTokenGroupID grp3(3);
         QuickAddress u1;
         QuickAddress u2;
 
@@ -520,235 +663,266 @@ BOOST_AUTO_TEST_CASE(tokengroup_basicfunctions)
         CCoinsView coinsDummy;
         CCoinsViewCache coins(&coinsDummy);
         CValidationState state;
-        COutPoint gutxo = AddUtxo(gp2pkh(grp1.addr, u1.addr, 100), 1, coins);
-        COutPoint gutxo_burnable = AddUtxo(gp2pkh(grp1.addr, grp1.addr, 100), 2, coins);
-        COutPoint putxo_mintable = AddUtxo(p2pkh(grp1.addr), 1, coins);
+        COutPoint gutxo = AddUtxo(gp2pkh(grp1, u1.addr, 100), 1, coins);
+        COutPoint gutxo_burnable = AddUtxo(gp2pkh(grp1, u1.addr, 100), 2, coins);
+        COutPoint mintctrl1 = AddUtxo(gp2pkh(grp1, u1.addr, toAmount(GroupControllerFlags::CTRL | GroupControllerFlags::MINT)), 1, coins);
+        COutPoint mintChildAuth1 = AddUtxo(gp2pkh(grp1, u1.addr, toAmount(GroupControllerFlags::CTRL | GroupControllerFlags::MINT | GroupControllerFlags::CCHILD)), 1, coins);
+        COutPoint mintctrl2 = AddUtxo(gp2pkh(grp2, u1.addr, toAmount(GroupControllerFlags::CTRL | GroupControllerFlags::MINT)), 1, coins);
+        COutPoint meltctrl1 = AddUtxo(gp2pkh(grp1, u1.addr, toAmount(GroupControllerFlags::CTRL | GroupControllerFlags::MELT)), 1, coins);
+        COutPoint meltctrl2 = AddUtxo(gp2pkh(grp2, u1.addr, toAmount(GroupControllerFlags::CTRL | GroupControllerFlags::MELT)), 1, coins);
         COutPoint putxo = AddUtxo(p2pkh(u1.addr), 1, coins);
         COutPoint putxo2 = AddUtxo(p2pkh(u1.addr), 2, coins);
-        COutPoint putxo3 = AddUtxo(p2pkh(u1.addr), 3, coins);
 
         // my p2sh will just be a p2pkh inside
         CScript p2shBaseScript = p2pkh(u1.addr);
         CScriptID sid = CScriptID(p2shBaseScript);
 
-        COutPoint gp2sh_meltable = AddUtxo(gp2sh(sid, sid, 100), 5, coins);
-        COutPoint p2sh_mintable = AddUtxo(p2sh(sid), 1, coins);
+        COutPoint gp2sh1 = AddUtxo(gp2sh(grp1, sid, 100), 5, coins);
+        COutPoint p2sh1 = AddUtxo(p2sh(sid), 1, coins);
         {
-            // check single mint tx
-            CHashWriter hasher(SER_GETHASH, PROTOCOL_VERSION);
-            hasher << putxo;
-            CTokenGroupID otg(hasher.GetHash());
-            CTransaction t = tx1x1(putxo, gp2pkh(otg, u1.addr, 100000), 1);
+            // check mint tx
+
+            // without mint authority
+            CTransaction t = tx2x1(putxo2, putxo, gp2pkh(grp1, u1.addr, 100000), 1);
             bool ok = CheckTokenGroups(t, state, coins);
-            BOOST_CHECK(ok);
-            t = tx1x2(putxo, gp2pkh(otg, u1.addr, 100000), 1, gp2pkh(otg, u2.addr, 10000), 1);
-            ok = CheckTokenGroups(t, state, coins);
-            BOOST_CHECK(ok);
-
-            // try to mint again to single mint group
-            t = tx1x1(putxo2, gp2pkh(otg, u1.addr, 100000), 1);
-            ok = CheckTokenGroups(t, state, coins);
             BOOST_CHECK(!ok);
-            t = tx1x2(putxo2, gp2pkh(otg, u1.addr, 100000), 1, gp2pkh(otg, u2.addr, 10000), 1);
+
+            // with an authority that does not include minting
+            t = tx2x1(meltctrl1, putxo, gp2pkh(grp1, u1.addr, 100000), 1);
             ok = CheckTokenGroups(t, state, coins);
             BOOST_CHECK(!ok);
 
-            // single mint with multiple inputs
-            t = tx2x1(putxo, putxo2, gp2pkh(otg, u1.addr, 100000), 1);
-            ok = CheckTokenGroups(t, state, coins);
-            BOOST_CHECK(ok);
-            t = tx2x2(putxo, putxo2, gp2pkh(otg, u1.addr, 100000), 1, gp2pkh(otg, u2.addr, 10000), 1);
+            // with minting authority
+            t = tx2x1(mintctrl1, putxo, gp2pkh(grp1, u1.addr, 100000), 1);
             ok = CheckTokenGroups(t, state, coins);
             BOOST_CHECK(ok);
 
-            // invalid single mint with multiple inputs
-            t = tx2x1(putxo3, putxo2, gp2pkh(otg, u1.addr, 100000), 1);
-            ok = CheckTokenGroups(t, state, coins);
-            BOOST_CHECK(!ok);
-            t = tx2x2(putxo3, putxo2, gp2pkh(otg, u1.addr, 100000), 1, gp2pkh(otg, u2.addr, 10000), 1);
+            // with minting authority, wrong group
+            t = tx2x1(mintctrl1, putxo, gp2pkh(grp2, u1.addr, 100000), 1);
             ok = CheckTokenGroups(t, state, coins);
             BOOST_CHECK(!ok);
 
-            CHashWriter hasher2(SER_GETHASH, PROTOCOL_VERSION);
-            hasher2 << putxo2;
-            CTokenGroupID otg2(hasher2.GetHash());
 
-            // double single mint
-            t = tx2x2(putxo, putxo2, gp2pkh(otg2, u1.addr, 100000), 1, gp2pkh(otg, u2.addr, 10000), 1);
+// mint to 2 utxos, 1 is p2sh
+            t = tx1x2(mintctrl1, gp2pkh(grp1, u1.addr, 100000), 1, gp2sh(grp1, u1.addr, 100000), 1);
             ok = CheckTokenGroups(t, state, coins);
             BOOST_CHECK(ok);
 
-            // double single mint wrong group
-            CHashWriter hasher3(SER_GETHASH, PROTOCOL_VERSION);
-            hasher3 << putxo3;
-            CTokenGroupID otg3(hasher3.GetHash());
+// mint to 1 utxos, 2 outputs
+            t = tx1x2(mintctrl1, p2pkh(u1.addr), 1, gp2sh(grp1, u1.addr, 100000), 1);
+            ok = CheckTokenGroups(t, state, coins);
+            BOOST_CHECK(ok);
+// mint to 1 utxos, 2 outputs
+            t = tx1x2(mintctrl1, gp2sh(grp1, u1.addr, 100000), 1, p2pkh(u1.addr), 1);
+            ok = CheckTokenGroups(t, state, coins);
+            BOOST_CHECK(ok);
 
-            t = tx2x2(putxo, putxo2, gp2pkh(otg3, u1.addr, 100000), 1, gp2pkh(otg, u2.addr, 10000), 1);
+// mint to 2 utxos, 1 group is wrong
+            t = tx1x2(mintctrl1, gp2pkh(grp1, u1.addr, 100000), 1, gp2pkh(grp2, u2.addr, 10000), 1);
             ok = CheckTokenGroups(t, state, coins);
             BOOST_CHECK(!ok);
 
-            // simultaneous single and normal mint
-            t = tx1x2(putxo, gp2pkh(otg, u1.addr, 1000), 1, gp2pkh(u1.addr, u2.addr, 10000), 1);
+// mint and create child, without auth
+            t = tx1x2(mintctrl1, gp2pkh(grp1, u1.addr, 100000), 1, gp2pkh(grp1, u1.addr, toAmount(GroupControllerFlags::CTRL | GroupControllerFlags::MINT)) , 1);
+            ok = CheckTokenGroups(t, state, coins);
+            BOOST_CHECK(!ok);
+
+// mint and create child, with auth
+            t = tx1x2(mintChildAuth1, gp2pkh(grp1, u1.addr, 100000), 1, gp2pkh(grp1, u1.addr, toAmount(GroupControllerFlags::CTRL | GroupControllerFlags::MINT)) , 1);
             ok = CheckTokenGroups(t, state, coins);
             BOOST_CHECK(ok);
+
+// mint and create child, with auth
+            t = tx1x2(mintChildAuth1, gp2pkh(grp1, u1.addr, 100000), 1, gp2pkh(grp1, u1.addr, toAmount(GroupControllerFlags::CTRL | GroupControllerFlags::MINT | GroupControllerFlags::CCHILD)) , 1);
+            ok = CheckTokenGroups(t, state, coins);
+            BOOST_CHECK(ok);
+
+            // double mint
+            t = tx2x2(mintctrl1, mintctrl2, gp2pkh(grp1, u1.addr, 100000), 1, gp2pkh(grp2, u2.addr, 10000), 1);
+            ok = CheckTokenGroups(t, state, coins);
+            BOOST_CHECK(ok);
+
+
+            // double mint 1 wrong group
+            t = tx2x2(mintctrl1, mintctrl2, gp2pkh(grp1, u1.addr, 100000), 1, gp2pkh(grp3, u2.addr, 10000), 1);
+            ok = CheckTokenGroups(t, state, coins);
+            BOOST_CHECK(!ok);
         }
 
         {
             // check p2sh melt
-            CTransaction t = tx1x1(gp2sh_meltable, p2pkh(u1.addr), 5);
+            CTransaction t = tx1x1(gp2sh1, p2pkh(u1.addr), 5);
             bool ok = CheckTokenGroups(t, state, coins);
-            BOOST_CHECK(ok);
+            BOOST_CHECK(!ok);
 
             // check p2sh move to another group (should fail)
-            t = tx1x1(gp2sh_meltable, gp2pkh(grp1.addr, u1.addr, 100), 5);
+            t = tx1x1(gp2sh1, gp2pkh(grp2, u1.addr, 100), 5);
             ok = CheckTokenGroups(t, state, coins);
             BOOST_CHECK(!ok);
 
             // check p2sh to p2pkh within group controlled by p2sh address
-            t = tx1x1(gp2sh_meltable, gp2pkh(sid, u1.addr, 100), 4);
+            t = tx1x1(gp2sh1, gp2pkh(grp1, u1.addr, 100), 4);
             ok = CheckTokenGroups(t, state, coins);
             BOOST_CHECK(ok);
 
             // check p2sh mint
-            t = tx1x1(p2sh_mintable, gp2sh(sid, u1.addr, 100000), 1);
+            t = tx1x1(p2sh1, gp2sh(sid, u1.addr, 100000), 1);
             ok = CheckTokenGroups(t, state, coins);
-            BOOST_CHECK(ok);
+            BOOST_CHECK(!ok);
+
+            /// TODO check p2sh mint working
         }
 
         // check same group 1 input 1 output
-        CTransaction t = tx1x1(gutxo, gp2pkh(grp1.addr, u1.addr, 100), 1);
+        CTransaction t = tx1x1(gutxo, gp2pkh(grp1, u1.addr, 100), 1);
         bool ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(ok);
 
         // check same group 1 input 1 output, wrong value
-        t = tx1x1(gutxo, gp2pkh(grp1.addr, u1.addr, 10), 1);
+        t = tx1x1(gutxo, gp2pkh(grp1, u1.addr, 10), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
-        t = tx1x1(gutxo, gp2pkh(grp1.addr, u1.addr, 1000), 1);
+        t = tx1x1(gutxo, gp2pkh(grp1, u1.addr, 1000), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
 
         // check different groups 1 input 1 output
-        t = tx1x1(gutxo, gp2pkh(grp2.addr, u1.addr, 100), 1);
+        t = tx1x1(gutxo, gp2pkh(grp2, u1.addr, 100), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
 
         // check mint, incorrect input group address
-        t = tx1x1(putxo, gp2pkh(grp2.addr, u1.addr, 100), 1);
+        t = tx1x1(putxo, gp2pkh(grp2, u1.addr, 100), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
-        t = tx1x1(putxo_mintable, gp2pkh(grp2.addr, u1.addr, 100), 1);
-        ok = CheckTokenGroups(t, state, coins);
-        BOOST_CHECK(!ok);
-        // check mint, correct input group address
-        t = tx1x1(putxo_mintable, gp2pkh(grp1.addr, u1.addr, 100), 1);
-        ok = CheckTokenGroups(t, state, coins);
-        BOOST_CHECK(ok);
 
-        // check burn but incorrect address
+//t = tx1x1(putxo_mintable, gp2pkh(grp2, u1.addr, 100), 1);
+//ok = CheckTokenGroups(t, state, coins);
+//BOOST_CHECK(!ok);
+        // check mint, correct input group address
+//        t = tx1x1(putxo_mintable, gp2pkh(grp1, u1.addr, 100), 1);
+//        ok = CheckTokenGroups(t, state, coins);
+//        BOOST_CHECK(ok);
+
+        // check melt but no authority
         t = tx1x1(gutxo, p2pkh(u2.addr), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
 
-        // check burn correct address
-        t = tx1x1(gutxo_burnable, p2pkh(u1.addr), 1);
+        // check melt with authority
+        t = tx2x1(gutxo, meltctrl1, p2pkh(u1.addr), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(ok);
 
+        // check melt with wrong authority
+        t = tx2x1(gutxo, mintctrl1, p2pkh(u1.addr), 1);
+        ok = CheckTokenGroups(t, state, coins);
+        BOOST_CHECK(!ok);
+
+        // check melt with wrong group authority
+        t = tx2x1(gutxo, meltctrl2, p2pkh(u1.addr), 1);
+        ok = CheckTokenGroups(t, state, coins);
+        BOOST_CHECK(!ok);
+
         // check burnable utxo but not burning
-        t = tx1x1(gutxo_burnable, gp2pkh(grp1.addr, u1.addr, 100), 1);
+        t = tx1x1(gutxo_burnable, gp2pkh(grp1, u1.addr, 100), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(ok);
 
         // check mintable utxo but not minting
-        t = tx1x1(putxo_mintable, p2pkh(u2.addr), 100);
-        ok = CheckTokenGroups(t, state, coins);
-        BOOST_CHECK(ok);
+//        t = tx1x1(putxo_mintable, p2pkh(u2.addr), 100);
+//        ok = CheckTokenGroups(t, state, coins);
+//        BOOST_CHECK(ok);
 
         // Test multiple input/output transactions
 
-        // send 1 coin and melt 100 tokens (with 2 satoshi) into output
-        t = tx2x1(putxo, gutxo_burnable, p2pkh(u2.addr), 3);
+        // send 1 coin and melt 100 tokens (with 1 satoshi) into output
+        t = tx3x1(putxo, gutxo, meltctrl1, p2pkh(u2.addr), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(ok);
 
         // this sends 2 satoshi into the fee so it works and melts tokens
-        t = tx2x1(putxo, gutxo_burnable, p2pkh(u2.addr), 1);
+        t = tx2x1(gutxo, meltctrl1, p2pkh(u2.addr), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(ok);
 
-        // send 100 coins and burn 100 coins into output, but incorrect amount
+        // send 1 coins and melt tokens, but incorrect BCH amount
         // this will work because CheckTokenGroups does not enforce bitcoin balances
-        t = tx2x1(putxo, gutxo_burnable, p2pkh(u2.addr), 300);
+        t = tx3x1(putxo, meltctrl1, gutxo, p2pkh(u2.addr), 300);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(ok);
 
         // partial melt
-        t = tx2x2(putxo, gutxo_burnable, p2pkh(u2.addr), 1, gp2pkh(grp1.addr, u1.addr, 50), 1);
+        t = tx2x2(gutxo, meltctrl1, gp2pkh(grp1, u1.addr, 10), 1, gp2pkh(grp1, u1.addr, 50), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(ok);
 
-        // atomic swap tokens
-        COutPoint gutxo2 = AddUtxo(gp2pkh(grp2.addr, u2.addr, 100), 1, coins);
+        // Exceed input without mint, but in separate outputs with melt authority so if outputs
+        // are not combined correctly it would work.
+        t = tx2x2(gutxo, meltctrl1, gp2pkh(grp1, u1.addr, 60), 1, gp2pkh(grp1, u1.addr, 50), 1);
+        ok = CheckTokenGroups(t, state, coins);
+        BOOST_CHECK(!ok);
 
-        t = tx2x2(gutxo, gutxo2, gp2pkh(grp1.addr, u2.addr, 100), 1, gp2pkh(grp2.addr, u1.addr, 100), 1);
+        // atomic swap tokens
+        COutPoint gutxo2 = AddUtxo(gp2pkh(grp2, u2.addr, 100), 1, coins);
+
+        t = tx2x2(gutxo, gutxo2, gp2pkh(grp1, u2.addr, 100), 1, gp2pkh(grp2, u1.addr, 100), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(ok);
 
         // wrong amounts
-        t = tx2x2(gutxo, gutxo2, gp2pkh(grp1.addr, u2.addr, 101), 1, gp2pkh(grp2.addr, u1.addr, 100), 1);
+        t = tx2x2(gutxo, gutxo2, gp2pkh(grp1, u2.addr, 101), 1, gp2pkh(grp2, u1.addr, 100), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
-        t = tx2x2(gutxo, gutxo2, gp2pkh(grp1.addr, u2.addr, 100), 1, gp2pkh(grp2.addr, u1.addr, 99), 1);
+        t = tx2x2(gutxo, gutxo2, gp2pkh(grp1, u2.addr, 100), 1, gp2pkh(grp2, u1.addr, 99), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
 
         // group transaction with 50 sat fee
         COutPoint p100utxo = AddUtxo(p2pkh(u1.addr), 100, coins);
 
-        t = tx2x2(p100utxo, gutxo, p2pkh(u1.addr), 50, gp2pkh(grp1.addr, u2.addr, 100), 1);
+        t = tx2x2(p100utxo, gutxo, p2pkh(u1.addr), 50, gp2pkh(grp1, u2.addr, 100), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(ok);
 
         // group transaction with group imbalance
-        t = tx2x2(p100utxo, gutxo, p2pkh(u1.addr), 50, gp2pkh(grp1.addr, u2.addr, 101), 1);
+        t = tx2x2(p100utxo, gutxo, p2pkh(u1.addr), 50, gp2pkh(grp1, u2.addr, 101), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
         // group transaction with group imbalance
-        t = tx2x2(p100utxo, gutxo, p2pkh(u1.addr), 50, gp2pkh(grp1.addr, u2.addr, 99), 1);
+        t = tx2x2(p100utxo, gutxo, p2pkh(u1.addr), 50, gp2pkh(grp1, u2.addr, 99), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
 
         // Check overflow/underflow errors
 
-        // Check overflow into negative number
-        COutPoint gutxo3 = AddUtxo(gp2pkh(grp1.addr, u1.addr, std::numeric_limits<CAmount>::max() - 50), 1, coins);
+        // Check overflow into negative number (2 inputs would sum to a negative)
+        COutPoint gutxo3 = AddUtxo(gp2pkh(grp1, u1.addr, std::numeric_limits<CAmount>::max() - 50), 1, coins);
         CAmount amt = std::numeric_limits<CAmount>::max();
         amt += 50;
-        t = tx2x1(gutxo3, gutxo, breakable_gp2pkh(grp1.addr, u1.addr, amt), 1);
+        t = tx2x1(gutxo3, gutxo, breakable_gp2pkh(grp1, u1.addr, amt), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
         // Check direct negative number in utxo
-        t = tx2x1(gutxo3, gutxo, breakable_gp2pkh(grp1.addr, u1.addr, -300), 1);
+        t = tx2x1(gutxo3, gutxo, breakable_gp2pkh(grp1, u1.addr, -300), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
 
         // include enough valid utxos to overflow into a valid summed output that equals the input
-        t = tx1x3(gutxo, gp2pkh(grp1.addr, u1.addr, std::numeric_limits<CAmount>::max()), 1,
-            gp2pkh(grp1.addr, u1.addr, std::numeric_limits<CAmount>::max()), 1, gp2pkh(grp1.addr, u1.addr, 102), 1);
+        t = tx1x3(gutxo, gp2pkh(grp1, u1.addr, std::numeric_limits<CAmount>::max()), 1,
+            gp2pkh(grp1, u1.addr, std::numeric_limits<CAmount>::max()), 1, gp2pkh(grp1, u1.addr, 102), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
 
         // Add enough positive inputs to overflow into a valid positive number
-        COutPoint gutxo4 = AddUtxo(gp2pkh(grp1.addr, u1.addr, std::numeric_limits<CAmount>::max()), 1, coins);
-        COutPoint gutxo5 = AddUtxo(gp2pkh(grp1.addr, u1.addr, std::numeric_limits<CAmount>::max()), 1, coins);
-        COutPoint gutxo6 = AddUtxo(gp2pkh(grp1.addr, u1.addr, 3), 1, coins);
+        COutPoint gutxo4 = AddUtxo(gp2pkh(grp1, u1.addr, std::numeric_limits<CAmount>::max()), 1, coins);
+        COutPoint gutxo5 = AddUtxo(gp2pkh(grp1, u1.addr, std::numeric_limits<CAmount>::max()), 1, coins);
+        COutPoint gutxo6 = AddUtxo(gp2pkh(grp1, u1.addr, 3), 1, coins);
         // max*2 overflows into negative number + 3 -> 1
-        t = tx3x1(gutxo4, gutxo5, gutxo6, gp2pkh(grp1.addr, u1.addr, 1), 1);
+        t = tx3x1(gutxo4, gutxo5, gutxo6, gp2pkh(grp1, u1.addr, 1), 1);
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
     }
-
     miningEnforceOpGroup.value = opgEnforcing;
 }
 
@@ -787,6 +961,24 @@ static bool tryMempool(const CTransaction &tx, CValidationState &state)
 }
 
 
+CTokenGroupID findGroupId(const COutPoint& input, TokenGroupIdFlags flags, uint64_t& nonce)
+{
+
+    CTokenGroupID ret;
+    do
+    {
+        nonce += 1;
+        CHashWriter hasher(SER_GETHASH, PROTOCOL_VERSION);
+        // mask off any flags in the nonce
+        nonce &= ~((uint64_t) GroupControllerFlags::ALL_BITS);
+        hasher << input << nonce;
+        ret = hasher.GetHash();
+    } while (ret.bytes()[31] != (uint8_t) flags);
+    return ret;
+}
+
+
+
 BOOST_FIXTURE_TEST_CASE(tokengroup_blockchain, TestChain100Setup)
 {
     // Have to enable the function to test it.
@@ -794,13 +986,15 @@ BOOST_FIXTURE_TEST_CASE(tokengroup_blockchain, TestChain100Setup)
     miningEnforceOpGroup.value = true;
 
     // fPrintToConsole = true;
-    // LogToggleCategory(Logging::TOKGRP, true);
+    // LogToggleCategory(Logging::ALL, true);
     CScript scriptPubKey = CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
 
     std::vector<CMutableTransaction> txns;
 
     QuickAddress p2pkGrp(coinbaseKey);
     QuickAddress grp0(4);
+    QuickAddress grp0AllAuth(5);
+    QuickAddress grp1AllAuth(6);
     QuickAddress grp1(1);
     QuickAddress a1(2);
     QuickAddress a2(3);
@@ -830,29 +1024,33 @@ BOOST_FIXTURE_TEST_CASE(tokengroup_blockchain, TestChain100Setup)
         BOOST_CHECK(!ret);
     }
 
-    // Should fail: premature coinbase spend into a group mint
-    uint256 hash = blk1.vtx[0].GetHash();
-    txns[0] = tx1x1(COutPoint(hash, 0), gp2pkh(grp1.grp, a1.addr, 10000), blk1.vtx[0].vout[0].nValue);
-    ret = tryBlock(txns, p2pkh(a2.addr), badblk, state);
-    BOOST_CHECK(!ret);
-
-    // Since the TestChain100Setup creates p2pk outputs this won't work
-    txns[0] = tx1x1(COutPoint(coinbaseTxns[0].GetHash(), 0), gp2pkh(p2pkGrp.grp, a1.addr, 100),
+    // Create group
+    uint64_t nonce;
+    CTokenGroupID gid = findGroupId(COutPoint(coinbaseTxns[0].GetHash(), 0), TokenGroupIdFlags::NONE, nonce);
+    txns[0] = tx1x1(COutPoint(coinbaseTxns[0].GetHash(), 0), gp2pkh(gid, grp0AllAuth.addr, authorityFlags(GroupControllerFlags::ALL, nonce)),
         coinbaseTxns[0].vout[0].nValue, coinbaseKey, coinbaseTxns[0].vout[0].scriptPubKey, false);
+    ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
+    BOOST_CHECK(ret);
+
+
+    // Mint tokens
+    txns[0] = tx({InputData(coinbaseTxns[1], 0, coinbaseKey, false), InputData(tipblk.vtx[1], 0, grp0AllAuth.secret)},
+        {OutputData(gp2pkh(gid, grp0AllAuth.addr, authorityFlags(GroupControllerFlags::ALL, nonce)), 10000),
+            OutputData(gp2pkh(gid, a1.addr, 1000), coinbaseTxns[1].vout[0].nValue - 10000)});
+    ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
+    CAmount grpInpAmt = coinbaseTxns[1].vout[0].nValue - 10000;
+    CAmount grpInpTokAmt = 1000;
+    CTransaction grpTx = txns[0];
+    InputData grpInp(grpTx, 1, a1.secret);
+    InputData grpAuth(grpTx, 0, grp0AllAuth.secret);
+    BOOST_CHECK(ret);
+
+
+    // Mint tokens without auth
+    txns[0] = tx({InputData(coinbaseTxns[2], 0, coinbaseKey, false) }, 
+                 {OutputData(gp2pkh(gid, a1.addr, 1000), coinbaseTxns[2].vout[0].nValue-10000)});
     ret = tryBlock(txns, p2pkh(a2.addr), badblk, state);
     BOOST_CHECK(!ret);
-
-    // so spend to a p2pkh address so we can tokenify it
-    txns[0] = tx1x1(COutPoint(coinbaseTxns[0].GetHash(), 0), p2pkh(grp0.addr), coinbaseTxns[0].vout[0].nValue,
-        coinbaseKey, coinbaseTxns[0].vout[0].scriptPubKey, false);
-    ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
-    BOOST_CHECK(ret);
-
-    // coinbase output in the first block as our group so minting should work
-    txns[0] = tx1x1(COutPoint(tipblk.vtx[1].GetHash(), 0), gp2pkh(grp0.grp, a1.addr, 1234567),
-        tipblk.vtx[1].vout[0].nValue, grp0.secret, tipblk.vtx[1].vout[0].scriptPubKey, true);
-    ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
-    BOOST_CHECK(ret);
 
     // Useful printouts:
     // Note state response is broken due to state = CValidationState(); in main.cpp:ActivateBestChainStep
@@ -863,86 +1061,77 @@ BOOST_FIXTURE_TEST_CASE(tokengroup_blockchain, TestChain100Setup)
     // printf("state: %d:%s, %s\n", state.GetRejectCode(), state.GetRejectReason().c_str(),
     // state.GetDebugMessage().c_str());
 
+    // Create another group, use different grp as 0 input tx (shouldn't matter)
+    nonce = 0xfffffffffff00000ULL;  // start anywhere
+    CTokenGroupID gid1 = findGroupId(COutPoint(coinbaseTxns[3].GetHash(), 0), TokenGroupIdFlags::NONE, nonce);
+    txns[0] = tx({InputData(coinbaseTxns[3], 0, coinbaseKey, false)},
+            {OutputData(gp2pkh(gid1, grp1AllAuth.addr, authorityFlags(GroupControllerFlags::ALL, nonce)), 1),
+             OutputData(p2pkh(a2.addr), coinbaseTxns[3].vout[0].nValue-1)});
+    ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
+    BOOST_CHECK(ret);
+
     // Should fail: pay from group to non-groups
-    txns[0] = tx1x1(COutPoint(tipblk.vtx[1].GetHash(), 0), p2pkh(a2.addr), tipblk.vtx[1].vout[0].nValue, a1.secret,
-        tipblk.vtx[1].vout[0].scriptPubKey);
+    txns[0] = tx({grpInp}, {OutputData(p2pkh(a2.addr), grpInpAmt-10000)});
     ret = tryMempool(txns[0], state);
     BOOST_CHECK(!ret);
     ret = tryBlock(txns, p2pkh(a2.addr), badblk, state);
     BOOST_CHECK(!ret);
 
     // now try the same but to the correct group, wrong group qty
-    txns[0] = tx1x1(COutPoint(tipblk.vtx[1].GetHash(), 0), gp2pkh(grp0.grp, a2.addr, 123456),
-        tipblk.vtx[1].vout[0].nValue, a1.secret, tipblk.vtx[1].vout[0].scriptPubKey);
+    txns[0] = tx({grpInp}, {OutputData(gp2pkh(gid, a2.addr, grpInpTokAmt-1), grpInpAmt-10000)});
     ret = tryMempool(txns[0], state);
     BOOST_CHECK(!ret);
     ret = tryBlock(txns, p2pkh(a2.addr), badblk, state);
     BOOST_CHECK(!ret);
 
-    // now try the same but to the correct group
-    txns[0] = tx1x1(COutPoint(tipblk.vtx[1].GetHash(), 0), gp2pkh(grp0.grp, a2.addr, 1234567),
-        tipblk.vtx[1].vout[0].nValue, a1.secret, tipblk.vtx[1].vout[0].scriptPubKey);
+    // now try the same but to the correct group, wrong group qty
+    txns[0] = tx({grpInp}, {OutputData(gp2pkh(gid, a2.addr, grpInpTokAmt+1), grpInpAmt-10000)});
+    ret = tryMempool(txns[0], state);
+    BOOST_CHECK(!ret);
+    ret = tryBlock(txns, p2pkh(a2.addr), badblk, state);
+    BOOST_CHECK(!ret);
+
+    // now try the same but to the correct group, wrong group qty
+    txns[0] = tx({grpInp},
+                 {OutputData(gp2pkh(gid, a2.addr, grpInpTokAmt-1), grpInpAmt-100),
+                  OutputData(gp2pkh(gid, a1.addr, 2), 10),
+                });
+    ret = tryMempool(txns[0], state);
+    BOOST_CHECK(!ret);
+    ret = tryBlock(txns, p2pkh(a2.addr), badblk, state);
+    BOOST_CHECK(!ret);
+
+    // now try the same but to the wrong group, correct qty
+    txns[0] = tx({grpInp}, {OutputData(gp2pkh(gid1, a2.addr, grpInpTokAmt), grpInpAmt-10000)});
+    ret = tryMempool(txns[0], state);
+    BOOST_CHECK(!ret);
+    ret = tryBlock(txns, p2pkh(a2.addr), badblk, state);
+    BOOST_CHECK(!ret);
+    
+
+    // now correct group spend in various ways
+    txns[0] = tx({grpInp},
+                 {OutputData(gp2pkh(gid, a2.addr, grpInpTokAmt/2), grpInpAmt-100),
+                  OutputData(gp2pkh(gid, a1.addr, grpInpTokAmt/2), 10),
+                         });
     ret = tryMempool(txns[0], state);
     BOOST_CHECK(ret);
+
+    InputDataCopy toks(txns[0],0, a2.secret);
     ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
     BOOST_CHECK(ret);
 
+    
     // To make sure blocks get accepted or rejected without the block's tx in the mempool, I
     // won't use the mempool for the rest of this test.
 
-    // Should fail: see if an unbalanced group but balanced btc tx is accepted
-    txns[0] = tx1x2(tipblk.vtx[1], 0, gp2pkh(grp0.grp, a1.addr, 100), tipblk.vtx[1].vout[0].nValue - 100000,
-        p2pkh(a2.addr), 100000, a2.secret);
-    ret = tryBlock(txns, p2pkh(a2.addr), badblk, state);
-    BOOST_CHECK(!ret);
-
-    // same tx as above but spend both to the group output should work because balanced
-    txns[0] = tx1x2(tipblk.vtx[1], 0, gp2pkh(grp0.grp, grp0.addr, 1234567 - 1000), tipblk.vtx[1].vout[0].nValue - 1,
-        gp2pkh(grp0.grp, a2.addr, 1000), 1, a2.secret);
+    // Melt (and lose the authority)
+    txns[0] = tx({grpAuth, toks},
+                 {OutputData(gp2pkh(gid, a1.addr, 1), 2)});
     ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
     BOOST_CHECK(ret);
 
-    // Should fail: try to melt the 2nd output (should fail because not grp addr)
-    txns[0] = tx1x1(tipblk.vtx[1], 1, p2pkh(a1.addr), tipblk.vtx[1].vout[1].nValue, a2.secret);
-    ret = tryBlock(txns, p2pkh(a2.addr), badblk, state);
-    BOOST_CHECK(!ret);
-
-    // try to melt the 1st output (should succeed)
-    txns[0] = tx1x1(tipblk.vtx[1], 0, p2pkh(a1.addr), tipblk.vtx[1].vout[0].nValue, grp0.secret);
-    ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
-    BOOST_CHECK(ret);
-
-    // Limited quantity mint
-
-    // Pay coinbase to a normal tx to test more likely scenario
-    // Note that early coinbase tx were not necessarily unique so basing a limited supply group off of one is a
-    // bad idea.  But now the coinbase string contains the block height so is unique.
-    QuickAddress a3, a4;
-    txns[0] = tx1x2(coinbaseTxns[2], 0, p2pkh(a3.addr), coinbaseTxns[2].vout[0].nValue / 2, p2pkh(a4.addr),
-        coinbaseTxns[2].vout[0].nValue / 2, coinbaseKey, false);
-    ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
-    BOOST_CHECK(ret);
-    auto spendable = tipblk;
-
-    // Now create the single mint
-    CHashWriter hasher(SER_GETHASH, PROTOCOL_VERSION);
-    hasher << COutPoint(tipblk.vtx[1].GetHash(), 0);
-    CTokenGroupID otg(hasher.GetHash());
-    txns[0] = tx1x1(tipblk.vtx[1], 0, gp2pkh(otg, a1.addr, 10000UL), tipblk.vtx[1].vout[0].nValue, a3.secret);
-    ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
-    BOOST_CHECK(ret);
-
-    // Now mint to that group again (should fail)
-    txns[0] = tx1x1(spendable.vtx[1], 1, gp2pkh(otg, a1.addr, 10000UL), spendable.vtx[1].vout[1].nValue, a3.secret);
-    ret = tryBlock(txns, p2pkh(a2.addr), badblk, state);
-    BOOST_CHECK(!ret);
-
-    // Spend the single mint group
-    txns[0] = tx1x2(tipblk.vtx[1], 0, gp2pkh(otg, a3.addr, 5000UL), 1, gp2pkh(otg, a2.addr, 5000UL), 1, a1.secret);
-    ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
-    BOOST_CHECK(ret);
-
-
+#if 0    // TODO not converted
     // P2SH
     CScript p2shBaseScript1 = p2pkh(a1.addr);
     CScriptID sid1 = CScriptID(p2shBaseScript1);
@@ -1006,6 +1195,7 @@ BOOST_FIXTURE_TEST_CASE(tokengroup_blockchain, TestChain100Setup)
         tx1x1_p2sh_of_p2pkh(tipblk.vtx[1], 0, p2pkh(a2.addr), tipblk.vtx[1].vout[0].nValue, a1.secret, p2shBaseScript1);
     ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
     BOOST_CHECK(ret);
+#endif    
 
     miningEnforceOpGroup.value = opgEnforcing;
 }

@@ -152,6 +152,8 @@ enum
     ZMQ = 0x2000000,
     QT = 0x4000000,
     TOKEN = 0x8000000,
+
+    VALIDATION = 0x10000000,
 };
 
 // Add corresponding lower case string for the category:

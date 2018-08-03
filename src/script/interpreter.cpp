@@ -1347,7 +1347,8 @@ uint256 SignatureHashBitcoinCash(const CScript &scriptCode,
         // Sighash type
         ss << nHashType;
 
-        return ss.GetHash();
+        uint256 ret = ss.GetHash();
+        return ret;
     }
     return one;
 }
