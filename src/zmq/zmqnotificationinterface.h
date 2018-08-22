@@ -7,8 +7,8 @@
 #define BITCOIN_ZMQ_ZMQNOTIFICATIONINTERFACE_H
 
 #include "validationinterface.h"
-#include <string>
 #include <map>
+#include <string>
 
 class CBlockIndex;
 class CZMQAbstractNotifier;
@@ -18,7 +18,7 @@ class CZMQNotificationInterface : public CValidationInterface
 public:
     virtual ~CZMQNotificationInterface();
 
-    static CZMQNotificationInterface* CreateWithArguments(const std::map<std::string, std::string> &args);
+    static CZMQNotificationInterface *CreateWithArguments(const std::map<std::string, std::string> &args);
 
 protected:
     bool Initialize();
@@ -32,7 +32,7 @@ private:
     CZMQNotificationInterface();
 
     void *pcontext;
-    std::list<CZMQAbstractNotifier*> notifiers;
+    std::list<CZMQAbstractNotifier *> notifiers;
 };
 
 #endif // BITCOIN_ZMQ_ZMQNOTIFICATIONINTERFACE_H

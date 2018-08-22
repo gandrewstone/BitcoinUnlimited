@@ -6357,7 +6357,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         std::shared_ptr<CBlock> block(new CBlock);
         uint64_t nBlockSize = vRecv.size();
         vRecv >> *block;
-        //DbgAssert(nBlockSize == ::GetSerializeSize(*block, SER_NETWORK, PROTOCOL_VERSION), return true);
+        // DbgAssert(nBlockSize == ::GetSerializeSize(*block, SER_NETWORK, PROTOCOL_VERSION), return true);
 
         CInv inv(MSG_BLOCK, block->GetHash());
         LogPrint("blk", "received block %s peer=%d\n", inv.hash.ToString(), pfrom->id);
@@ -7170,8 +7170,8 @@ bool SendMessages(CNode *pto)
         std::vector<CInv> vInvWait;
         std::vector<CInv> vInvSend;
         {
-            //static arith_uint256 hashSalt;
-            //if (hashSalt == 0)
+            // static arith_uint256 hashSalt;
+            // if (hashSalt == 0)
             //    hashSalt = UintToArith256(GetRandHash());
 
             bool fSendTrickle = pto->fWhitelisted;

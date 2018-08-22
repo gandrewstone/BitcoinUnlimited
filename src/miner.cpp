@@ -241,8 +241,7 @@ CBlockTemplate *BlockAssembler::CreateNewBlock(const CScript &scriptPubKeyIn, bo
             else
             {
                 // WRT TxInputs: transactions would not ever enter the mempool if their inputs were invalid
-                if (!TestBlockValidity(
-                        state, chainparams, *pblock, pindexPrev, false, false, CheckTxInputsOption::NO))
+                if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false, CheckTxInputsOption::NO))
                 {
                     throw std::runtime_error(
                         strprintf("%s: TestBlockValidity failed: %s", __func__, FormatStateMessage(state)));
