@@ -179,6 +179,7 @@ bool CThinBlock::process(CNode *pfrom, int nSizeThinBlock)
             pfrom->thinBlock.GetHash().ToString(), pfrom->thinBlockWaitingForTxns, unnecessaryCount,
             pfrom->thinBlock.vtx.size(), pfrom->mapMissingTx.size(), pfrom->GetLogName());
     } // end lock cs_orphancache, mempool.cs, cs_xval
+
     LogPrint("thin", "Total in memory thinblockbytes size is %ld bytes\n", thindata.GetThinBlockBytes());
 
     // Clear out data we no longer need before processing block.
@@ -808,6 +809,7 @@ bool CXThinBlock::process(CNode *pfrom,
             }
         }
     } // End locking cs_orphancache, mempool.cs and cs_xval
+
     LogPrint("thin", "Total in memory thinblockbytes size is %ld bytes\n", thindata.GetThinBlockBytes());
 
     // These must be checked outside of the mempool.cs lock or deadlock may occur.
@@ -833,8 +835,8 @@ bool CXThinBlock::process(CNode *pfrom,
     }
 
     pfrom->thinBlockWaitingForTxns = setHashesToRequest.size();
-    ;
-    LogPrint("thin", "xthinblock waiting for: %d, unnecessary: %d, total txns: %d received txns: %d\n",
+
+    LogPrint("thin", "xthinblock waiting for: %d, unnecessary: %d, total txns: %d received txns: %d.\n",
         pfrom->thinBlockWaitingForTxns, unnecessaryCount, pfrom->thinBlock.vtx.size(), pfrom->mapMissingTx.size());
 
     // If there are any missing hashes or transactions then we request them here.
@@ -847,7 +849,7 @@ bool CXThinBlock::process(CNode *pfrom,
         // Update run-time statistics of thin block bandwidth savings
         thindata.UpdateInBoundReRequestedTx(pfrom->thinBlockWaitingForTxns);
 
-        LogPrint("thin", "Sending re-req for %d missing transaction(s), peer=%s", pfrom->thinBlockWaitingForTxns,
+        LogPrint("thin", "Sending re-req for %d missing transaction(s), peer=%s.\n", pfrom->thinBlockWaitingForTxns,
             pfrom->GetLogName());
         return true;
     }
