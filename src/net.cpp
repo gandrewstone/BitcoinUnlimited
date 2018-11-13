@@ -3011,13 +3011,16 @@ void CNode::EndMessage() UNLOCK_FUNCTION(cs_vSend)
     UpdateSendStats(this, currentCommand, nSize + CMessageHeader::HEADER_SIZE, GetTimeMicros());
 
     // Set the checksum
-    uint256 hash = Hash(ssSend.begin() + CMessageHeader::HEADER_SIZE, ssSend.end());
-    unsigned int nChecksum = 0;
-    memcpy(&nChecksum, &hash, sizeof(nChecksum));
+    uint32_t nChecksum = 0;
+    if (!skipChecksum)
+    {
+        uint256 hash = Hash(ssSend.begin() + CMessageHeader::HEADER_SIZE, ssSend.end());
+        memcpy(&nChecksum, &hash, sizeof(nChecksum));
+    }
     assert(ssSend.size() >= CMessageHeader::CHECKSUM_OFFSET + sizeof(nChecksum));
     memcpy((char *)&ssSend[CMessageHeader::CHECKSUM_OFFSET], &nChecksum, sizeof(nChecksum));
 
-    LOG(NET, "(%d bytes) peer=%d\n", nSize, id);
+    LOG(NET, "(%d bytes) peer=%s\n", nSize, GetLogName());
 
     // Connection slot attack mitigation.  We don't want to add useful bytes for outgoing INV, PING, ADDR,
     // VERSION or VERACK messages since attackers will often just connect and listen to INV messages.

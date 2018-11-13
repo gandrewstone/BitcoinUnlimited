@@ -2133,7 +2133,7 @@ extern std::map<std::pair<void *, void *>, LockStack> lockorders;
 extern std::vector<std::string> vUseDNSSeeds;
 extern std::list<CNode *> vNodesDisconnected;
 extern std::set<CNetAddr> setservAddNodeAddresses;
-extern std::map<uint256, CTxCommitData> txCommitQ;
+extern std::map<uint256, CTxCommitData> *txCommitQ;
 extern std::queue<CTxInputData> txDeferQ;
 extern std::queue<CTxInputData> txInQ;
 extern UniValue getstructuresizes(const UniValue &params, bool fHelp)
