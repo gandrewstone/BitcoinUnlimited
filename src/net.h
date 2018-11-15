@@ -95,8 +95,8 @@ static const bool DEFAULT_FORCEBITNODES = false;
 // BITCOINUNLIMITED END
 
 static const bool DEFAULT_FORCEDNSSEED = false;
-static const size_t DEFAULT_MAXRECEIVEBUFFER = 5 * 1000;
-static const size_t DEFAULT_MAXSENDBUFFER = 1 * 1000;
+static const size_t DEFAULT_MAXRECEIVEBUFFER = 10 * 1000;
+static const size_t DEFAULT_MAXSENDBUFFER = 10 * 1000;
 
 unsigned int ReceiveFloodSize();
 unsigned int SendBufferSize();
