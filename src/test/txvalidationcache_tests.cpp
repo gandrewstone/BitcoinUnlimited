@@ -69,7 +69,7 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend, TestChain100Setup)
 
     // put the transactions in LTOR ordering before creating and processing a block
     std::vector<CMutableTransaction> spends;
-    if(prespends[0].GetHash() > prespends[1].GetHash())
+    if (prespends[0].GetHash() > prespends[1].GetHash())
     {
         spends.push_back(prespends[1]);
         spends.push_back(prespends[0]);
