@@ -2653,6 +2653,7 @@ bool CWallet::CommitTransaction(CWalletTx &wtxNew, CReserveKey &reservekey)
     {
         LOCK2(cs_main, cs_wallet);
         LOGA("CommitTransaction:\n%s", wtxNew.ToString());
+        LOGA("CommitTransaction:\n%s\n", EncodeHexTx(static_cast<CTransaction>(wtxNew)));
 
 #if 1
         if (fBroadcastTransactions)

@@ -50,7 +50,8 @@ public:
         strRejectReason = strRejectReasonIn;
         corruptionPossible = corruptionIn;
         strDebugMessage = strDebugMessageIn;
-        LOG(VALIDATION, "Validation DoS level: %d, Code: %d, Reason: %s, Message: %s\n", level, chRejectCode, strRejectReason, strDebugMessage);
+        LOG(VALIDATION, "Validation DoS level: %d, Code: %d, Reason: %s, Message: %s\n", level, chRejectCode,
+            strRejectReason, strDebugMessage);
         if (mode == MODE_ERROR)
             return ret;
         nDoS += level;
