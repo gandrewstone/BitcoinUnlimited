@@ -143,8 +143,8 @@ CTokenGroupInfo::CTokenGroupInfo(const CScript &script)
     }
     else // If OP_GROUP is used, enforce rules on the other fields
     {
-        // group must be 32 bytes
-        if (opcodeGrp != 0x20)
+        // group must be 32 bytes or more
+        if (opcodeGrp < 0x20)
         {
             invalid = true;
             return;
@@ -179,12 +179,14 @@ class CBalance
 public:
     CBalance()
         : ctrlPerms(GroupAuthorityFlags::NONE), allowedCtrlOutputPerms(GroupAuthorityFlags::NONE),
-          ctrlOutputPerms(GroupAuthorityFlags::NONE), input(0), output(0), numOutputs(0)
+          allowedSubgroupCtrlOutputPerms(GroupAuthorityFlags::NONE), ctrlOutputPerms(GroupAuthorityFlags::NONE),
+          input(0), output(0), numOutputs(0)
     {
     }
-    CTokenGroupInfo groups; // possible groups
+    // CTokenGroupInfo groups; // possible groups
     GroupAuthorityFlags ctrlPerms; // what permissions are provided in inputs
     GroupAuthorityFlags allowedCtrlOutputPerms; // What permissions are provided in inputs with CHILD set
+    GroupAuthorityFlags allowedSubgroupCtrlOutputPerms; // What permissions are provided in inputs with CHILD set
     GroupAuthorityFlags ctrlOutputPerms; // What permissions are enabled in outputs
     CAmount input;
     CAmount output;
@@ -257,6 +259,8 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
             if (hasCapability(temp, GroupAuthorityFlags::CCHILD))
             {
                 gBalance[tokenGrp.associatedGroup].allowedCtrlOutputPerms |= temp;
+                if (hasCapability(temp, GroupAuthorityFlags::SUBGROUP))
+                    gBalance[tokenGrp.associatedGroup].allowedSubgroupCtrlOutputPerms |= temp;
             }
             // Track what permissions this transaction has
             gBalance[tokenGrp.associatedGroup].ctrlPerms |= temp;
@@ -276,6 +280,31 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
         }
     }
 
+    // Now pass thru the outputs applying parent group capabilities to any subgroups
+    for (auto &txo : gBalance)
+    {
+        CTokenGroupID group = txo.first;
+        CBalance &bal = txo.second;
+        if (group.isSubgroup())
+        {
+            CTokenGroupID parentgrp = group.parentGroup();
+            auto parentSearch = gBalance.find(parentgrp);
+            if (parentSearch != gBalance.end()) // The parent group is part of the inputs
+            {
+                CBalance &parentData = parentSearch->second;
+                if (hasCapability(parentData.ctrlPerms, GroupAuthorityFlags::SUBGROUP))
+                {
+                    // Give the subgroup has all the capabilities the parent group had,
+                    // except no recursive subgroups so remove the subgrp authority bit.
+                    bal.ctrlPerms |= parentData.ctrlPerms & ~(GroupAuthorityFlags::SUBGROUP);
+                }
+
+                // Give the subgroup authority printing permissions as specified by the parent group
+                bal.allowedCtrlOutputPerms |=
+                    parentData.allowedSubgroupCtrlOutputPerms & ~(GroupAuthorityFlags::SUBGROUP);
+            }
+        }
+    }
 
     // Now pass thru the outputs ensuring balance or mint/melt permission
     for (auto &txo : gBalance)
@@ -323,3 +352,10 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
 
 
 bool CTokenGroupID::isUserGroup(void) const { return (!data.empty()); }
+bool CTokenGroupID::isSubgroup(void) const { return (data.size() > PARENT_GROUP_ID_SIZE); }
+CTokenGroupID CTokenGroupID::parentGroup(void) const
+{
+    if (data.size() <= PARENT_GROUP_ID_SIZE)
+        return CTokenGroupID(data);
+    return CTokenGroupID(std::vector<unsigned char>(data.begin(), data.begin() + PARENT_GROUP_ID_SIZE));
+}
