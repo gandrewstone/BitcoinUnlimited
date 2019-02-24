@@ -100,6 +100,13 @@ public:
     //* Returns this groupID as a string in cashaddr format
     // std::string Encode(const CChainParams &params = Params()) const;
 
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+        READWRITE(data);
+    }
+
     bool hasFlag(TokenGroupIdFlags flag) const;
 };
 
@@ -195,6 +202,21 @@ public:
     GroupAuthorityFlags controllingGroupFlags; // if the utxo is a controller this is not NONE
     CAmount quantity; // The number of tokens specified in this script
     bool invalid;
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+        READWRITE(this->associatedGroup);
+        READWRITE(this->quantity);
+        READWRITE(this->invalid);
+    }
+
+    // if the utxo is a controller this is not NONE
+    GroupAuthorityFlags controllingGroupFlags() const {
+        if (quantity < 0) return (GroupAuthorityFlags)quantity;
+        return GroupAuthorityFlags::NONE;
+    }
 
     // return true if this object is a token authority.
     bool isAuthority() const
