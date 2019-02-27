@@ -18,7 +18,7 @@ if sys.version_info[0] < 3:
 logging.basicConfig(format='%(asctime)s.%(levelname)s: %(message)s', level=logging.INFO, stream=sys.stdout)
 
 
-class MyTest (BitcoinTestFramework):
+class GroupTokensTest (BitcoinTestFramework):
 
     def setup_chain(self, bitcoinConfDict=None, wallets=None):
         print("Initializing test directory "+self.options.tmpdir)
@@ -295,11 +295,11 @@ class MyTest (BitcoinTestFramework):
 
 
 if __name__ == '__main__':
-    MyTest().main()
+    GroupTokensTest().main()
 
 # Create a convenient function for an interactive python debugging session
 def Test():
-    t = MyTest()
+    t = GroupTokensTest()
     t.drop_to_pdb = True
     bitcoinConf = {
         # "debug": ["blk", "thin", "mempool", "bench", "evict"],
@@ -311,4 +311,4 @@ def Test():
     # you may want these additional flags:
     # "--srcdir=<out-of-source-build-dir>/debug/src"
     # "--tmpdir=/ramdisk/test"
-    t.main(["--nocleanup", "--noshutdown", "--tmpdir=/ramdisk/test"], bitcoinConf, None)
+    t.main(["--srcdir=/fast/bitcoin/op_group/debug/src", "--nocleanup", "--noshutdown", "--tmpdir=/ramdisk/test"], bitcoinConf, None)
