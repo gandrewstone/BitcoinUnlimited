@@ -190,7 +190,7 @@ if ENABLE_ZMQ:
 
 #Tests
 testScripts = [ RpcTest(t) for t in [
-    'tokens',
+    'grouptokens',
     'sigchecks_inputstandardness_activation',
     'block_sigchecks_activation',
     'txindex',
