@@ -964,6 +964,7 @@ extern UniValue token(const UniValue &params, bool fHelp)
         }
         else
         {
+            // 'token new' either accepts a valid output address or a token description
             authDest = DecodeDestination(params[curparam].get_str(), Params());
             if (authDest == CTxDestination(CNoDestination()))
             {
@@ -977,8 +978,8 @@ extern UniValue token(const UniValue &params, bool fHelp)
                 authKeyReservation.GetReservedKey(authKey);
                 authDest = authKey.GetID();
             }
-            curparam++;
         }
+        curparam++;
 
         CTokenGroupID grpID = findGroupId(coin.GetOutPoint(), opretScript, TokenGroupIdFlags::NONE, grpNonce);
 
