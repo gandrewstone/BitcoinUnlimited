@@ -212,12 +212,6 @@ public:
         READWRITE(this->invalid);
     }
 
-    // if the utxo is a controller this is not NONE
-    GroupAuthorityFlags controllingGroupFlags() const {
-        if (quantity < 0) return (GroupAuthorityFlags)quantity;
-        return GroupAuthorityFlags::NONE;
-    }
-
     // return true if this object is a token authority.
     bool isAuthority() const
     {

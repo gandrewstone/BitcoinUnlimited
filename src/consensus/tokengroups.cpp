@@ -36,6 +36,7 @@ bool IsAnyTxOutputGrouped(const CTransaction &tx)
     return false;
 }
 
+#if 0 // TBD
 bool IsAnyTxOutputGroupedCreation(const CTransaction &tx, const TokenGroupIdFlags tokenGroupIdFlags)
 {
     for (const CTxOut& txout : tx.vout) {
@@ -47,6 +48,7 @@ bool IsAnyTxOutputGroupedCreation(const CTransaction &tx, const TokenGroupIdFlag
     }
     return false;
 }
+#endif
 
 std::vector<unsigned char> SerializeAmount(CAmount num)
 {
@@ -342,6 +344,7 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
                         "Multiple grouped outputs created during group creation transaction");
                 bal.allowedCtrlOutputPerms = bal.ctrlPerms = GroupAuthorityFlags::ALL;
             }
+#if 0 // TBD            
             else
             {
                 if (((uint64_t)bal.ctrlOutputPerms & (uint64_t)~GroupAuthorityFlags::ALL_BITS) != 0)
@@ -350,6 +353,7 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
                          "Only mint transactions can have a nonce");
                 }
             }
+#endif            
         }
 
         if ((bal.input > bal.output) && !hasCapability(bal.ctrlPerms, GroupAuthorityFlags::MELT))

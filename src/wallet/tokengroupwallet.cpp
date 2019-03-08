@@ -977,8 +977,8 @@ extern UniValue token(const UniValue &params, bool fHelp)
                 authKeyReservation.GetReservedKey(authKey);
                 authDest = authKey.GetID();
             }
+            curparam++;
         }
-        curparam++;
 
         CTokenGroupID grpID = findGroupId(coin.GetOutPoint(), opretScript, TokenGroupIdFlags::NONE, grpNonce);
 
