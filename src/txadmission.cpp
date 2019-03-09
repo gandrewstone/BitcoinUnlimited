@@ -6,6 +6,7 @@
 #include "txadmission.h"
 #include "blockstorage/blockstorage.h"
 #include "connmgr.h"
+#include "consensus/tokengroups.h"
 #include "consensus/tx_verify.h"
 #include "dosman.h"
 #include "fastfilter.h"
@@ -615,6 +616,15 @@ bool ParallelAcceptToMemoryPool(Snapshot &ss,
     // Coinbase is only valid in a block, not as a loose transaction
     if (tx->IsCoinBase())
         return state.DoS(100, false, REJECT_INVALID, "coinbase");
+
+    // Disallow any OP_GROUP txs from entering the mempool until OP_GROUP is enabled.
+    // This ensures that someone won't create an invalid OP_GROUP tx that sits in the mempool until after activation,
+    // potentially causing this node to create a bad block.
+    if ((unsigned int)chainActive.Tip()->nHeight < enforceOpGroupStartHeight)
+    {
+        if (IsAnyTxOutputGrouped(*tx))
+            return state.DoS(0, false, REJECT_NONSTANDARD, "premature-op_group-tx");
+    }
 
     // Reject nonstandard transactions if so configured.
     // (-testnet/-regtest allow nonstandard, and explicit submission via RPC)

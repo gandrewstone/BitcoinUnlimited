@@ -180,6 +180,7 @@ if ENABLE_ZMQ:
 
 #Tests
 testScripts = [ RpcTest(t) for t in [
+    'tokengroups',
     'bip135basic',
     'ctor',
     'mining_ctor',

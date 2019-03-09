@@ -172,7 +172,10 @@ enum
     GRAPHENE = 0x10000000,
     RESPEND = 0x20000000,
     WB = 0x40000000, // weak blocks
-    CMPCT = 0x80000000 // compact blocks
+    CMPCT = 0x80000000, // compact blocks
+
+    TOKEN = 0x100000000,
+    VALIDATION = 0x200000000,
 };
 
 namespace Logging
@@ -187,18 +190,18 @@ To add a new log category:
 */
 
 // Add corresponding lower case string for the category:
-#define LOGLABELMAP                                                                                             \
-    {                                                                                                           \
-        {NONE, "none"}, {ALL, "all"}, {THIN, "thin"}, {MEMPOOL, "mempool"}, {COINDB, "coindb"}, {TOR, "tor"},   \
-            {NET, "net"}, {ADDRMAN, "addrman"}, {LIBEVENT, "libevent"}, {HTTP, "http"}, {RPC, "rpc"},           \
-            {PARTITIONCHECK, "partitioncheck"}, {BENCH, "bench"}, {PRUNE, "prune"}, {REINDEX, "reindex"},       \
-            {MEMPOOLREJ, "mempoolrej"}, {BLK, "blk"}, {EVICT, "evict"}, {PARALLEL, "parallel"}, {RAND, "rand"}, \
-            {REQ, "req"}, {BLOOM, "bloom"}, {LCK, "lck"}, {PROXY, "proxy"}, {DBASE, "dbase"},                   \
-            {SELECTCOINS, "selectcoins"}, {ESTIMATEFEE, "estimatefee"}, {QT, "qt"}, {IBD, "ibd"},               \
-            {GRAPHENE, "graphene"}, {RESPEND, "respend"}, {WB, "weakblocks"}, {CMPCT, "cmpctblock"},            \
-        {                                                                                                       \
-            ZMQ, "zmq"                                                                                          \
-        }                                                                                                       \
+#define LOGLABELMAP                                                                                                    \
+    {                                                                                                                  \
+        {NONE, "none"}, {ALL, "all"}, {THIN, "thin"}, {MEMPOOL, "mempool"}, {COINDB, "coindb"}, {TOR, "tor"},          \
+            {NET, "net"}, {ADDRMAN, "addrman"}, {LIBEVENT, "libevent"}, {HTTP, "http"}, {RPC, "rpc"},                  \
+            {PARTITIONCHECK, "partitioncheck"}, {BENCH, "bench"}, {PRUNE, "prune"}, {REINDEX, "reindex"},              \
+            {MEMPOOLREJ, "mempoolrej"}, {BLK, "blk"}, {EVICT, "evict"}, {PARALLEL, "parallel"}, {RAND, "rand"},        \
+            {REQ, "req"}, {BLOOM, "bloom"}, {LCK, "lck"}, {PROXY, "proxy"}, {DBASE, "dbase"},                          \
+            {SELECTCOINS, "selectcoins"}, {ZMQ, "zmq"}, {ESTIMATEFEE, "estimatefee"}, {QT, "qt"}, {IBD, "ibd"},        \
+            {GRAPHENE, "graphene"}, {RESPEND, "respend"}, {WB, "weakblocks"}, {CMPCT, "cmpctblock"}, {TOKEN, "token"}, \
+        {                                                                                                              \
+            VALIDATION, "validation"                                                                                   \
+        }                                                                                                              \
     }
 
 /**
@@ -478,6 +481,14 @@ void SetArg(const std::string &strArg, const std::string &strValue);
  * @return none
  */
 void SetBoolArg(const std::string &strArg, bool fValue);
+
+/**
+ * Convert string into true/false
+ *
+ * @param strValue String to parse as a boolean
+ * @return true or false
+ */
+bool InterpretBool(const std::string &strValue);
 
 /**
  * Set an argument if it doesn't already have a value

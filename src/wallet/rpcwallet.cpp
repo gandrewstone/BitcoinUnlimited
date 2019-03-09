@@ -14,6 +14,7 @@
 #include "rpc/server.h"
 #include "script/sign.h"
 #include "timedata.h"
+#include "tokengroupwallet.h"
 #include "txadmission.h"
 #include "util.h"
 #include "utilmoneystr.h"
@@ -1499,8 +1500,8 @@ void ListTransactions(const CWalletTx &wtx,
 {
     CAmount nFee;
     string strSentAccount;
-    list<COutputEntry> listReceived;
-    list<COutputEntry> listSent;
+    list<CGroupedOutputEntry> listReceived;
+    list<CGroupedOutputEntry> listSent;
 
     wtx.GetAmounts(listReceived, listSent, nFee, strSentAccount, filter);
 
@@ -1510,7 +1511,7 @@ void ListTransactions(const CWalletTx &wtx,
     // Sent
     if ((!listSent.empty() || nFee != 0) && (fAllAccounts || strAccount == strSentAccount))
     {
-        for (const COutputEntry &s : listSent)
+        for (const CGroupedOutputEntry &s : listSent)
         {
             UniValue entry(UniValue::VOBJ);
             if (involvesWatchonly || (::IsMine(*pwalletMain, s.destination, chainActive.Tip()) & ISMINE_WATCH_ONLY))
@@ -1520,6 +1521,11 @@ void ListTransactions(const CWalletTx &wtx,
             entry.pushKV("category", "send");
             entry.pushKV("satoshi", UniValue(-s.amount));
             entry.pushKV("amount", ValueFromAmount(-s.amount));
+            if (s.grp != NoGroup)
+            {
+                entry.pushKV("group", EncodeTokenGroup(s.grp));
+                entry.pushKV("groupAmount", -s.grpAmount);
+            }
             if (pwalletMain->mapAddressBook.count(s.destination))
                 entry.pushKV("label", pwalletMain->mapAddressBook[s.destination].name);
             entry.pushKV("vout", s.vout);
@@ -1534,7 +1540,7 @@ void ListTransactions(const CWalletTx &wtx,
     // Received
     if (listReceived.size() > 0 && wtx.GetDepthInMainChain() >= nMinDepth)
     {
-        for (const COutputEntry &r : listReceived)
+        for (const CGroupedOutputEntry &r : listReceived)
         {
             string account;
             if (pwalletMain->mapAddressBook.count(r.destination))
@@ -1561,6 +1567,11 @@ void ListTransactions(const CWalletTx &wtx,
                 }
                 entry.pushKV("satoshi", UniValue(r.amount));
                 entry.pushKV("amount", ValueFromAmount(r.amount));
+                if (r.grp != NoGroup)
+                {
+                    entry.pushKV("group", EncodeTokenGroup(r.grp));
+                    entry.pushKV("groupAmount", r.grpAmount);
+                }
                 if (pwalletMain->mapAddressBook.count(r.destination))
                     entry.pushKV("label", account);
                 entry.pushKV("vout", r.vout);
@@ -2090,11 +2101,13 @@ UniValue gettransaction(const UniValue &params, bool fHelp)
             "can be \"\" for the default account.\n"
             "      \"address\" : \"bitcoinaddress\",   (string) The bitcoin address involved in the transaction\n"
             "      \"category\" : \"send|receive\",    (string) The category, either 'send' or 'receive'\n"
-            "      \"amount\" : x.xxx,                 (numeric) The amount in " +
+            "      \"group\": \"groupidentifier\",     (string) The token identifier (appears only if applicable)\n"
+            "      \"groupAmount\": n,               (numeric) The token quantity (appears only if applicable)\n"
+            "      \"amount\" : x.xxx,               (numeric) The amount in " +
             CURRENCY_UNIT +
             "\n"
             "      \"label\" : \"label\",              (string) A comment for the address/transaction, if any\n"
-            "      \"vout\" : n,                       (numeric) the vout value\n"
+            "      \"vout\" : n,                     (numeric) the vout value\n"
             "    }\n"
             "    ,...\n"
             "  ],\n"
@@ -2884,6 +2897,7 @@ extern UniValue dumpwallet(const UniValue &params, bool fHelp);
 extern UniValue importwallet(const UniValue &params, bool fHelp);
 extern UniValue importprunedfunds(const UniValue &params, bool fHelp);
 extern UniValue removeprunedfunds(const UniValue &params, bool fHelp);
+extern UniValue token(const UniValue &params, bool fHelp);
 
 /* clang-format off */
 static const CRPCCommand commands[] = {
@@ -2938,6 +2952,7 @@ static const CRPCCommand commands[] = {
     {"wallet",                "walletpassphrasechange",   &walletpassphrasechange,   true},
     {"wallet",                "walletpassphrase",         &walletpassphrase,         true},
     {"wallet",                "removeprunedfunds",        &removeprunedfunds,        true},
+    {"wallet",                "token",                    &token,                    true}
 };
 /* clang-format on */
 

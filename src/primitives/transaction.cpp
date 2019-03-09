@@ -8,6 +8,7 @@
 
 #include "hash.h"
 #include "policy/policy.h"
+// TODO remove #include "streams.h"
 #include "tinyformat.h"
 #include "utilstrencodings.h"
 

@@ -296,7 +296,6 @@ CTweak<uint64_t> maxScriptOps("consensus.maxScriptOps",
     "Maximum number of script operations allowed.  Stack pushes are excepted.",
     MAX_OPS_PER_SCRIPT);
 
-
 CTweak<bool> unsafeGetBlockTemplate("mining.unsafeGetBlockTemplate",
     "Allow getblocktemplate to succeed even if the chain tip is old or this node is not connected to other nodes",
     false);
@@ -449,4 +448,12 @@ public:
 };
 
 static CPrintSomePointers unused;
+
+CTweakRef<uint32_t> miningEnforceOpGroup("mining.opgroup",
+    "Enable enforcement of the OP_GROUP opcode at this block height",
+    enforceOpGroupStartHeight);
+
+CTweakRef<bool> miningForkOpGroupTweak("mining.forkOpgroup",
+    "Enable enforcement of the OP_GROUP opcode at the fork point",
+    &miningForkOpGroup);
 #endif

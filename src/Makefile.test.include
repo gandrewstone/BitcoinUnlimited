@@ -50,6 +50,7 @@ BITCOIN_TEST_SUITE = \
 
 # test_bitcoin binary #
 BITCOIN_TESTS =\
+  test/tokengroup_tests.cpp \
   respend/test/respendrelayer_tests.cpp \
   respend/test/respenddetector_tests.cpp \
   test/uahf_test.cpp \

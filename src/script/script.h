@@ -180,7 +180,8 @@ enum opcodetype
     OP_NOP4 = 0xb3,
     OP_NOP5 = 0xb4,
     OP_NOP6 = 0xb5,
-    OP_NOP7 = 0xb6,
+    OP_GROUP = 0xb6,
+    OP_NOP7 = OP_GROUP,
     OP_NOP8 = 0xb7,
     OP_NOP9 = 0xb8,
     OP_NOP10 = 0xb9,
@@ -195,6 +196,7 @@ enum opcodetype
     // template matching params
     OP_BIGINTEGER = 0xf0,
     OP_DATA = 0xf1,
+    OP_GRP_DATA = 0xf9,
     OP_SMALLINTEGER = 0xfa,
     OP_PUBKEYS = 0xfb,
     OP_PUBKEYHASH = 0xfd,
@@ -614,7 +616,8 @@ public:
      */
     unsigned int GetSigOpCount(const uint32_t flags, const CScript &scriptSig) const;
 
-    bool IsPayToScriptHash() const;
+    // if this is a p2sh then the script hash is filled into the passed param if its not null
+    bool IsPayToScriptHash(std::vector<unsigned char> *hashBytes = nullptr) const;
 
     /** Called by IsStandardTx and P2SH/BIP62 VerifyScript (which makes it consensus-critical). */
     bool IsPushOnly(const_iterator pc) const;
@@ -626,6 +629,7 @@ public:
      * instantly when entering the UTXO set.
      */
     bool IsUnspendable() const { return (size() > 0 && *begin() == OP_RETURN) || (size() > MAX_SCRIPT_SIZE); }
+    /** Remove all instructions in this script. */
     void clear()
     {
         // The default prevector::clear() does not release memory

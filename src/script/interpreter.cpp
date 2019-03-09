@@ -860,7 +860,6 @@ bool ScriptMachine::Step()
                 case OP_NOP4:
                 case OP_NOP5:
                 case OP_NOP6:
-                case OP_NOP7:
                 case OP_NOP8:
                 case OP_NOP9:
                 case OP_NOP10:
@@ -870,6 +869,8 @@ bool ScriptMachine::Step()
                 }
                 break;
 
+                case OP_GROUP: // OP_GROUP is a no-op during script evaluation
+                    break;
                 case OP_IF:
                 case OP_NOTIF:
                 {

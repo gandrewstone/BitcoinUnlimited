@@ -19,6 +19,7 @@
 #include "connmgr.h"
 #include "consensus/consensus.h"
 #include "consensus/merkle.h"
+#include "consensus/tokengroups.h"
 #include "consensus/tx_verify.h"
 #include "consensus/validation.h"
 #include "dosman.h"
