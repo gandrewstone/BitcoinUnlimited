@@ -11,7 +11,7 @@ cache:
 
 env:
   global:
-    - MAKEJOBS=-j2
+    - MAKEJOBS=-j2 V=1
     - RUN_TESTS=false
     - RUN_FORMATTING_CHECK=false
     - DOCKER_NAME_TAG=ubuntu:18.04
