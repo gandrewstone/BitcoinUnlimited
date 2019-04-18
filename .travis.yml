@@ -132,7 +132,7 @@ install:
 before_script:
     - set -o errexit; source .travis/before_script.sh
 script:
-    - echo -e "Elapsed Time in Seconds: $SECONDS"
+    # - echo -e "Elapsed Time in Seconds: $SECONDS"
     - if [ $SECONDS -gt 1980 ]; then set +o errexit; echo "Travis early exit to cache current state"; false; else set -o errexit; source .travis/script_a.sh; fi
     - if [ $SECONDS -gt 1980 ]; then set +o errexit; echo "Travis early exit to cache current state"; false; else set -o errexit; source .travis/script_b.sh; fi
 after_script:
