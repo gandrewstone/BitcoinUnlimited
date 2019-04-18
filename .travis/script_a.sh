@@ -32,6 +32,7 @@ echo "BITCOIN_CONFIG=$BITCOIN_CONFIG"
 echo "GOAL=$GOAL"
 
 BEGIN_FOLD configure
+echo ../configure --cache-file=config.cache $BITCOIN_CONFIG_ALL $BITCOIN_CONFIG
 DOCKER_EXEC ../configure --cache-file=config.cache $BITCOIN_CONFIG_ALL $BITCOIN_CONFIG || ( cat config.log && false)
 if [ "$HOST" = "x86_64-apple-darwin11" ]; then
   docker exec $DOCKER_ID bash -c "$TRAVIS_BUILD_DIR/contrib/devtools/xversionkeys.py > $TRAVIS_BUILD_DIR/src/xversionkeys.h < $TRAVIS_BUILD_DIR/src/xversionkeys.dat" ;
@@ -45,6 +46,7 @@ END_FOLD
 BEGIN_FOLD make
 DOCKER_EXEC make $MAKEJOBS $GOAL || ( echo "Build failure. Verbose build follows." && DOCKER_EXEC make $GOAL V=1 ; false ) ;
 if [ "$RUN_TESTS" = "true" ] && { [ "$HOST" = "i686-w64-mingw32" ] || [ "$HOST" = "x86_64-w64-mingw32" ]; }; then
+  echo LD_LIBRARY_PATH=$TRAVIS_BUILD_DIR/depends/$HOST/lib make $MAKEJOBS check VERBOSE=1
   travis_wait 50 DOCKER_EXEC LD_LIBRARY_PATH=$TRAVIS_BUILD_DIR/depends/$HOST/lib make $MAKEJOBS check VERBOSE=1;
 fi
 END_FOLD
