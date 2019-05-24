@@ -49,9 +49,6 @@ public:
         nFilterBytes = (uint32_t)(std::ceil(-1 / LN2SQUARED * nElements * log(nFPRate) / 8));
         nFilterItems = 8 * nFilterBytes;
 
-        if (nFilterBytes > std::numeric_limits<uint32_t>::max())
-            throw std::runtime_error("CVariableFastFilter can have size no greater maximum uint32_t.");
-
         vData.resize(nFilterBytes, 0);
 
         unsigned int optimalNHashFuncs =
