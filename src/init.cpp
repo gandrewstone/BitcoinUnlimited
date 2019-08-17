@@ -14,6 +14,7 @@
 #include "amount.h"
 #include "blockstorage/blockstorage.h"
 #include "blockstorage/sequential_files.h"
+#include "capd.h"
 #include "chain.h"
 #include "chainparams.h"
 #include "checkpoints.h"
@@ -213,6 +214,7 @@ void Shutdown()
     // Call every async stop function before flushing to disk
     StopHTTPRPC();
     StopREST();
+    StopCapd();
     StopRPC();
     StopHTTPServer();
     StopTxAdmission();
@@ -526,6 +528,8 @@ bool AppInitServers(thread_group &threadGroup, int rpcport, const std::string &n
     if (!StartHTTPRPC())
         return false;
     if (GetBoolArg("-rest", DEFAULT_REST_ENABLE) && !StartREST())
+        return false;
+    if (!StartCapd())
         return false;
     if (!StartHTTPServer())
         return false;

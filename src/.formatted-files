@@ -37,6 +37,8 @@ blockstorage/blockstorage.cpp
 blockstorage/blockstorage.h
 bloom.cpp
 bloom.h
+capd.cpp
+capd.h
 cashaddr.cpp
 cashaddr.h
 cashaddrenc.cpp
