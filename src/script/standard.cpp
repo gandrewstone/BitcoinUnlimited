@@ -99,16 +99,8 @@ static bool MatchLabelPublic(const CScript &script, std::vector<valtype> &dataCa
     // data deve contenere il OP_DATA
     if (script.size() < 1 || script[0] != OP_RETURN || !script.IsPushOnly(script.begin() + 1))
     {
-<<<<<<< HEAD
         return false;
     }
-=======
-        // GP2PKH (group pay to public key hash): Bitcoin address tx, sender provides hash of pubkey, receiver provides
-        // signature and pubkey
-        mTemplates.insert(make_pair(TX_GRP_PUBKEYHASH, CScript() << OP_GRP_DATA << OP_GRP_DATA << OP_GROUP << OP_DROP
-                                                                 << OP_DROP << OP_DUP << OP_HASH160 << OP_PUBKEYHASH
-                                                                 << OP_EQUALVERIFY << OP_CHECKSIG));
->>>>>>> ab6c01bef... add quantity to OP_GROUP, allow limited quantity tokens via a single mint operation, format c++ and python files as per our style and PEP8 recommendations
 
     valtype data;
     opcodetype opcode;
