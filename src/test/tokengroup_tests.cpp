@@ -663,7 +663,7 @@ BOOST_AUTO_TEST_CASE(tokengroup_basicfunctions)
     // grpAddr = pubkey.GetID();
     // eGrpAddr = pubkey.GetHash();
 
-    for (CAmount qty = 1; qty < 257; qty += 1)
+    for (CAmount qty = 0; qty < 257; qty += 1)
     { // check GP2PKH
         CScript script = CScript() << ToByteVector(grpAddr);
         script << SerializeAmount(qty);
@@ -684,6 +684,19 @@ BOOST_AUTO_TEST_CASE(tokengroup_basicfunctions)
         // BOOST_CHECK(r);  r will be false because the signature check will fail.  What's important here is that
         // minimaldata passes
         BOOST_CHECK(err != SCRIPT_ERR_MINIMALDATA);
+    }
+
+    // check invalid 1 character amount
+    for (int i = 0; i < 256; i++)
+    {
+        std::vector<uint8_t> tmp(1);
+        tmp[0] = i;
+        CScript script = CScript() << ToByteVector(grpAddr);
+        script << tmp; // Serialize the amount by hand because these serialization methods are illegal
+        script << OP_GROUP << OP_DROP << OP_DROP << OP_DUP << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY
+               << OP_CHECKSIG;
+        CTokenGroupInfo ret(script);
+        BOOST_CHECK(ret.invalid == true);
     }
 
     { // check P2SH
