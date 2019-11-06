@@ -20,8 +20,17 @@
 
 #include <univalue.h>
 
+const CMsgRef nullmsgref = CMsgRef();
 
-uint256 CMsg::CalcHash()
+CMsgPool msgpool;
+
+uint64_t MSG_LIFETIME_SEC = 60*60*10;  // expected message lifetime in seconds
+
+// Local message difficulty must be less than forwarded message difficulty
+uint256 MIN_FORWARD_MSG_DIFFICULTY = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+uint256 MIN_LOCAL_MSG_DIFFICULTY = uint256S("0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
+uint256 CMsg::CalcHash() const
 {
     CDataStream serialized(SER_GETHASH, CLIENT_VERSION);
     serialized << *this;
@@ -53,9 +62,31 @@ uint256 CMsg::CalcHash()
     return hash;
 }
 
-bool CMsg::DoesPowMatchDifficulty()
+arith_uint256 MAX_UINT256 = ~arith_uint256();
+
+
+
+double CMsg::Priority() const
 {
-    // TODO
+    // hash must be less than this number, so smaller numbers are harder
+    arith_uint256 hashTarget = arith_uint256().SetCompact(difficultyBits);
+    // subtract from maxint to reverse the direction of priority -- now bigger numbers are harder
+    hashTarget = MAX_UINT256 - hashTarget;
+    double tgt = hashTarget.getdouble();
+
+    // Size based penalty
+    double ret = tgt - data.size();
+
+    // Time based penalty
+    double penaltyPerSec = tgt/MSG_LIFETIME_SEC;
+    ret -= (GetTime() - createTime)*penaltyPerSec;
+    return ret;
+}
+
+
+bool CMsg::DoesPowMatchDifficulty() const
+{
+    return GetDifficulty() > GetHash();
 }
 
 uint64_t CMsg::Mine()
@@ -86,6 +117,218 @@ uint64_t CMsg::Mine()
     } while (1);
 
     return nonce;
+}
+
+std::vector<CMsgLookup> CMsg::GetAccessPatterns()
+{
+    std::vector<CMsgLookup> ret(1);
+    ret[0] = CMsgLookup(data.begin(), data.end());
+    return ret;
+}
+
+
+
+void CMsgPool::add(const CMsgRef& msg)
+{
+    WRITELOCK(csMsgPool);
+
+    // TODO clean up a message if pool is filled
+
+    if (!msg->DoesPowMatchDifficulty())
+    {
+        throw CMsgPoolException("Message POW inconsistent");
+    }
+    if (msg->GetDifficulty() > _GetLocalDifficulty())
+    {
+        printf("msg: %s > local: %s\n", msg->GetDifficulty().GetHex().c_str(), _GetLocalDifficulty().GetHex().c_str());
+        throw CMsgPoolException("Message POW too low");
+    }
+
+    // Free up some room
+    _pare(msg->RamSize());
+
+    msgs.insert(msg);
+    size += msg->RamSize();
+}
+
+void CMsgPool::clear()
+{
+    WRITELOCK(csMsgPool);
+    /*
+    cam.clear();
+    while (!heap.empty())
+    {
+        heap.pop();
+    }
+    */
+    msgs.clear();
+    size = 0;
+}
+
+void CMsg::SetDifficultyHarderThan(uint256 target)
+{
+    // Subtract 1 from the difficulty as a compact number.  By doing it this way we are certain
+    // that the change isn't rounded away.
+    uint32_t cInt = UintToArith256(target).GetCompact();
+    uint32_t mantissa = (cInt & ((1<<23)-1));
+    uint32_t randomReduction = std::rand() % 0xff;
+
+    if (mantissa > randomReduction)  // subtract a bit from the mantissa if we won't underflow
+    {
+        cInt -= randomReduction;
+    }
+    else  // subtract one from the exponent and set the enough bits that its like 0x100 -> 0xff
+    {
+        cInt = (cInt-(1<<25)) | 0xff;
+    }
+
+    arith_uint256 num;
+    printf("harder than: %s -> 0x%x\n", target.GetHex().c_str(), cInt);
+    SetDifficulty(num.SetCompact(cInt));
+}
+uint256 CMsgPool::_GetAdmissionDifficulty()
+{
+    if (size < maxSize*8/10) return MIN_FORWARD_MSG_DIFFICULTY;
+
+    auto& priorityIndexer = msgs.get<MsgPriority>();
+
+    unsigned int half = priorityIndexer.size()/2;
+
+    MsgIterByPriority i = priorityIndexer.begin();
+    for (unsigned int j=0;j < half; j++, i++) {} // essentially i += half;
+
+    if (i==priorityIndexer.end()) return MIN_FORWARD_MSG_DIFFICULTY;
+
+    return (*i)->GetDifficulty();
+}
+
+uint256 CMsgPool::_GetLocalDifficulty()
+{
+    if (size < maxSize*8/10) return MIN_LOCAL_MSG_DIFFICULTY;
+
+    auto& priorityIndexer = msgs.get<MsgPriority>();
+
+    //MsgReverseIterByPriority i = priorityIndexer.rbegin();
+    //if (i==priorityIndexer.rend()) return  MIN_LOCAL_MSG_DIFFICULTY;
+
+    MsgIterByPriority i = priorityIndexer.begin();
+    if (i==priorityIndexer.end()) return  MIN_LOCAL_MSG_DIFFICULTY;
+
+    return (*i)->GetDifficulty();
+}
+
+void CMsgPool::_pare(int len)
+{
+    len -= maxSize - size;  // We already have this amount available
+    auto& priorityIndexer = msgs.get<MsgPriority>();
+    MsgIterByPriority i = priorityIndexer.begin();
+    auto end = priorityIndexer.end();
+
+    //MsgIterByPriority st = priorityIndexer.begin();
+    //if (st != priorityIndexer.end() && i != end)
+    //    printf("%x %x\n", (*st)->difficultyBits, (*i)->difficultyBits);
+
+    while ((len > 0) && (i != end))
+    {
+        auto txSize = (*i)->RamSize();
+        len -= txSize;
+        size -= txSize;
+
+        auto j = i;  // Advance before erase
+        i++;
+        priorityIndexer.erase(j);
+    }
+}
+
+
+CMsgRef CMsgPool::find(const uint256& hash) const
+{
+    MsgIter i = msgs.find(hash);
+    if (i == msgs.end()) return nullmsgref;
+    return *i;
+}
+
+std::vector<CMsgRef> CMsgPool::find(const std::vector<unsigned char> v) const
+{
+
+    READLOCK(csMsgPool);
+    if (v.size() == 2)
+    {
+    auto& indexer = msgs.get<MsgLookup2>();
+    std::array<unsigned char, 2> srch = { v[0], v[1] };
+    MessageContainer::index<MsgLookup2>::type::iterator it = indexer.find(srch);
+
+    std::vector<CMsgRef> ret;
+    for(;it != indexer.end();it++)
+    {
+        if (!(*it)->matches(srch)) break;
+        ret.push_back(*it);
+    }
+    return ret;
+    }
+
+    if (v.size() == 4)
+    {
+    auto& indexer = msgs.get<MsgLookup4>();
+    std::array<unsigned char, 4> srch = { v[0], v[1], v[2], v[3] };
+    MessageContainer::index<MsgLookup4>::type::iterator it = indexer.find(srch);
+
+    std::vector<CMsgRef> ret;
+    for(;it != indexer.end();it++)
+    {
+        if (!(*it)->matches(srch)) break;
+        ret.push_back(*it);
+    }
+    return ret;
+    }
+
+    if (v.size() == 8)
+    {
+    auto& indexer = msgs.get<MsgLookup8>();
+    std::array<unsigned char, 8> srch;
+    for (auto i=0;i<8;i++) srch[i] = v[i];
+    MessageContainer::index<MsgLookup8>::type::iterator it = indexer.find(srch);
+
+    std::vector<CMsgRef> ret;
+    for(;it != indexer.end();it++)
+    {
+        if (!(*it)->matches(srch)) break;
+        ret.push_back(*it);
+    }
+    return ret;
+    }
+    
+    if (v.size() == 16)
+    {
+    auto& indexer = msgs.get<MsgLookup16>();
+    std::array<unsigned char, 16> srch;
+    for (auto i=0;i<16;i++) srch[i] = v[i];
+    MessageContainer::index<MsgLookup16>::type::iterator it = indexer.find(srch);
+
+    std::vector<CMsgRef> ret;
+    for(;it != indexer.end();it++)
+    {
+        if (!(*it)->matches(srch)) break;
+        ret.push_back(*it);
+    }
+    return ret;
+    }
+    
+    return std::vector<CMsgRef>();
+}
+
+
+void CMsgPool::_DbgDump()
+{
+    auto& priorityIndexer = msgs.get<MsgPriority>();
+
+    MsgIterByPriority i = priorityIndexer.begin();
+    for (unsigned int j=0; i!=priorityIndexer.end(); j++, i++)
+    {
+        printf("%4d: %s: %s\n", j, (*i)->GetDifficulty().GetHex().c_str(), (*i)->GetHash().GetHex().c_str() );
+    }
+    
+    printf("relay: %s, local: %s\n", _GetAdmissionDifficulty().GetHex().c_str(), _GetLocalDifficulty().GetHex().c_str());
 }
 
 
@@ -160,6 +403,7 @@ static bool CheckWarmup(HTTPRequest *req)
     return true;
 }
 
+// http://192.168.1.155:20332/capd/get/<data>
 static bool capdHttpGet(HTTPRequest *req, const std::string &strURIPart)
 {
     if (!CheckWarmup(req))
@@ -222,7 +466,22 @@ static bool capdHttpSend(HTTPRequest *req, const std::string &strURIPart)
     if (!IsHex(strURIPart))
         return RETERR(req, HTTP_BAD_REQUEST, "Invalid hex string: " + strURIPart);
     std::vector<unsigned char> msgData = ParseHex(strURIPart);
-
+    CMsgRef msg = MakeMsgRef(CMsg(msgData));
+    if (!msg->DoesPowMatchDifficulty())
+    {
+        result = "inconsistent message, incorrect proof-of-work";
+    }
+    else
+    {
+        try
+        {
+            msgpool.add(msg);
+        }
+        catch(CMsgPoolException& e)
+        {
+            result = e.what();
+        }
+    }
 
     req->WriteHeader("Content-Type", "text/plain");
     req->WriteReply(HTTP_OK, result);
