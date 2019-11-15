@@ -1478,7 +1478,8 @@ bool CheckSequenceLocks(const CTransactionRef &tx,
     return EvaluateSequenceLocks(index, lockPair);
 }
 
-bool CheckFinalTx(const CTransactionRef &tx, int flags, const Snapshot *ss)
+bool CheckFinalTx(const CTransactionRef &tx, int flags, const Snapshot *ss) { return CheckFinalTx(*tx, flags, ss); }
+bool CheckFinalTx(const CTransaction &tx, int flags, const Snapshot *ss)
 {
     // By convention a negative value for flags indicates that the
     // current network-enforced consensus rules should be used. In

@@ -53,6 +53,7 @@ unsigned int GetP2SHSigOpCount(const CTransactionRef &tx, const CCoinsViewCache 
  * specified height and time. Consensus critical.
  */
 bool IsFinalTx(const CTransactionRef &tx, int nBlockHeight, int64_t nBlockTime);
+bool IsFinalTx(const CTransaction &tx, int nBlockHeight, int64_t nBlockTime);
 
 /**
  * Calculates the block height and previous block's median time past at

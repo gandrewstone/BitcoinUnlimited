@@ -457,12 +457,13 @@ class WalletTest (BitcoinTestFramework):
 
 
 if __name__ == '__main__':
-    WalletTest ().main ()
+    WalletTest ().main (None, {"wallet.maxTxFeePercent":-1})
 
 def Test():
     t = WalletTest()
     bitcoinConf = {
-        "debug": ["rpc","net", "blk", "thin", "mempool", "req", "bench", "evict"],
+        "debug": ["selectcoins", "rpc","net", "blk", "thin", "mempool", "req", "bench", "evict"],
+        "wallet.maxTxFeePercent":-1
     }
 
     flags = standardFlags()

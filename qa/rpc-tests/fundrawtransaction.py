@@ -339,6 +339,7 @@ class RawTransactionsTest(BitcoinTestFramework):
 
         try:
             rawtxfund = self.nodes[2].fundrawtransaction(rawtx)
+            logging.info("Unspent: " + str(len(listunspent)) + "\n" + str(listunspent))  # if we spend more let's see what's unspent
             raise AssertionError("Spent more than available")
         except JSONRPCException as e:
             assert("Insufficient" in e.error['message'])
@@ -670,13 +671,16 @@ class RawTransactionsTest(BitcoinTestFramework):
         assert(changeaddress != nextaddr)
 
 if __name__ == '__main__':
-    RawTransactionsTest().main(None,{"keypool":1})
+    # this test sends a 0 value transaction so we need to turn off the fee percent check
+    RawTransactionsTest().main(None,{"keypool":1, "wallet.maxTxFeePercent":-1 })
 
 def Test():
     t = RawTransactionsTest()
+    t.drop_to_pdb = True
     bitcoinConf = {
-        "debug": ["rpc","net", "blk", "thin", "mempool", "req", "bench", "evict"],
-        "keypool":1
+        "debug": ["all"], # ["rpc","net", "blk", "thin", "mempool", "req", "bench", "evict"],
+        "keypool":1,
+        "wallet.maxTxFeePercent":-1
     }
 
     flags = standardFlags()

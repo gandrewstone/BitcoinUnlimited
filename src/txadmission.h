@@ -212,6 +212,7 @@ void CommitTxToMempool();
  * See consensus/consensus.h for flag definitions.
  */
 bool CheckFinalTx(const CTransactionRef &tx, int flags = -1, const Snapshot *ss = nullptr);
+bool CheckFinalTx(const CTransaction &tx, int flags = -1, const Snapshot *ss = nullptr);
 
 /*
  * Check if transaction will be BIP 68 final in the next block to be created.

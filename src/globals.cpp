@@ -63,6 +63,8 @@ using namespace std;
 LockData lockdata;
 #endif
 
+//! Maximum fee as a percentage of the value input into the transaction
+extern int MAX_FEE_PERCENT_OF_VALUE;
 
 // this flag is set to true when a wallet rescan has been invoked.
 std::atomic<bool> fRescan{false};
@@ -363,6 +365,11 @@ CTweak<CAmount> maxTxFee("wallet.maxTxFee",
     "transactions.",
     DEFAULT_TRANSACTION_MAXFEE);
 
+CTweakRef<int> maxTxFeePercent("wallet.maxTxFeePercent",
+    "Maximum total fees to use in a single wallet transaction or raw transaction as a percent of the total value"
+    "(sent and change) of the transaction.  Set to a negative number to turn off",
+    &MAX_FEE_PERCENT_OF_VALUE);
+
 /** Number of blocks that can be requested at any given time from a single peer. */
 CTweak<unsigned int> maxBlocksInTransitPerPeer("net.maxBlocksInTransitPerPeer",
     "Number of blocks that can be requested at any given time from a single peer. 0 means use algorithm.",
@@ -374,6 +381,33 @@ CTweak<unsigned int> maxBlocksInTransitPerPeer("net.maxBlocksInTransitPerPeer",
 CTweak<unsigned int> blockDownloadWindow("net.blockDownloadWindow",
     "How far ahead of our current height do we fetch? 0 means use algorithm.",
     0);
+
+/** If transactions overpay by less than this amount in Satoshis, the extra will be put in the fee rather than a
+    change address.  Zero means calculate this dynamically as a fraction of the current transaction fee
+    (recommended). */
+CTweak<unsigned int> txDust("wallet.txFeeOverpay",
+    "If transactions overpay by less than this amount in Satoshis, the extra will be put in the fee rather than a "
+    "change address.  Zero means calculate this dynamically as a fraction of the current transaction fee "
+    "(recommended).",
+    0);
+
+/** When sending, how long should this wallet search for a more efficient or no-change payment solution in
+    milliseconds.  A no-change solution reduces transaction fees, but is extremely unlikely unless your wallet
+    is very large and well distributed because transaction fees add a small quantity of dust to the normal round
+    numbers that humans use.
+*/
+CTweak<unsigned int> maxCoinSelSearchTime("wallet.coinSelSearchTime",
+    "When sending, how long should this wallet search for a no-change payment solution in milliseconds.  A no-change "
+    "solution reduces transaction fees.",
+    25);
+
+/** How many UTXOs should be maintained in this wallet (on average).  If the number of UTXOs exceeds this value,
+    transactions will be found that tend to have more inputs.  This will consolidate UTXOs.
+ */
+CTweak<unsigned int> preferredNumUTXO("wallet.preferredNumUTXO",
+    "How many UTXOs should be maintained in this wallet (on average).  If the number of UTXOs exceeds this value, "
+    "transactions will be found that tend to have more inputs.  This will consolidate UTXOs.",
+    5000);
 
 /** This setting specifies the minimum supported Graphene version (inclusive).
  *  The actual version used will be negotiated between sender and receiver.
