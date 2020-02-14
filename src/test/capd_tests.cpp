@@ -2,16 +2,91 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <tgmath.h>
+
 #include "capd.h"
 #include "test/test_bitcoin.h"
+#include "test/test_random.h"
 
 #include <boost/test/unit_test.hpp>
 
 BOOST_FIXTURE_TEST_SUITE(capd_tests, BasicTestingSetup)
 BOOST_AUTO_TEST_CASE(capd_msg_test_vectors)
 {
-    BOOST_CHECK(1 == 1);
+    {
+    arith_uint256 tmp;
+    double val = 1;
+    for (int i = 1; i < 10; i++)
+    {
+        val *= insecure_rand()&0xffff;
 
+        printf("val = %f\n", val);
+        tmp.setdouble(val);
+        printf("int256 = %s  double = %f\n", tmp.GetHex().c_str(), tmp.getdouble());
+        // precision BOOST_CHECK(val == tmp.getdouble());
+    }
+    }
+    
+    arith_uint256 CONVERSION_ERROR_MASK = ~arith_uint256((1024*PRIORITY_CONVERSION_FRAC)-1);
+
+    // check that Priority() and PriorityToDifficulty() are inverse
+    {
+        {
+        arith_uint256 tmp("0123456fffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        PriorityType p = Priority(tmp, NOMINAL_MSG_SIZE, 0);
+        arith_uint256 tmp1 = aPriorityToDifficultyTarget(p, NOMINAL_MSG_SIZE, 0);
+        //printf("%s\n", tmp.GetHex().c_str());
+        //printf("%s\n", tmp1.GetHex().c_str());
+        BOOST_CHECK((tmp&CONVERSION_ERROR_MASK) == (tmp1&CONVERSION_ERROR_MASK));
+        }
+
+        // check that Priority() increases as difficulty target gets smaller
+        {
+        arith_uint256 tmp1("0123456fffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        PriorityType p1 = Priority(tmp1, NOMINAL_MSG_SIZE, 0);
+        arith_uint256 tmp2("0023456fffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        PriorityType p2 = Priority(tmp2, NOMINAL_MSG_SIZE, 0);
+
+        BOOST_CHECK(p1 < p2);
+
+        // check that the priority of a bigger message is smaller
+        PriorityType p3 = Priority(tmp2, 2*NOMINAL_MSG_SIZE, 0);
+        BOOST_CHECK(p3 < p2);
+
+        // check that the priority of an older message is smaller
+        PriorityType p4 = Priority(tmp2, NOMINAL_MSG_SIZE, 20);
+        BOOST_CHECK(p4 < p2);
+        
+        }
+        
+        
+        uint256 tmp;
+        for (unsigned int i=0;i<100;i++)
+        {
+            // numbers that are too big overflow, and too small have rounding errors but difficulty will not
+            // be either of these extremes anyway.
+            int zeros = insecure_rand()%26 + 2;
+            
+            for (unsigned int j = 0; j < tmp.size(); j++)
+                if (j>tmp.size()-zeros) *(tmp.begin() + j) = 0;
+                else
+                    *(tmp.begin() + j) = insecure_rand()&255;
+
+            auto utmp = UintToArith256(tmp);
+            auto priority = Priority(utmp, 2*NOMINAL_MSG_SIZE, 0);
+            auto tmp2 = aPriorityToDifficultyTarget(priority, 2*NOMINAL_MSG_SIZE, 0);
+
+            // since difficulty target to priority has precision errors, we need to test that the numbers are
+            // approximately equal by taking the log and then rounding to a few decimal places.
+            // printf("%f %f\n", log(UintToArith256(tmp).getdouble()), log(tmp2.getdouble()));
+            BOOST_CHECK(floorf(1000*log(UintToArith256(tmp).getdouble())) == floorf(1000*log(tmp2.getdouble())));
+            //printf("%f\n", priority);
+            //printf("%s\n", tmp.GetHex().c_str());
+            //printf("%s\n", tmp2.GetHex().c_str());
+        }
+        
+    }
+    
     {  // Probabilistically check that the default constructor inits everything and that CalcHash is reproducible
         CMsg msg1;
         CMsg msg2;
@@ -34,31 +109,34 @@ BOOST_AUTO_TEST_CASE(capd_msg_test_vectors)
         CMsg msg1("this is a test");
         arith_uint256 target = UintToArith256(uint256S("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
         msg1.difficultyBits = target.GetCompact();
-        msg1.Mine();
+        msg1.Solve();
         printf("Soln found: %lu\n", msg1.nonce);
 
         CMsg msg2("shorter");
         msg2.difficultyBits = target.GetCompact();
-        msg2.Mine();
-        double startPri = msg1.Priority();
+        msg2.Solve();
+        PriorityType startPri = msg1.Priority();
 
         auto t2 = GetStopwatchMicros();
         CMsg msg3("this is a test");
         target = UintToArith256(uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
         msg3.difficultyBits = target.GetCompact();
-        msg3.Mine();
+        msg3.Solve();
         auto t3 = GetStopwatchMicros();
         CMsg msg4("this is a test");
         target = UintToArith256(uint256S("0007ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
         msg4.difficultyBits = target.GetCompact();
-        msg4.Mine();
+        msg4.Solve();
         auto t4 = GetStopwatchMicros();
         CMsg msg5("this is a test");
         target = UintToArith256(uint256S("000007ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
         msg5.difficultyBits = target.GetCompact();
-        msg5.Mine();
+        msg5.Solve();
+        // Expiration time is essentially the same but msg5 has more work
+        BOOST_CHECK(msg5.Priority() > msg4.Priority());
         auto t5 = GetStopwatchMicros();
 
+        /*
         printf("Priorities: %f %f %f\n%f (time: %lu)\n%f (time: %lu)\n%f (time: %lu)\n", startPri, msg1.Priority(), msg2.Priority(),
                msg3.Priority(),
                (t3 - t2),
@@ -67,14 +145,19 @@ BOOST_AUTO_TEST_CASE(capd_msg_test_vectors)
                msg5.Priority(),
                (t5 - t4)
             );
-
-        // use an old createtime to test lowering priority
-        msg5.createTime = GetTime() -  (MSG_LIFETIME_SEC+1);
-        msg5.Mine();
-
-        printf("Time expired message: %f\n", msg5.Priority());
-        BOOST_CHECK(msg5.Priority() < 0);
+        */
         
+        // use an old createtime to test lowering priority
+        msg5.Solve(GetTime() -  (MSG_LIFETIME_SEC+1)/2);
+
+        PriorityType p1 = msg5.Priority();
+        printf("Time expired message priority: %f\n", p1);
+
+        msg5.Solve(GetTime() -  (MSG_LIFETIME_SEC+1));
+        PriorityType p2 = msg5.Priority();
+        printf("Time expired message priority: %f\n", p2);
+
+        BOOST_CHECK_MESSAGE(p2 < p1, "Older messages have lower priority");
     }
 
     if (0)
@@ -90,45 +173,50 @@ BOOST_AUTO_TEST_CASE(capd_msg_test_vectors)
 
     msgpool.clear();
     msgpool.SetMaxSize(2000);
-    uint256 diff = msgpool.GetAdmissionDifficulty();
-    BOOST_CHECK(diff ==  MIN_FORWARD_MSG_DIFFICULTY);  // because no messages in the pool
+    uint256 diff = msgpool.GetRelayDifficulty();
+    BOOST_CHECK(diff ==  ArithToUint256(MIN_FORWARD_MSG_DIFFICULTY));  // because no messages in the pool
 }
 
 BOOST_AUTO_TEST_CASE(capd_pool_test_vectors)
 {
+    int64_t now = GetTime();
+    SetMockTime(now);  // Freeze the time at now
+
     CMsg msg1("this is a test");
 
     const unsigned int TEST_MSGPOOL_SIZE=4000;
     CMsgPool mp(TEST_MSGPOOL_SIZE);
     // Empty pool must be  minimum difficulty
-    BOOST_CHECK(msgpool.GetAdmissionDifficulty() == MIN_FORWARD_MSG_DIFFICULTY);
+    BOOST_CHECK(msgpool.GetRelayDifficulty() == ArithToUint256(MIN_FORWARD_MSG_DIFFICULTY));
 
     try
     {
-    mp.add(MsgRefCopy(msg1));
-    BOOST_FAIL("Expected exception because message has bad nonce");
+        mp.add(MsgRefCopy(msg1));
+        BOOST_FAIL("Expected exception because message has bad nonce");
     }
     catch(CMsgPoolException &e)
     {
     }
+    
     msg1.SetDifficulty(uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
     uint256 d = msg1.GetDifficulty();
     printf("%s\n", d.GetHex().c_str());
-    msg1.Mine();
+    msg1.Solve();
     try
     {
-    mp.add(MsgRefCopy(msg1));
-    BOOST_FAIL("Expected exception because message difficulty is too low");
+        printf("expecting exception:");
+        mp.add(MsgRefCopy(msg1));
+        BOOST_FAIL("Expected exception because message difficulty is too low");
     }
     catch(CMsgPoolException &e)
     {
     }
 
-    msg1.SetDifficulty(msgpool.GetAdmissionDifficulty());
-    msg1.Mine();
+    msg1.SetDifficulty(msgpool.GetRelayDifficulty());
+    msg1.Solve();
 
-    BOOST_CHECK(mp.GetLocalDifficulty() == MIN_LOCAL_MSG_DIFFICULTY); // empty pool difficulty
-    BOOST_CHECK(mp.GetAdmissionDifficulty() == MIN_FORWARD_MSG_DIFFICULTY); // empty pool difficulty
+    BOOST_CHECK(mp.GetLocalDifficulty() == ArithToUint256(MIN_LOCAL_MSG_DIFFICULTY)); // empty pool difficulty
+    BOOST_CHECK(mp.GetRelayDifficulty() == ArithToUint256(MIN_FORWARD_MSG_DIFFICULTY)); // empty pool difficulty
     
     auto tmp = mp.find(msg1.GetHash());  // test nonexistent message
     BOOST_CHECK(tmp == nullmsgref);
@@ -139,101 +227,180 @@ BOOST_AUTO_TEST_CASE(capd_pool_test_vectors)
     
     BOOST_CHECK(mp.Size() == msg1.RamSize());
     // non-full pool must be minimum difficulty
-    BOOST_CHECK(mp.GetAdmissionDifficulty() == MIN_FORWARD_MSG_DIFFICULTY);
-    BOOST_CHECK(mp.GetLocalDifficulty() == MIN_LOCAL_MSG_DIFFICULTY);
+    BOOST_CHECK(mp.GetRelayDifficulty() == ArithToUint256(MIN_FORWARD_MSG_DIFFICULTY));
+    BOOST_CHECK(mp.GetLocalDifficulty() == ArithToUint256(MIN_LOCAL_MSG_DIFFICULTY));
 
     // Add a lot of messages and validate msgpool characteristics
 
-    uint256 oldDiff = mp.GetAdmissionDifficulty();
-    for(int count=0;count<100;count++)
+    uint256 oldDiff = mp.GetRelayDifficulty();
+    for(int count=0;count<80;count++)
     {
+        unsigned char prefix = count + '!';
+        printf("%d: inserting '%c' (%u)\n", count, prefix, (unsigned int) prefix);
         CMsg m(" message12345678 " + std::to_string(count));
-        CMsg m1(" message87654321 " + std::to_string(count));
-        m.data[0] = count;
-        m1.data[0] = count;
-        auto diff = mp.GetAdmissionDifficulty();
+        m.data[0] = prefix;
+        auto diff = mp.GetRelayDifficulty();
         BOOST_CHECK(!(oldDiff < diff));  // difficulty must be getting harder since no messages time expired
 
-        m.SetDifficultyHarderThan(mp.GetAdmissionDifficulty());
-        BOOST_CHECK(!(mp.GetAdmissionDifficulty() > mp.GetLocalDifficulty()));
-        BOOST_CHECK(!(m.GetDifficulty() > mp.GetAdmissionDifficulty()));
-        m.Mine();
-        // mp._DbgDump();
+        m.SetDifficultyHarderThan(diff);
+        BOOST_CHECK(!(mp.GetRelayDifficulty() > mp.GetLocalDifficulty()));
+        BOOST_CHECK(!(m.GetDifficulty() > mp.GetRelayDifficulty()));
+        m.Solve();
         mp.add(MsgRefCopy(m));
-
-        m1.SetDifficultyHarderThan(mp.GetAdmissionDifficulty());
-        m1.Mine();
-        mp.add(MsgRefCopy(m1));
+        //mp._DbgDump();
         
+        CMsg m1(" message87654321 " + std::to_string(count));
+        m1.data[0] = prefix;
+        m1.SetDifficultyHarderThan(mp.GetRelayDifficulty());
+        m1.Solve();
+        mp.add(MsgRefCopy(m1));
+
+        //mp._DbgDump();
         oldDiff = diff;
         //printf("%d: %s\n", count, diff.GetHex().c_str());
         BOOST_CHECK(mp.Size() <= TEST_MSGPOOL_SIZE);
 
-        printf("Messages matching 2 bytes: %c:\n", count);
-        std::vector<unsigned char> srch = {(unsigned char) count, 'm' };
+        printf("Messages matching 2 bytes: %c:\n", prefix);
+        std::vector<unsigned char> srch = {(unsigned char) prefix, 'm' };
         auto findings = mp.find(srch);
         int qty=0;
         for (auto f : findings)
         {
             printf("%.*s\n", (int) f->data.size(), &f->data[0]);
-            if (f->data[0] != count) break;
+            BOOST_CHECK(f->data[0] == prefix);
             qty++;
         }
         BOOST_CHECK(qty == 2);
 
-        printf("Messages matching 4 bytes: %c:\n", count);
-        srch = {(unsigned char) count, 'm', 'e', 's' };
+        //printf("Messages matching 4 bytes: %c:\n", prefix);
+        srch = {(unsigned char) prefix, 'm', 'e', 's' };
         findings = mp.find(srch);
         qty=0;
         for (auto f : findings)
         {
-            printf("%.*s\n", (int) f->data.size(), &f->data[0]);
-            if (f->data[0] != count) break;
+            //printf("%.*s\n", (int) f->data.size(), &f->data[0]);
+            BOOST_CHECK(f->data[0] == prefix);
             qty++;
         }
         BOOST_CHECK(qty == 2);
 
-        printf("Messages matching 8 bytes: %c:\n", count);
-        srch = {(unsigned char) count, 'm', 'e', 's', 's', 'a', 'g', 'e' };
+        //printf("Messages matching 8 bytes: %c:\n", prefix);
+        srch = {(unsigned char) prefix, 'm', 'e', 's', 's', 'a', 'g', 'e' };
         findings = mp.find(srch);
         qty=0;
         for (auto f : findings)
         {
-            printf("%.*s\n", (int) f->data.size(), &f->data[0]);
-            if (f->data[0] != count) break;
+            //printf("%.*s\n", (int) f->data.size(), &f->data[0]);
+            BOOST_CHECK(f->data[0] == prefix) ;
             qty++;
         }
         BOOST_CHECK(qty == 2);
 
-        printf("Messages matching 16 bytes\n");
-        srch = {(unsigned char) count, 'm', 'e', 's', 's', 'a', 'g', 'e', '1','2','3','4','5','6','7','8' };
+        //printf("Messages matching 16 bytes\n");
+        srch = {(unsigned char) prefix, 'm', 'e', 's', 's', 'a', 'g', 'e', '1','2','3','4','5','6','7','8' };
         findings = mp.find(srch);
         qty=0;
         for (auto f : findings)
         {
-            printf("%.*s\n", (int) f->data.size(), &f->data[0]);
-            if (f->data[0] != count) break;
+            //printf("%.*s\n", (int) f->data.size(), &f->data[0]);
+            BOOST_CHECK(f->data[0] == prefix);
             qty++;
         }
         BOOST_CHECK(qty == 1);
 
-        printf("Messages matching 16 bytes\n");
-        srch = {(unsigned char) count, 'm', 'e', 's', 's', 'a', 'g', 'e', '8','7','6','5','4','3','2','1' };
+        //printf("Messages matching 16 bytes\n");
+        srch = {(unsigned char) prefix, 'm', 'e', 's', 's', 'a', 'g', 'e', '8','7','6','5','4','3','2','1' };
         findings = mp.find(srch);
         qty=0;
         for (auto f : findings)
         {
-            printf("%.*s\n", (int) f->data.size(), &f->data[0]);
-            if (f->data[0] != count) break;
+            //printf("%.*s\n", (int) f->data.size(), &f->data[0]);
+            BOOST_CHECK(f->data[0] == prefix);
             qty++;
         }
-        BOOST_CHECK(qty == 1);
-
-        
+        BOOST_CHECK_MESSAGE(qty == 1, strprintf("expected 1 got %d", qty).c_str());
     }
 
-    
+    SetMockTime(now + MSG_LIFETIME_SEC);
+    // Every message inserted should have a negative priority at this point
+    if (mp.GetRelayPriority() != MIN_RELAY_PRIORITY)
+    {
+        printf("problem!\n");
+    }
+
+    // although other messages have expired, a new message should be easily added
+    {
+        CMsgRef m = std::make_shared<CMsg>("zz message12345678 ");
+
+        PriorityType priority = mp.GetRelayPriority();
+        m->SetDifficultyHarderThanPriority(priority);
+        m->Solve();
+        mp.add(m);
+        auto findings = mp.find({'z','z'});
+        BOOST_CHECK(findings.size() == 1);
+    }
 }
+
+
+// This test checks the persistence of a high work message, and then ensures that it ages out
+BOOST_AUTO_TEST_CASE(capd_pool_test_vectors2)
+{
+    int64_t now = GetTime();
+    SetMockTime(now);  // Freeze the time at now
+
+    const unsigned int TEST_MSGPOOL_SIZE=2000;
+    CMsgPool mp(TEST_MSGPOOL_SIZE);
+
+    // Insert a high POW message
+    CMsg msg1("!!this is a test");
+    msg1.SetDifficulty(uint256S("0007ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
+    uint256 d = msg1.GetDifficulty();
+    printf("%s\n", d.GetHex().c_str());
+    msg1.Solve();
+    mp.add(MsgRefCopy(msg1));
+
+    // Add a lot of minimum POW messages
+    uint256 oldDiff = mp.GetRelayDifficulty();
+    for(int count=0;count<100;count++)
+    {
+        unsigned char prefix = count + '!';
+        // printf("%d: inserting '%c' (%u)\n", count, prefix, (unsigned int) prefix);
+        CMsg m(" message12345678 " + std::to_string(count));
+        m.data[0] = prefix;
+        auto diff = mp.GetRelayDifficulty();
+        BOOST_CHECK(!(oldDiff < diff));  // difficulty must be getting harder since no messages time expired
+
+        m.SetDifficultyHarderThan(diff);
+        BOOST_CHECK(!(mp.GetRelayDifficulty() > mp.GetLocalDifficulty()));
+        BOOST_CHECK(!(m.GetDifficulty() > mp.GetRelayDifficulty()));
+        m.Solve();
+        mp.add(MsgRefCopy(m));
+    }
+
+    // Verify that the high POW message remains
+    std::vector<unsigned char> srch = {'!', '!' };
+    auto findings = mp.find(srch);
+    BOOST_CHECK(findings.size() == 1);
+
+    // Add a lot of minimum POW messages
+    for(int count=0;count<1000;count++)
+    {
+        // Move forward to where the high priority message should be aged out
+        SetMockTime(now + MSG_LIFETIME_SEC + count);
+
+        CMsg m(" message12345678 " + std::to_string(count));
+        auto diff = mp.GetRelayDifficulty();
+        m.SetDifficultyHarderThan(diff);
+        m.Solve();
+        mp.add(MsgRefCopy(m));
+    }
+
+    // Verify that the high POW message aged out
+    findings = mp.find(srch);
+    BOOST_CHECK(findings.size() == 0);
+
+}
+
 
 BOOST_AUTO_TEST_CASE(capd_testhttp)
 {

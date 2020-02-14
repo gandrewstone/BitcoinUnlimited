@@ -89,6 +89,7 @@ public:
     }
 
     double getdouble() const;
+    void setdouble(double val);
 
     base_uint &operator=(uint64_t b)
     {

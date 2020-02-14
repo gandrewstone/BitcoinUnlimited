@@ -156,6 +156,18 @@ double base_uint<BITS>::getdouble() const
 }
 
 template <unsigned int BITS>
+void base_uint<BITS>::setdouble(double val)
+{
+    double fact = 1.0;
+    for (int i = 0; i < WIDTH; i++)
+    {
+        double tmp = val / fact;
+        pn[i] = (uint32_t)tmp;
+        fact *= 4294967296.0;
+    }
+}
+
+template <unsigned int BITS>
 std::string base_uint<BITS>::GetHex() const
 {
     return ArithToUint256(*this).GetHex();
@@ -207,6 +219,7 @@ template base_uint<256> &base_uint<256>::operator/=(const base_uint<256> &b);
 template int base_uint<256>::CompareTo(const base_uint<256> &) const;
 template bool base_uint<256>::EqualTo(uint64_t) const;
 template double base_uint<256>::getdouble() const;
+template void base_uint<256>::setdouble(double);
 template std::string base_uint<256>::GetHex() const;
 template std::string base_uint<256>::ToString() const;
 template void base_uint<256>::SetHex(const char *);
