@@ -47,6 +47,7 @@ class CAddrMan;
 class CSubNet;
 class CNode;
 class CNodeRef;
+class CapdNode;
 
 namespace boost
 {
@@ -382,6 +383,10 @@ public:
     CSharedCriticalSection csMsgSerializer;
     // socket
     uint64_t nServices;
+    //! Set to true if capd is enabled in this node (based on XVersion config)
+    bool isCapdEnabled = false;
+    //! The "hook" into capd functionality
+    CapdNode *capd = nullptr;
     SOCKET hSocket;
     CDataStream ssSend;
     std::atomic<uint64_t> nSendSize; // total size in bytes of all vSendMsg entries
@@ -974,6 +979,7 @@ public:
 
     void copyStats(CNodeStats &stats);
 
+    bool IsCapdEnabled() { return isCapdEnabled; }
     // Network stats
     static void RecordBytesRecv(uint64_t bytes);
     static void RecordBytesSent(uint64_t bytes);

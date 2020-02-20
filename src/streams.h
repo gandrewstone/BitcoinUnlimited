@@ -200,6 +200,12 @@ public:
         nReadPos = 0;
     }
 
+    /** Return the current read offset from the beginning of the message
+        This helps provide information to the Rewind() function.  Otherwise the caller must
+        count bytes read which can be very hard when things like compact ints are being read.
+     */
+    size_type ReadPos() { return nReadPos; }
+    /** Rewind by n characters, returns false if n is > the maximum rewindable amount */
     bool Rewind(size_type n)
     {
         // Rewind by n characters if the buffer hasn't been compacted yet

@@ -199,7 +199,8 @@ enum
     CMPCT = 0x80000000, // compact blocks
 
     ELECTRUM = 0x100000000,
-    MPOOLSYNC = 0x200000000
+    MPOOLSYNC = 0x200000000,
+    CAPD = 0x400000000
 };
 
 namespace Logging
@@ -223,7 +224,7 @@ To add a new log category:
             {REQ, "req"}, {BLOOM, "bloom"}, {LCK, "lck"}, {PROXY, "proxy"}, {DBASE, "dbase"},                   \
             {SELECTCOINS, "selectcoins"}, {ESTIMATEFEE, "estimatefee"}, {QT, "qt"}, {IBD, "ibd"},               \
             {GRAPHENE, "graphene"}, {RESPEND, "respend"}, {WB, "weakblocks"}, {CMPCT, "cmpctblock"},            \
-            {ELECTRUM, "electrum"}, {MPOOLSYNC, "mempoolsync"},                                                 \
+            {ELECTRUM, "electrum"}, {MPOOLSYNC, "mempoolsync"}, {CAPD, "capd"},                                 \
         {                                                                                                       \
             ZMQ, "zmq"                                                                                          \
         }                                                                                                       \

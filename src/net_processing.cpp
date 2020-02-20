@@ -13,6 +13,7 @@
 #include "blockrelay/mempool_sync.h"
 #include "blockrelay/thinblock.h"
 #include "blockstorage/blockstorage.h"
+#include "capd.h"
 #include "chain.h"
 #include "dosman.h"
 #include "expedited.h"
@@ -1959,6 +1960,10 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         pfrom->fRelayTxes = true;
     }
 
+    else if (capdEnabled.Value() && pfrom->IsCapdEnabled() && (strCommand.substr(0, 4) == NetMsgType::CAPDPREFIX))
+    {
+        capdProtocol.HandleCapdMessage(pfrom, strCommand, vRecv, nStopwatchTimeReceived);
+    }
 
     else if (strCommand == NetMsgType::REJECT)
     {

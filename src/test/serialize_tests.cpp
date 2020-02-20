@@ -308,6 +308,13 @@ static bool isCanonicalException(const std::ios_base::failure &ex)
     return strcmp(expectedException.what(), ex.what()) == 0;
 }
 
+BOOST_AUTO_TEST_CASE(serialize_vector)
+{
+    CDataStream ss(SER_DISK, 0);
+    std::vector<int> vi(10);
+
+    ss << vi;
+}
 
 BOOST_AUTO_TEST_CASE(noncanonical)
 {

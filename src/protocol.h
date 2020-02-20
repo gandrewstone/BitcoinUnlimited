@@ -350,6 +350,30 @@ extern const char *GETBLOCKTXN;
  * @since protocol version 70014 as described by BIP 152
  */
 extern const char *BLOCKTXN;
+
+/** all CAPD messages have this prefix
+ * NOT AN ACTUAL MESSAGE
+*/
+extern const char *CAPDPREFIX;
+
+/**
+ * Contains CAPD message notifications
+ * only if XVERSION capd enabled
+ * This is a seperate message from normal INV so that it can be de-prioritized
+ */
+extern const char *CAPDINV;
+
+/**
+ * Request CAPD messages by hash
+ * only if XVERSION capd enabled
+ */
+extern const char *CAPDGETMSG;
+
+/**
+ * Contains CAPD messages
+ * only if XVERSION capd enabled
+ */
+extern const char *CAPDMSG;
 };
 
 

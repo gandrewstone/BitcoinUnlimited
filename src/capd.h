@@ -5,6 +5,8 @@
 #include <queue>
 
 #include "arith_uint256.h"
+#include "fastfilter.h"
+#include "protocol.h"
 #include "serialize.h"
 #include "sync.h"
 #include "uint256.h"
@@ -14,6 +16,14 @@
 #include "boost/multi_index/hashed_index.hpp"
 #include "boost/multi_index/ordered_index.hpp"
 #include "boost/multi_index_container.hpp"
+
+class CNode;
+class CDataStream;
+class CapdProtocol;
+
+extern const uint CAPD_MAX_INV_TO_SEND;
+extern const uint CAPD_MAX_MSG_TO_REQUEST;
+extern const uint CAPD_MAX_MSG_TO_SEND;
 
 extern bool StartCapd();
 extern void StopCapd();
@@ -36,6 +46,10 @@ extern PriorityType MIN_LOCAL_PRIORITY;
 
 /** The maximum uint256 number (a useful constant) */
 extern arith_uint256 MAX_UINT256;
+
+/** Whether CAPD is enabled on this node */
+extern CTweak<bool> capdEnabled;
+
 
 /* When converting a double to a uint256, precision will be lost.  This is how much to keep.
    Basically, doubles are multiplied by this amount before being converted to a uint256.
@@ -79,9 +93,69 @@ protected:
 public:
 };
 
+//! Indicate a section of a vector, without copying the vector.  You can then serialize the section.
+template <typename T, class A = std::allocator<T> >
+class VectorSpan
+{
+public:
+    std::vector<T, A> &v;
+    size_t start;
+    size_t count;
+
+    VectorSpan(std::vector<T, A> &_v, unsigned int _start, unsigned int _count) : v(_v), start(_start), count(_count) {}
+    template <typename Stream>
+    void Serialize(Stream &os) const
+    {
+        // Get the mininum of the desired element count and the number of elements
+        auto sz = v.size() - start;
+        if (start >= v.size())
+            sz = 0;
+        if (count < sz)
+            sz = count;
+        // Write the vector size
+        WriteCompactSize(os, sz);
+        // Serialized the desired span
+        if (sz != 0)
+        {
+            auto end = v.begin() + start + sz;
+            for (typename std::vector<T, A>::const_iterator vi = v.begin() + start; vi != end; ++vi)
+                ::Serialize(os, (*vi));
+        }
+    }
+};
+
+template <typename Stream, typename T, typename A, typename V>
+void Serialize_impl(Stream &os, VectorSpan<T, A> &vs, const V &)
+{
+    vs.Serialize(os);
+    /*
+    // Get the mininum of the desired element count and the number of elements
+    auto sz = vs.v.size() - vs.start;
+    if (vs.start >= vs.v.size()) sz = 0;
+    if (vs.count < sz) sz = vs.count;
+    // Write the vector size
+    WriteCompactSize(os, sz);
+    // Serialized the desired span
+    if (sz!=0)
+    {
+        auto end = vs.v.begin() + vs.start + sz;
+        for (typename std::vector<T, A>::const_iterator vi = vs.v.begin()+vs.start; vi != end; ++vi)
+            ::Serialize(os, (*vi));
+    }
+    */
+}
+
+//! Serialize a section of a vector.  This is serialized as a vector whose contents are the section, so there is
+// no concept of deserialization into a VectorSpan.
+template <typename Stream, typename T, typename A>
+inline void Serialize(Stream &os, const VectorSpan<const T, A> &v)
+{
+    Serialize_impl(os, v, T());
+}
+
 
 //! A message to be stored in the pool
-class CMsg
+class CapdMsg
 {
 protected:
     enum Fields : uint8_t
@@ -106,13 +180,13 @@ public:
     uint32_t difficultyBits = 0; //!< the message's proof of work target
     uint64_t nonce = 0; //!< needed to prove this message's POW
 
-    CMsg(uint8_t ver = CURRENT_VERSION) : version(ver) {}
-    CMsg(const std::string &indata, uint8_t ver = CURRENT_VERSION)
+    CapdMsg(uint8_t ver = CURRENT_VERSION) : version(ver) {}
+    CapdMsg(const std::string &indata, uint8_t ver = CURRENT_VERSION)
         : version(ver), createTime(GetTime()), data(indata.begin(), indata.end())
     {
     }
 
-    CMsg(const std::vector<uint8_t> &indata, uint8_t ver = CURRENT_VERSION)
+    CapdMsg(const std::vector<uint8_t> &indata, uint8_t ver = CURRENT_VERSION)
         : version(ver), createTime(GetTime()), data(indata.begin(), indata.end())
     {
     }
@@ -185,7 +259,7 @@ public:
     }
 
     /** Return the approximate RAM used by this object */
-    size_t RamSize() const { return sizeof(CMsg) + data.size(); }
+    size_t RamSize() const { return sizeof(CapdMsg) + data.size(); }
     /** Calculate this message's hash.  Used for POW and identity */
     uint256 CalcHash() const;
 
@@ -233,38 +307,42 @@ public:
 
     /** Returns the message's current priority */
     PriorityType Priority() const;
+
+    /** Serialize into a hex string */
+    std::string EncodeHex();
 };
 
+extern template void Serialize<CDataStream, CapdMsg>(CDataStream &os, const std::shared_ptr<const CapdMsg> &p);
 
-typedef std::shared_ptr<CMsg> CMsgRef;
+typedef std::shared_ptr<CapdMsg> CapdMsgRef;
 /** the null pointer equivalent for message references */
-extern const CMsgRef nullmsgref;
+extern const CapdMsgRef nullmsgref;
 
-static inline CMsgRef MakeMsgRef() { return std::make_shared<CMsg>(); }
-static inline CMsgRef MakeMsgRef(CMsg &&in) { return std::make_shared<CMsg>(std::forward<CMsg>(in)); }
-static inline CMsgRef MsgRefCopy(const CMsg &in) { return std::make_shared<CMsg>(in); }
-/** Allow CMsg to be sorted by priority
+static inline CapdMsgRef MakeMsgRef() { return std::make_shared<CapdMsg>(); }
+static inline CapdMsgRef MakeMsgRef(CapdMsg &&in) { return std::make_shared<CapdMsg>(std::forward<CapdMsg>(in)); }
+static inline CapdMsgRef MsgRefCopy(const CapdMsg &in) { return std::make_shared<CapdMsg>(in); }
+/** Allow CapdMsg to be sorted by priority
     begin() will have the lowest priority
     end()-1 will have the highest
 */
-class CompareCMsgRefByPriority
+class CompareCapdMsgRefByPriority
 {
 public:
-    bool operator()(const CMsgRef &a, const CMsgRef &b) const { return (a->Priority() < b->Priority()); }
+    bool operator()(const CapdMsgRef &a, const CapdMsgRef &b) const { return (a->Priority() < b->Priority()); }
 };
 
 // extracts a TxMemPoolEntry's transaction hash
 struct MsgHashExtractor
 {
     typedef uint256 result_type;
-    result_type operator()(const CMsgRef &msg) const { return msg->GetHash(); }
+    result_type operator()(const CapdMsgRef &msg) const { return msg->GetHash(); }
 };
 
-class CMsgPoolException : public std::exception
+class CapdMsgPoolException : public std::exception
 {
 public:
     std::string reason;
-    CMsgPoolException(const std::string &what) : reason(what) {}
+    CapdMsgPoolException(const std::string &what) : reason(what) {}
     const char *what() const throw() { return reason.c_str(); }
 };
 
@@ -274,7 +352,7 @@ typedef struct MsgLookup1Extractor
 {
   typedef uint64_t result_type;
 
-  result_type operator()(const CMsgRef& r) const
+  result_type operator()(const CapdMsgRef& r) const
   {
       uint64_t ret = 0;
       if (r->data.size() > 0)
@@ -302,7 +380,7 @@ public:
     typedef InplaceChunk<N> result_type;
     //typedef std::vector<unsigned char> result_type;
 
-  result_type operator()(const CMsgRef& r) const
+  result_type operator()(const CapdMsgRef& r) const
   {
       result_type ret;
       ret.data = &r->data[0];
@@ -329,7 +407,7 @@ public:
     typedef std::array<unsigned char, N> result_type;
     // typedef std::vector<unsigned char> result_type;
 
-    result_type operator()(const CMsgRef &r) const
+    result_type operator()(const CapdMsgRef &r) const
     {
         result_type ret;
         // ret.resize(N);
@@ -400,18 +478,18 @@ struct MsgLookup16
 };
 
 //! The pool of all current messages
-class CMsgPool
+class CapdMsgPool
 {
 protected:
     typedef boost::multi_index_container<
-        CMsgRef,
+        CapdMsgRef,
         boost::multi_index::indexed_by<
             // sorted by message id (hash)
             boost::multi_index::ordered_unique<MsgHashExtractor>,
             // priority:  TODO: replace with random_access so we can grab the median element efficiently
             boost::multi_index::ordered_non_unique<boost::multi_index::tag<MsgPriorityTag>,
-                boost::multi_index::identity<CMsgRef>,
-                CompareCMsgRefByPriority>,
+                boost::multi_index::identity<CapdMsgRef>,
+                CompareCapdMsgRefByPriority>,
             boost::multi_index::
                 hashed_non_unique<boost::multi_index::tag<MsgLookup2>, MsgLookupNExtractor<2>, ArrayHash2>,
             boost::multi_index::
@@ -434,13 +512,16 @@ protected:
     /** the largest this msg pool should become */
     uint64_t maxSize = DEFAULT_MSG_POOL_MAX_SIZE;
 
+    CapdProtocol *p2p = nullptr;
+
 public:
-    CMsgPool(uint64_t maxSz = DEFAULT_MSG_POOL_MAX_SIZE) : maxSize(maxSz) {}
+    CapdMsgPool(uint64_t maxSz = DEFAULT_MSG_POOL_MAX_SIZE) : maxSize(maxSz) {}
     enum
     {
         DEFAULT_MSG_POOL_MAX_SIZE = 100 * 1024 * 1024
     };
 
+    void setP2PprotocolHandler(CapdProtocol *protoHandler) { p2p = protoHandler; }
     /** Return the minimum difficulty for a message to be accepted into this mempool and be elligible for forwarding
         A lower difficulty value is harder because the hash must be below the returned difficulty to be valid.
      */
@@ -477,8 +558,9 @@ public:
     PriorityType _GetLocalPriority();
 
 
-    /** Add a message into the message pool.  Throws CMsgPoolException if the message was not added */
-    void add(const CMsgRef &msg);
+    /** Add a message into the message pool.  Throws CapdMsgPoolException if the message was not added.
+     */
+    void add(const CapdMsgRef &msg);
 
     /** Delete every message in the message pool */
     void clear();
@@ -487,11 +569,13 @@ public:
     void SetMaxSize(unsigned int sz) { maxSize = sz; }
     /** Return the current size of the msg pool */
     uint64_t Size() { return size; }
+    /** Return the current size of the msg pool */
+    uint64_t Count() { return msgs.size(); }
     /** Returns a reference to the message whose id is hash, or a null pointer */
-    CMsgRef find(const uint256 &hash) const;
+    CapdMsgRef find(const uint256 &hash) const;
 
     /** Content search */
-    std::vector<CMsgRef> find(const std::vector<unsigned char> c) const;
+    std::vector<CapdMsgRef> find(const std::vector<unsigned char> c) const;
 
     /** Remove enough lowest priority messages to make len bytes available in the msgpool */
     void pare(int len)
@@ -506,4 +590,74 @@ public:
 };
 
 
-extern CMsgPool msgpool;
+// These protocol handling routines are separated into their own class so that the msgpool can operate independently
+// of the protocol.
+class CapdProtocol
+{
+    CapdMsgPool *pool = nullptr;
+
+public:
+    enum // Since these types will never appear in a normal INV msg they could overlap values, but don't.
+    {
+        CAPD_MSG_TYPE = 72,
+    };
+
+    CapdProtocol(CapdMsgPool &msgpool) : pool(&msgpool) {}
+    bool HandleCapdMessage(CNode *pfrom, std::string &command, CDataStream &vRecv, int64_t stopwatchTimeReceived);
+
+    /** Notify nodes about the existence of a message */
+    void GossipMessage(const CapdMsg &msg);
+};
+
+/** This class stores info relevant to each CNode.
+    Member functions should only be called if a CNode AddRef() is held because it caches a pnode pointer
+    without adding a reference (to avoid a circular ref dependency).  */
+class CapdNode
+{
+public:
+    CCriticalSection csCapdNode;
+
+    CRollingFastFilter<4 * 1024 * 1024> filterInventoryKnown;
+    std::vector<uint256> invMsgs;
+    std::vector<uint256> requestMsgs;
+    std::vector<CapdMsgRef> sendMsgs;
+    CNode *node = nullptr; // The associated node.
+
+    // I've told this node not to send me anything below this priority
+    PriorityType dontSendMePriority = MIN_RELAY_PRIORITY;
+    // This node's told me not to send anything below this priority
+    PriorityType youDontSendPriority = MIN_RELAY_PRIORITY;
+
+    //! Puts this INV into a queue to be sent.  Returns true if this inv hasn't been seen before
+    bool inv(const CInv &inv)
+    {
+        LOCK(csCapdNode);
+        // Add to this send list if we haven't recently sent the same INV
+        if (filterInventoryKnown.checkAndSet(inv.hash))
+        {
+            invMsgs.push_back(inv.hash);
+            return true;
+        }
+        return false;
+    }
+
+    void getData(const CInv &inv)
+    {
+        LOCK(csCapdNode);
+        if (inv.type == CapdProtocol::CAPD_MSG_TYPE)
+            requestMsgs.push_back(inv.hash);
+    }
+
+    void sendMsg(CapdMsgRef m)
+    {
+        LOCK(csCapdNode);
+        sendMsgs.push_back(m);
+    }
+
+    //! Send any enqueued messages
+    // Return true if anything needed to be sent.
+    bool FlushMessages();
+};
+
+extern CapdMsgPool msgpool;
+extern CapdProtocol capdProtocol;

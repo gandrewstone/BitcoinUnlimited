@@ -266,9 +266,15 @@ CTweak<uint64_t> pruneIntervalTweak("prune.pruneInterval",
     "How much block data (in MiB) is written to disk before trying to prune our block storage",
     DEFAULT_PRUNE_INTERVAL);
 
-CTweak<uint32_t> netMagic("net.magic", "network prefix override. If 0 use the default", 0);
+CTweak<uint32_t> netMagic("net.magic", "Network prefix override. If 0 use the default", 0);
 
 CTweak<uint32_t> randomlyDontInv("net.randomlyDontInv", "Skip sending an INV for some percent of transactions", 0);
+
+CTweak<bool> capdEnabled("net.capd",
+    "Enable/disable the counterparty and protocol discovery message pool.\n"
+    "Note that enabling CAPD will only happen for new node connections, and\n"
+    "disabling will make this node silently drop incoming CAPD messages.",
+    false);
 
 CTweakRef<uint64_t> ebTweak("net.excessiveBlock",
     "Excessive block size in bytes",

@@ -274,6 +274,7 @@ libbitcoin_server_a_SOURCES = \
   blockstorage/blockstorage.cpp \
   bloom.cpp \
   capd.cpp \
+  capd_rpc.cpp \
   chain.cpp \
   checkpoints.cpp \
   connmgr.cpp \

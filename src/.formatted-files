@@ -316,6 +316,7 @@ test/base64_tests.cpp
 test/bip32_tests.cpp
 test/bloom_tests.cpp
 test/bswap_tests.cpp
+test/capd_tests.cpp
 test/cashaddr_tests.cpp
 test/cashaddrenc_tests.cpp
 test/checkblock_tests.cpp

@@ -7,11 +7,11 @@
 #include "arith_uint256.h"
 #include "capd.h"
 #include "clientversion.h"
+#include "dosman.h"
+#include "net.h"
 #include "serialize.h"
 #include "streams.h"
 #include "uint256.h"
-
-// #include "BLAKE2/sse/blake2.h"
 
 #include "hashwrapper.h"
 #include "httpserver.h"
@@ -20,11 +20,15 @@
 
 #include <univalue.h>
 
-const CMsgRef nullmsgref = CMsgRef();
+const CapdMsgRef nullmsgref = CapdMsgRef();
 
 const long int YEAR_OF_SECONDS = 31536000;
+const uint CAPD_MAX_INV_TO_SEND = 20000;
+const uint CAPD_MAX_MSG_TO_REQUEST = 10000;
+const uint CAPD_MAX_MSG_TO_SEND = 5000;
 
-CMsgPool msgpool;
+CapdMsgPool msgpool;
+CapdProtocol capdProtocol(msgpool);
 
 uint64_t MSG_LIFETIME_SEC = 60 * 60 * 10; // expected message lifetime in seconds
 uint64_t NOMINAL_MSG_SIZE = 100; // A message of this size or less has no penalty
@@ -144,7 +148,7 @@ arith_uint256 aPriorityToDifficultyTarget(PriorityType priority, size_t msgConte
     return ret;
 }
 
-uint256 CMsg::CalcHash() const
+uint256 CapdMsg::CalcHash() const
 {
     CDataStream serialized(SER_GETHASH, CLIENT_VERSION);
     serialized << *this;
@@ -176,9 +180,16 @@ uint256 CMsg::CalcHash() const
     return hash;
 }
 
-PriorityType CMsg::Priority() const { return ::Priority(difficultyBits, data.size(), GetTime() - createTime); }
-bool CMsg::DoesPowMatchDifficulty() const { return GetDifficulty() > GetHash(); }
-uint64_t CMsg::Solve(long int time)
+PriorityType CapdMsg::Priority() const { return ::Priority(difficultyBits, data.size(), GetTime() - createTime); }
+bool CapdMsg::DoesPowMatchDifficulty() const { return GetDifficulty() > GetHash(); }
+std::string CapdMsg::EncodeHex()
+{
+    CDataStream strmdata(SER_NETWORK, PROTOCOL_VERSION);
+    strmdata << *this;
+    return HexStr(strmdata.begin(), strmdata.end());
+}
+
+uint64_t CapdMsg::Solve(long int time)
 {
     if (time < YEAR_OF_SECONDS)
         createTime = GetTime() - time;
@@ -214,33 +225,39 @@ uint64_t CMsg::Solve(long int time)
 }
 
 
-void CMsgPool::add(const CMsgRef &msg)
+void CapdMsgPool::add(const CapdMsgRef &msg)
 {
-    WRITELOCK(csMsgPool);
-
-    // TODO clean up a message if pool is filled
-
-    if (!msg->DoesPowMatchDifficulty())
     {
-        throw CMsgPoolException("Message POW inconsistent");
-    }
-    if (msg->Priority() < _GetLocalPriority())
-    {
-        // printf("Priority: msg: %s >=  local: %s\n", msg->Priority().GetHex().c_str(),
-        // _GetLocalPriority().GetHex().c_str());
-        // printf("Difficulty: msg: %s  local: %s\n", msg->GetDifficulty().GetHex().c_str(),
-        // _GetLocalDifficulty().GetHex().c_str());
-        throw CMsgPoolException("Message POW too low");
+        WRITELOCK(csMsgPool);
+
+        // TODO clean up a message if pool is filled
+
+        if (!msg->DoesPowMatchDifficulty())
+        {
+            throw CapdMsgPoolException("Message POW inconsistent");
+        }
+        if (msg->Priority() < _GetLocalPriority())
+        {
+            // printf("Priority: msg: %s >=  local: %s\n", msg->Priority().GetHex().c_str(),
+            // _GetLocalPriority().GetHex().c_str());
+            // printf("Difficulty: msg: %s  local: %s\n", msg->GetDifficulty().GetHex().c_str(),
+            // _GetLocalDifficulty().GetHex().c_str());
+            throw CapdMsgPoolException("Message POW too low");
+        }
+
+        // Free up some room
+        _pare(msg->RamSize());
+
+        msgs.insert(msg);
+        size += msg->RamSize();
     }
 
-    // Free up some room
-    _pare(msg->RamSize());
-
-    msgs.insert(msg);
-    size += msg->RamSize();
+    auto *p = p2p; // Throw in a temp to avoid locking
+    if (p)
+        p->GossipMessage(*msg);
 }
 
-void CMsgPool::clear()
+void CapdMsgPool::clear()
 {
     WRITELOCK(csMsgPool);
     /*
@@ -254,7 +271,7 @@ void CMsgPool::clear()
     size = 0;
 }
 
-void CMsg::SetDifficultyHarderThan(uint256 target)
+void CapdMsg::SetDifficultyHarderThan(uint256 target)
 {
     // Subtract 1 from the difficulty as a compact number.  By doing it this way we are certain
     // that the change isn't rounded away.
@@ -276,12 +293,12 @@ void CMsg::SetDifficultyHarderThan(uint256 target)
     SetDifficulty(num.SetCompact(cInt));
 }
 
-void CMsg::SetDifficultyHarderThanPriority(PriorityType priority)
+void CapdMsg::SetDifficultyHarderThanPriority(PriorityType priority)
 {
     SetDifficultyHarderThan(PriorityToDifficultyTarget(priority, data.size(), 0));
 }
 
-uint256 CMsgPool::_GetRelayDifficulty()
+uint256 CapdMsgPool::_GetRelayDifficulty()
 {
     static const uint256 minFwdDiffTgt = ArithToUint256(MIN_FORWARD_MSG_DIFFICULTY);
 
@@ -306,7 +323,7 @@ uint256 CMsgPool::_GetRelayDifficulty()
     return ret;
 }
 
-uint256 CMsgPool::_GetLocalDifficulty()
+uint256 CapdMsgPool::_GetLocalDifficulty()
 {
     static const uint256 minLclDiffTgt = ArithToUint256(MIN_LOCAL_MSG_DIFFICULTY);
 
@@ -328,7 +345,7 @@ uint256 CMsgPool::_GetLocalDifficulty()
     return ret;
 }
 
-PriorityType CMsgPool::_GetRelayPriority()
+PriorityType CapdMsgPool::_GetRelayPriority()
 {
     if (size < maxSize * 8 / 10)
         return MIN_RELAY_PRIORITY;
@@ -351,7 +368,7 @@ PriorityType CMsgPool::_GetRelayPriority()
     return ret;
 }
 
-PriorityType CMsgPool::_GetLocalPriority()
+PriorityType CapdMsgPool::_GetLocalPriority()
 {
     if (size < maxSize * 8 / 10)
         return MIN_LOCAL_PRIORITY;
@@ -376,7 +393,7 @@ PriorityType CMsgPool::_GetLocalPriority()
 }
 
 
-void CMsgPool::_pare(int len)
+void CapdMsgPool::_pare(int len)
 {
     len -= maxSize - size; // We already have this amount available
     auto &priorityIndexer = msgs.get<MsgPriorityTag>();
@@ -400,7 +417,7 @@ void CMsgPool::_pare(int len)
 }
 
 
-CMsgRef CMsgPool::find(const uint256 &hash) const
+CapdMsgRef CapdMsgPool::find(const uint256 &hash) const
 {
     MsgIter i = msgs.find(hash);
     if (i == msgs.end())
@@ -408,7 +425,7 @@ CMsgRef CMsgPool::find(const uint256 &hash) const
     return *i;
 }
 
-std::vector<CMsgRef> CMsgPool::find(const std::vector<unsigned char> v) const
+std::vector<CapdMsgRef> CapdMsgPool::find(const std::vector<unsigned char> v) const
 {
     READLOCK(csMsgPool);
     if (v.size() == 2)
@@ -417,7 +434,7 @@ std::vector<CMsgRef> CMsgPool::find(const std::vector<unsigned char> v) const
         std::array<unsigned char, 2> srch = {v[0], v[1]};
         MessageContainer::index<MsgLookup2>::type::iterator it = indexer.find(srch);
 
-        std::vector<CMsgRef> ret;
+        std::vector<CapdMsgRef> ret;
         for (; it != indexer.end(); it++)
         {
             if (!(*it)->matches(srch))
@@ -433,7 +450,7 @@ std::vector<CMsgRef> CMsgPool::find(const std::vector<unsigned char> v) const
         std::array<unsigned char, 4> srch = {v[0], v[1], v[2], v[3]};
         MessageContainer::index<MsgLookup4>::type::iterator it = indexer.find(srch);
 
-        std::vector<CMsgRef> ret;
+        std::vector<CapdMsgRef> ret;
         for (; it != indexer.end(); it++)
         {
             if (!(*it)->matches(srch))
@@ -451,7 +468,7 @@ std::vector<CMsgRef> CMsgPool::find(const std::vector<unsigned char> v) const
             srch[i] = v[i];
         MessageContainer::index<MsgLookup8>::type::iterator it = indexer.find(srch);
 
-        std::vector<CMsgRef> ret;
+        std::vector<CapdMsgRef> ret;
         for (; it != indexer.end(); it++)
         {
             if (!(*it)->matches(srch))
@@ -469,7 +486,7 @@ std::vector<CMsgRef> CMsgPool::find(const std::vector<unsigned char> v) const
             srch[i] = v[i];
         MessageContainer::index<MsgLookup16>::type::iterator it = indexer.find(srch);
 
-        std::vector<CMsgRef> ret;
+        std::vector<CapdMsgRef> ret;
         for (; it != indexer.end(); it++)
         {
             if (!(*it)->matches(srch))
@@ -479,11 +496,11 @@ std::vector<CMsgRef> CMsgPool::find(const std::vector<unsigned char> v) const
         return ret;
     }
 
-    return std::vector<CMsgRef>();
+    return std::vector<CapdMsgRef>();
 }
 
 
-void CMsgPool::_DbgDump()
+void CapdMsgPool::_DbgDump()
 {
     auto &priorityIndexer = msgs.get<MsgPriorityTag>();
 
@@ -495,6 +512,165 @@ void CMsgPool::_DbgDump()
     }
 
     printf("relay: %s, local: %s\n", _GetRelayDifficulty().GetHex().c_str(), _GetLocalDifficulty().GetHex().c_str());
+}
+
+
+bool CapdProtocol::HandleCapdMessage(CNode *pfrom,
+    std::string &command,
+    CDataStream &vRecv,
+    int64_t stopwatchTimeReceived)
+{
+    DbgAssert(pool != nullptr, return false);
+    CapdNode *cn = pfrom->capd;
+    if (!pfrom->IsCapdEnabled())
+        return false;
+    if (!cn)
+        return false;
+
+    if (command == NetMsgType::CAPDINV)
+    {
+        std::vector<uint256> vInv;
+        int objtype = ReadCompactSize(vRecv);
+        if (objtype != CAPD_MSG_TYPE) // unknown object type
+        {
+            return error(CAPD, "Received INV with unknown type %d\n", objtype);
+        }
+        vRecv >> vInv;
+        if (vInv.size() > CAPD_MAX_INV_TO_SEND)
+        {
+            dosMan.Misbehaving(pfrom, 20);
+            return error(CAPD, "Received message with too many (%d) INVs\n", vInv.size());
+        }
+        for (auto inv : vInv)
+        {
+            if (pool->find(inv) == nullptr)
+                cn->getData(CInv(objtype, inv));
+        }
+    }
+    else if (command == NetMsgType::CAPDGETMSG)
+    {
+        std::vector<uint256> msgIds;
+        vRecv >> cn->youDontSendPriority;
+        vRecv >> msgIds;
+        if (msgIds.size() > CAPD_MAX_MSG_TO_REQUEST)
+        {
+            dosMan.Misbehaving(pfrom, 20);
+            return error(CAPD, "Received message with too many (%d) capd message requests\n", msgIds.size());
+        }
+
+        for (auto id : msgIds)
+        {
+            auto msg = pool->find(id);
+            if ((msg != nullptr) && (msg->Priority() >= cn->youDontSendPriority))
+            {
+                cn->sendMsg(msg);
+            }
+        }
+    }
+    else if (command == NetMsgType::CAPDMSG)
+    {
+        std::vector<std::pair<uint256, PriorityType> > relayInv;
+        std::vector<CapdMsg> msgs; // TODO deserialize as CapdMsgRefs
+        vRecv >> msgs;
+        for (const auto msg : msgs)
+        {
+            auto msgRef = MakeMsgRef(CapdMsg(msg));
+            PriorityType priority = msgRef->Priority();
+            if (priority < cn->dontSendMePriority)
+            {
+                dosMan.Misbehaving(pfrom, 1);
+                LOG(CAPD, "Capd message priority below minimum for node %s: %f %f\n", pfrom->GetLogName(), priority,
+                    cn->dontSendMePriority);
+                continue;
+            }
+
+            try
+            {
+                pool->add(msgRef);
+                relayInv.push_back(std::pair<uint256, PriorityType>(msgRef->GetHash(), priority));
+            }
+            catch (CapdMsgPoolException &e)
+            {
+                // messsage was too low priority, drop it
+            }
+        }
+    }
+    else
+    {
+        // TODO: Something more than ignore if I don't understand the capd message
+    }
+    return true;
+}
+
+void CapdProtocol::GossipMessage(const CapdMsg &msg)
+{
+    auto hash = msg.GetHash();
+    auto inv = CInv(CAPD_MSG_TYPE, hash);
+
+    std::vector<CNode *> vNodesCopy;
+
+    {
+        LOCK(cs_vNodes);
+        vNodesCopy = vNodes;
+        for (CNode *pnode : vNodesCopy)
+            pnode->AddRef();
+    }
+
+    for (CNode *pnode : vNodesCopy)
+    {
+        CapdNode *cn = pnode->capd;
+        if (pnode->IsCapdEnabled() && cn)
+            cn->inv(inv);
+    }
+    // A cs_vNodes lock is not required here when releasing refs for two reasons: one, this only decrements
+    // an atomic counter, and two, the counter will always be > 0 at this point, so we don't have to worry
+    // that a pnode could be disconnected and no longer exist before the decrement takes place.
+    for (CNode *pnode : vNodesCopy)
+    {
+        pnode->Release();
+    }
+}
+
+bool CapdNode::FlushMessages()
+{
+    LOCK(csCapdNode);
+    DbgAssert(node, return false);
+
+    if (!invMsgs.empty())
+    {
+        unsigned int offset = 0;
+        do
+        {
+            node->PushMessage(NetMsgType::CAPDINV, VectorSpan<uint256>(invMsgs, offset, CAPD_MAX_INV_TO_SEND));
+            offset += CAPD_MAX_INV_TO_SEND;
+        } while (offset < invMsgs.size());
+
+        invMsgs.clear();
+    }
+
+    unsigned int offset = 0;
+    do
+    {
+        node->PushMessage(NetMsgType::CAPDGETMSG, msgpool.GetRelayPriority(),
+            VectorSpan<uint256>(requestMsgs, offset, CAPD_MAX_MSG_TO_REQUEST));
+        offset += CAPD_MAX_MSG_TO_REQUEST;
+    } while (offset < requestMsgs.size());
+
+    requestMsgs.clear();
+
+    offset = 0;
+    std::vector<CapdMsg> sm; // TODO figure out shared_ptr serialization
+    for (auto m : sendMsgs)
+        sm.push_back(*m);
+    do
+    {
+        node->PushMessage(NetMsgType::CAPDMSG, VectorSpan<CapdMsg>(sm, offset, CAPD_MAX_MSG_TO_SEND));
+        offset += CAPD_MAX_MSG_TO_SEND;
+    } while (offset < sm.size());
+
+    sendMsgs.clear();
+
+    return true;
 }
 
 
@@ -632,7 +808,7 @@ static bool capdHttpSend(HTTPRequest *req, const std::string &strURIPart)
     if (!IsHex(strURIPart))
         return RETERR(req, HTTP_BAD_REQUEST, "Invalid hex string: " + strURIPart);
     std::vector<unsigned char> msgData = ParseHex(strURIPart);
-    CMsgRef msg = MakeMsgRef(CMsg(msgData));
+    CapdMsgRef msg = MakeMsgRef(CapdMsg(msgData));
     if (!msg->DoesPowMatchDifficulty())
     {
         result = "inconsistent message, incorrect proof-of-work";
@@ -643,7 +819,7 @@ static bool capdHttpSend(HTTPRequest *req, const std::string &strURIPart)
         {
             msgpool.add(msg);
         }
-        catch (CMsgPoolException &e)
+        catch (CapdMsgPoolException &e)
         {
             result = e.what();
         }
