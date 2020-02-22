@@ -39,6 +39,10 @@ enum SafeChars
 */
 std::string SanitizeString(const std::string &str, int rule = SAFE_CHARS_DEFAULT);
 std::string GetHex(const unsigned char *data, unsigned int len); // convert the passed binary data into a hex string
+inline std::string GetHex(const std::vector<unsigned char> &data) // convert the passed binary data into a hex string
+{
+    return GetHex(&data[0], data.size());
+}
 std::vector<unsigned char> ParseHex(const char *psz);
 std::vector<unsigned char> ParseHex(const std::string &str);
 signed char HexDigit(char c);

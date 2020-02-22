@@ -1,5 +1,135 @@
+import pdb
+
 from .nodemessages import *
 
+class CapdMsg(object):
+    FIELD_HAS_EXPIRATION  = 1
+    FIELD_HAS_RESCINDHASH = 2
+    def __init__(self, data):
+        self.createTime=0
+        self.expiration=None
+        self.rescindHash=None
+        self.data = data
+        self.difficultyBits = 0
+        self.nonce = 0
+        
+    def deserialize(self, f):
+        if isinstance(f, str):
+            # str - assumed to be hex string
+            f = BytesIO(unhexlify(f))
+        elif isinstance(f, bytes):
+            f = BytesIO(f)
+            
+        fields = f.read(1)
+        self.createTime = struct.unpack("<Q", f.read(8))[0]
+        self.difficultyBits = struct.unpack("<I", f.read(4))[0]
+        self.nonce = deser_string()
+        if fields&FIELD_HAS_EXPIRATION:
+            self.expiration = struct.unpack("<H", f.read(2))[0]
+        else:
+            self.expiration = None
+        if fields&FIELD_HAS_RESCINDHASH:
+            self.rescindHash = f.read(20)
+        else:
+            self.rescindHash = None
+        self.data = deser_string()
+        return self
+
+    def serialize(self):
+        flag = 0
+        if self.expiration != None: flag |= FIELD_HAS_EXPIRATION
+        if self.rescingHash != None: flag |= FIELD_HAS_RESCINDHASH
+        r = bytes(chr(flag))
+        r += struct.pack("<Q", self.createTime)
+        r += struct.pack("<I", self.difficultyBits)
+        r += ser_string(self.nonce)
+        if self.expiration != None: r += struct.pack("<H", self.expiration)
+        if self.rescindHash != None:
+            assert(len(self.rescindHash)==20)
+            r += self.rescindHash
+        r += self.data
+        return r
+
+    def serializeForHash(self):
+        r = b""
+        r += self.data
+        r += struct.pack("<Q", self.createTime)
+
+        rs = self.rescindHash
+        if rs == None:
+            rs = bytes(chr(0))*20
+        r += rs
+
+        e = self.expiration
+        if e == None: e = 0xffff
+        r += struct.pack("<H", e)
+        
+        r += struct.pack("<I", self.difficultyBits)
+        return r
+
+    def toHex(self):
+        """Return the hex string serialization of this object"""
+        return hexlify(self.serialize()).decode("utf-8")
+
+class msg_capdinv(object):
+    command = b"capdinv"
+    CAPD_MSG_TYPE = 72
+    
+    def __init__(self, hashes=None):
+        self.hashes = hashes
+
+    def deserialize(self, f):
+        invType = CompactSize.deserialize(f)
+        assert(invType == msg_capdinv.CAPD_MSG_TYPE)
+        self.hashes = deser_hash32_vector(f)
+        return self
+
+    def serialize(self):
+        return CompactSize(msg_capdinv.CAPD_MSG_TYPE).serialize() + ser_hash32_vector(self.hashes)
+
+    def __repr__(self):
+        if self.hashes is not None:
+            return "msg_capdinv(hashes=%s)" % (str(self.hashes))
+        else:
+            return "msg_capdinv(hashes=None)"
+
+class msg_capdgetmsg(object):
+    command = b"capdgetmsg"
+    def __init__(self, hashes=None):
+        self.hashes = hashes
+        self.priorityCutoff = 0
+
+    def deserialize(self, f):
+        self.priorityCutoff = deser_double(f)
+        self.hashes = deser_hash32_vector(f)
+        return self
+
+    def serialize(self):
+        return ser_double(self.priorityCutoff) + ser_hash32_vector(self.hashes)
+
+    def __repr__(self):
+        if self.hashes is not None:
+            return "msg_capdgetmsg()"
+        else:
+            return "msg_capdgetmsg()"
+
+class msg_capdmsg(object):
+    command = b"capdmsg"
+    def __init__(self, msgs=None):
+        self.msgs = msgs
+
+    def deserialize(self, f):
+        self.msgs = deser_vector(f, CapdMsg)
+        return self
+
+    def serialize(self):
+        return ser_vector(self.msgs)
+
+    def __repr__(self):
+        if self.hashes is not None:
+            return "msg_capdmsg()"
+        else:
+            return "msg_capdmsg()"
 
 class msg_buversion(object):
     command = b"buversion"

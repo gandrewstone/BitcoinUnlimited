@@ -159,7 +159,7 @@ BOOST_AUTO_TEST_CASE(capd_msg_test_vectors)
             UintToArith256(uint256S("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
         msg1.difficultyBits = target.GetCompact();
         msg1.Solve();
-        printf("Soln found: %lu\n", msg1.nonce);
+        printf("Soln found: %s\n", GetHex(msg1.nonce).c_str());
 
         CapdMsg msg2("shorter");
         msg2.difficultyBits = target.GetCompact();
@@ -502,7 +502,7 @@ BOOST_AUTO_TEST_CASE(capd_p2p)
     bool fInboundIn = false;
 
     CNode node1(hSocket, addr, pszDest, fInboundIn);
-    CapdNode capdNode1;
+    CapdNode capdNode1(&node1);
 
     CapdMsg msg1("!!this is a test");
     msg1.SetDifficulty(uint256S("0007ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
@@ -638,6 +638,9 @@ BOOST_AUTO_TEST_CASE(capd_p2p)
 
     // No addtl message should be enqueued since all these hashes were bogus
     BOOST_CHECK(capdNode1.sendMsgs.size() == 1);
+
+    // Since CapdNode is stack allocated, remove it before destructing the CNode
+    node1.capd = nullptr;
 }
 
 BOOST_AUTO_TEST_SUITE_END()

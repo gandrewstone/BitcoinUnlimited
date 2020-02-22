@@ -240,6 +240,11 @@ def uint256_from_compact(c):
     v = (c & 0xFFFFFF) << (8 * (nbytes - 3))
     return v
 
+def deser_double(f):
+    return struct.unpack("<d", f.read(8))[0]
+
+def ser_double(d):
+    return struct.pack("<d", d)
 
 def deser_vector(f, c):
     nit = struct.unpack("<B", f.read(1))[0]
@@ -300,6 +305,38 @@ def ser_uint256_vector(l):
     for i in l:
         r += ser_uint256(i)
     return r
+
+def ser_hash32_vector(l):
+    """ Serializes a vector of 32 byte hashes supplied as a list of 32 byte 'bytes' objects  """
+    r = b""
+    if len(l) < 253:
+        r = struct.pack("B", len(l))
+    elif len(l) < 0x10000:
+        r = struct.pack("<BH", 253, len(l))
+    elif len(l) < 0x100000000:
+        r = struct.pack("<BI", 254, len(l))
+    else:
+        r = struct.pack("<BQ", 255, len(l))
+    for i in l:
+        assert(len(i) == 32)
+        r += i
+    return r
+
+def deser_hash32_vector(f):
+    """ Deserializes a vector of 32 byte hashes, into a list of 32 byte 'bytes' objects """
+    nit = struct.unpack("<B", f.read(1))[0]
+    if nit == 253:
+        nit = struct.unpack("<H", f.read(2))[0]
+    elif nit == 254:
+        nit = struct.unpack("<I", f.read(4))[0]
+    elif nit == 255:
+        nit = struct.unpack("<Q", f.read(8))[0]
+    r = []
+    for i in range(nit):
+        t = f.read(32)
+        r.append(t)
+    return r
+
 
 def ser_compact_size(l):
     r = b""

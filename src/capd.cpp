@@ -169,12 +169,13 @@ uint256 CapdMsg::CalcHash() const
 
     CSHA256 sha;
     sha.Write((unsigned char *)serialized.data(), serialized.size());
-    unsigned char stage1[CSHA256::OUTPUT_SIZE + sizeof(uint64_t)];
+    unsigned char stage1[CSHA256::OUTPUT_SIZE];
     sha.Finalize(stage1);
     uint256 hash;
-    memcpy(&stage1[CSHA256::OUTPUT_SIZE], (void *)&nonce, sizeof(uint64_t));
+    // memcpy(&stage1[CSHA256::OUTPUT_SIZE], (void *)&nonce, sizeof(uint64_t));
     CHash256 sha2;
     sha2.Write(stage1, sizeof(stage1));
+    sha2.Write(&nonce[0], nonce.size());
     sha2.Finalize(hash.begin());
 
     return hash;
@@ -189,7 +190,21 @@ std::string CapdMsg::EncodeHex()
     return HexStr(strmdata.begin(), strmdata.end());
 }
 
-uint64_t CapdMsg::Solve(long int time)
+
+bool CapdMsg::checkNonce(unsigned char *stage1, const arith_uint256 &hashTarget)
+{
+    uint256 hash;
+    CHash256 sha2;
+    sha2.Write(stage1, CSHA256::OUTPUT_SIZE);
+    sha2.Write(&nonce[0], nonce.size());
+    sha2.Finalize(hash.begin());
+
+    if (UintToArith256(hash) <= hashTarget)
+        return true;
+    return false;
+}
+
+bool CapdMsg::Solve(long int time)
 {
     if (time < YEAR_OF_SECONDS)
         createTime = GetTime() - time;
@@ -201,27 +216,80 @@ uint64_t CapdMsg::Solve(long int time)
 
     CSHA256 sha;
     sha.Write((unsigned char *)serialized.data(), serialized.size());
-    unsigned char stage1[CSHA256::OUTPUT_SIZE + sizeof(uint64_t)];
+    unsigned char stage1[CSHA256::OUTPUT_SIZE];
     sha.Finalize(stage1);
 
     arith_uint256 hashTarget = arith_uint256().SetCompact(difficultyBits);
 
-    uint256 hash;
+    bool solved = false;
+
     do
     {
-        memcpy(&stage1[CSHA256::OUTPUT_SIZE], (void *)&nonce, sizeof(uint64_t));
-        CHash256 sha2;
-        sha2.Write(stage1, sizeof(stage1));
-        sha2.Finalize(hash.begin());
-
-        if (UintToArith256(hash) <= hashTarget)
+        // Looking for the shortest solution means searching all possibilities of different nonce lengths.
+        nonce.resize(1);
+        uint64_t count = 0;
+        while (count < 256)
         {
-            break;
+            nonce[0] = count & 255;
+            if (checkNonce(stage1, hashTarget))
+            {
+                solved = true;
+                break;
+            }
+            count++;
         }
-        nonce += 1;
-    } while (1);
+        if (solved)
+            break;
 
-    return nonce;
+        count = 0;
+        nonce.resize(2);
+        while (count < 256 * 256)
+        {
+            nonce[0] = count & 255;
+            nonce[1] = count >> 8;
+            if (checkNonce(stage1, hashTarget))
+            {
+                solved = true;
+                break;
+            }
+            count++;
+        }
+        if (solved)
+            break;
+
+        count = 0;
+        nonce.resize(3);
+        while (count < 256 * 256 * 256)
+        {
+            nonce[0] = count & 255;
+            nonce[1] = count >> 8;
+            nonce[2] = count >> 16;
+            if (checkNonce(stage1, hashTarget))
+            {
+                solved = true;
+                break;
+            }
+            count++;
+        }
+
+        count = 0;
+        nonce.resize(4);
+        while (count < 256UL * 256UL * 256UL * 256UL)
+        {
+            nonce[0] = count & 255;
+            nonce[1] = count >> 8;
+            nonce[2] = count >> 16;
+            nonce[3] = count >> 24;
+            if (checkNonce(stage1, hashTarget))
+            {
+                solved = true;
+                break;
+            }
+            count++;
+        }
+    } while (0);
+
+    return solved;
 }
 
 
@@ -648,27 +716,33 @@ bool CapdNode::FlushMessages()
         invMsgs.clear();
     }
 
-    unsigned int offset = 0;
-    do
+    if (!requestMsgs.empty())
     {
-        node->PushMessage(NetMsgType::CAPDGETMSG, msgpool.GetRelayPriority(),
-            VectorSpan<uint256>(requestMsgs, offset, CAPD_MAX_MSG_TO_REQUEST));
-        offset += CAPD_MAX_MSG_TO_REQUEST;
-    } while (offset < requestMsgs.size());
+        unsigned int offset = 0;
+        do
+        {
+            node->PushMessage(NetMsgType::CAPDGETMSG, msgpool.GetRelayPriority(),
+                VectorSpan<uint256>(requestMsgs, offset, CAPD_MAX_MSG_TO_REQUEST));
+            offset += CAPD_MAX_MSG_TO_REQUEST;
+        } while (offset < requestMsgs.size());
 
-    requestMsgs.clear();
+        requestMsgs.clear();
+    }
 
-    offset = 0;
-    std::vector<CapdMsg> sm; // TODO figure out shared_ptr serialization
-    for (auto m : sendMsgs)
-        sm.push_back(*m);
-    do
+    if (!sendMsgs.empty())
     {
-        node->PushMessage(NetMsgType::CAPDMSG, VectorSpan<CapdMsg>(sm, offset, CAPD_MAX_MSG_TO_SEND));
-        offset += CAPD_MAX_MSG_TO_SEND;
-    } while (offset < sm.size());
+        unsigned int offset = 0;
+        std::vector<CapdMsg> sm; // TODO figure out shared_ptr serialization
+        for (auto m : sendMsgs)
+            sm.push_back(*m);
+        do
+        {
+            node->PushMessage(NetMsgType::CAPDMSG, VectorSpan<CapdMsg>(sm, offset, CAPD_MAX_MSG_TO_SEND));
+            offset += CAPD_MAX_MSG_TO_SEND;
+        } while (offset < sm.size());
 
-    sendMsgs.clear();
+        sendMsgs.clear();
+    }
 
     return true;
 }

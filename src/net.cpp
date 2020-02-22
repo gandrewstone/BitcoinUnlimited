@@ -18,6 +18,7 @@
 #include "blockrelay/blockrelay_common.h"
 #include "blockrelay/graphene.h"
 #include "blockrelay/mempool_sync.h"
+#include "capd.h"
 #include "chainparams.h"
 #include "connmgr.h"
 #include "consensus/consensus.h"
@@ -3128,6 +3129,12 @@ CNode::~CNode()
     // Decrement thintype peer counters
     thinrelay.RemovePeers(this);
 
+    // Clean up the CAPD node information, if it exists
+    auto tmp = capd;
+    capd = nullptr;
+    if (tmp)
+        delete tmp;
+
     GetNodeSignals().FinalizeNode(GetId());
 }
 
@@ -3279,6 +3286,13 @@ void CNode::ReadConfigFromXVersion()
     canSyncMempoolWithPeers = (xVersion.as_u64c(XVer::BU_MEMPOOL_SYNC) == 1);
     nMempoolSyncMinVersionSupported = xVersion.as_u64c(XVer::BU_MEMPOOL_SYNC_MIN_VERSION_SUPPORTED);
     nMempoolSyncMaxVersionSupported = xVersion.as_u64c(XVer::BU_MEMPOOL_SYNC_MAX_VERSION_SUPPORTED);
+
+    num = xVersion.as_u64c(XVer::BU_CAPD_VERSION);
+    if (num)
+    {
+        capd = new CapdNode(this);
+        isCapdEnabled = true;
+    }
 }
 
 

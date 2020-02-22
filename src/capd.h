@@ -5,6 +5,7 @@
 #include <queue>
 
 #include "arith_uint256.h"
+#include "crypto/sha256.h"
 #include "fastfilter.h"
 #include "protocol.h"
 #include "serialize.h"
@@ -165,6 +166,8 @@ protected:
         RESCINDHASH = 2,
     };
 
+    bool checkNonce(unsigned char *stage1, const arith_uint256 &hashTarget);
+
 public:
     static const uint8_t CURRENT_VERSION = 0;
     static const uint8_t HASHSIZE = 20;
@@ -173,12 +176,12 @@ public:
     uint8_t version; //!< (not network serialized) The expected serialization version
 
     uint64_t createTime = 0; //!< When this message was created (seconds since epoch)
-    //! When this message expires (seconds since epoch) max_int means never
-    uint64_t expiration = std::numeric_limits<short>::max();
+    //! When this message expires (seconds since createTime) max_int means never
+    uint16_t expiration = std::numeric_limits<uint16_t>::max();
     uint160 rescindHash; //!< When the preimage is published, this message expires, 0 means no preimage
     std::vector<uint8_t> data; //!< The message contents
     uint32_t difficultyBits = 0; //!< the message's proof of work target
-    uint64_t nonce = 0; //!< needed to prove this message's POW
+    std::vector<uint8_t> nonce; //!< needed to prove this message's POW
 
     CapdMsg(uint8_t ver = CURRENT_VERSION) : version(ver) {}
     CapdMsg(const std::string &indata, uint8_t ver = CURRENT_VERSION)
@@ -229,7 +232,7 @@ public:
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream &s, Operation ser_action)
     {
-        if (s.GetType() & SER_GETHASH)
+        if (s.GetType() & SER_GETHASH) // Note this is only 1 stage of a 2 stage process of calculating the hash
         {
             READWRITE(data);
             READWRITE(createTime);
@@ -286,9 +289,10 @@ public:
            (31536000) is considered to be an offset from the current time.  For example, 0 means "now", 10 would solve
            a message that only becomes valid 10 seconds from now, and -5 solves a message that became valid 5 seconds
            ago.
-    @return the solved nonce (the message is updated with this nonce so there's nothing the caller needs to do with it)
+    @return True if the message is solved.  This function will check billions of solns so will hang before returning
+    false.
     */
-    uint64_t Solve(long int creationTime = 0);
+    bool Solve(long int creationTime = 0);
 
     /** Set difficulty bits based on difficulty value */
     void SetDifficulty(arith_uint256 target) { difficultyBits = target.GetCompact(); }
@@ -615,6 +619,7 @@ public:
 class CapdNode
 {
 public:
+    CapdNode(CNode *n) : node(n) {}
     CCriticalSection csCapdNode;
 
     CRollingFastFilter<4 * 1024 * 1024> filterInventoryKnown;

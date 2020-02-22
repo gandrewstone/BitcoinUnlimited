@@ -589,6 +589,9 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         xver.set_u64c(XVer::BU_MEMPOOL_SYNC_MIN_VERSION_SUPPORTED, mempoolSyncMinVersionSupported.Value());
         xver.set_u64c(XVer::BU_XTHIN_VERSION, 2); // xthin version
 
+        if (capdEnabled.Value())
+            xver.set_u64c(XVer::BU_CAPD_VERSION, 1); // capd version
+
         size_t nLimitAncestors = GetArg("-limitancestorcount", BU_DEFAULT_ANCESTOR_LIMIT);
         size_t nLimitAncestorSize = GetArg("-limitancestorsize", BU_DEFAULT_ANCESTOR_SIZE_LIMIT) * 1000;
         size_t nLimitDescendants = GetArg("-limitdescendantcount", BU_DEFAULT_DESCENDANT_LIMIT);
@@ -2574,6 +2577,10 @@ bool SendMessages(CNode *pto)
                 }
             }
         }
+
+        // Send any CAPD communication that might be pending
+        if (pto->capd)
+            pto->capd->FlushMessages();
 
         // If the chain is not entirely sync'd then look for new blocks to download.
         //

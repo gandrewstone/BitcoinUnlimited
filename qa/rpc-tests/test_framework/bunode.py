@@ -61,6 +61,7 @@ class BUProtocolHandler(NodeConnCB):
             self.last_headers = None
 
     def on_version(self, conn, message):
+        self.show_debug_msg("received version message")
         if message.nVersion >= 209:
             conn.send_message(msg_verack())
         conn.ver_send = min(MY_VERSION, message.nVersion)

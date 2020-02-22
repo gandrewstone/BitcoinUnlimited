@@ -260,7 +260,10 @@ class NodeConn(asyncore.dispatcher):
         b"sendcmpct": msg_sendcmpct,
         b"cmpctblock": msg_cmpctblock,
         b"getblocktxn": msg_getblocktxn,
-        b"blocktxn": msg_blocktxn
+        b"blocktxn": msg_blocktxn,
+        b"capdinv": msg_capdinv,
+        b"capdgetmsg": msg_capdgetmsg,
+        b"capdmsg": msg_capdmsg
     }, bumessagemap)
 
     BTC_MAGIC_BYTES = {
@@ -424,8 +427,8 @@ class NodeConn(asyncore.dispatcher):
                     t.deserialize(f)
                     self.got_message(t)
                 else:
-                    print("Unknown command: '" + str(command) + "' ")
-                    self.show_debug_msg("Unknown command: '" + str(command) + "' " +
+                    print("Unknown command: '" + command.decode() + "' ")
+                    self.show_debug_msg("Unknown command: '" + command.decode() + "' " +
                                         repr(msg))
                     # pdb.set_trace()
         except Exception as e:
