@@ -322,7 +322,7 @@ void CapdMsgPool::add(const CapdMsgRef &msg)
 
     auto *p = p2p; // Throw in a temp to avoid locking
     if (p)
-        p->GossipMessage(*msg);
+        p->GossipMessage(msg);
 }
 
 void CapdMsgPool::clear()
@@ -637,7 +637,6 @@ bool CapdProtocol::HandleCapdMessage(CNode *pfrom,
     }
     else if (command == NetMsgType::CAPDMSG)
     {
-        std::vector<std::pair<uint256, PriorityType> > relayInv;
         std::vector<CapdMsg> msgs; // TODO deserialize as CapdMsgRefs
         vRecv >> msgs;
         for (const auto msg : msgs)
@@ -660,7 +659,12 @@ bool CapdProtocol::HandleCapdMessage(CNode *pfrom,
             catch (CapdMsgPoolException &e)
             {
                 // messsage was too low priority, drop it
+                LOG(CAPD, "Capd message priority too low to add");
             }
+        }
+
+        if (!relayInv.empty())
+        {
         }
     }
     else
@@ -670,12 +674,19 @@ bool CapdProtocol::HandleCapdMessage(CNode *pfrom,
     return true;
 }
 
-void CapdProtocol::GossipMessage(const CapdMsg &msg)
+void CapdProtocol::GossipMessage(const CapdMsgRef &msg)
 {
-    auto hash = msg.GetHash();
-    auto inv = CInv(CAPD_MSG_TYPE, hash);
+    relayInv.push_back(std::pair<uint256, PriorityType>(msg->GetHash(), msg->Priority()));
+}
 
+void CapdProtocol::FlushGossipMessagesToNodes()
+{
     std::vector<CNode *> vNodesCopy;
+    {
+        LOCK(csCapdProtocol);
+        if (relayInv.empty())
+            return;
+    }
 
     {
         LOCK(cs_vNodes);
@@ -684,11 +695,18 @@ void CapdProtocol::GossipMessage(const CapdMsg &msg)
             pnode->AddRef();
     }
 
-    for (CNode *pnode : vNodesCopy)
     {
-        CapdNode *cn = pnode->capd;
-        if (pnode->IsCapdEnabled() && cn)
-            cn->inv(inv);
+        LOCK(csCapdProtocol);
+        for (CNode *pnode : vNodesCopy)
+        {
+            for (auto &item : relayInv)
+            {
+                CapdNode *cn = pnode->capd;
+                if (pnode->IsCapdEnabled() && cn && (item.second >= cn->youDontSendPriority))
+                    cn->invMsg(item.first);
+            }
+        }
+        relayInv.clear();
     }
     // A cs_vNodes lock is not required here when releasing refs for two reasons: one, this only decrements
     // an atomic counter, and two, the counter will always be > 0 at this point, so we don't have to worry
@@ -709,7 +727,8 @@ bool CapdNode::FlushMessages()
         unsigned int offset = 0;
         do
         {
-            node->PushMessage(NetMsgType::CAPDINV, VectorSpan<uint256>(invMsgs, offset, CAPD_MAX_INV_TO_SEND));
+            node->PushMessage(NetMsgType::CAPDINV, CompactSerializer(CapdProtocol::CAPD_MSG_TYPE),
+                VectorSpan<uint256>(invMsgs, offset, CAPD_MAX_INV_TO_SEND));
             offset += CAPD_MAX_INV_TO_SEND;
         } while (offset < invMsgs.size());
 

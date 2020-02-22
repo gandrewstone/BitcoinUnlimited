@@ -2363,6 +2363,10 @@ void ThreadMessageHandler()
             pnode->Release();
         }
 
+        // Pass any invs for any CAPD messages that have arrived to every node
+        if (capdEnabled.Value())
+            capdProtocol.FlushGossipMessagesToNodes();
+
         if (fSleep)
         {
             messageHandlerCondition.timed_wait(

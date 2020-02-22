@@ -599,6 +599,8 @@ public:
 class CapdProtocol
 {
     CapdMsgPool *pool = nullptr;
+    CCriticalSection csCapdProtocol;
+    std::vector<std::pair<uint256, PriorityType> > relayInv;
 
 public:
     enum // Since these types will never appear in a normal INV msg they could overlap values, but don't.
@@ -609,8 +611,12 @@ public:
     CapdProtocol(CapdMsgPool &msgpool) : pool(&msgpool) {}
     bool HandleCapdMessage(CNode *pfrom, std::string &command, CDataStream &vRecv, int64_t stopwatchTimeReceived);
 
+    /** Periodically distribute all the INVs that have accrued into per-node send queues, checking whether each node
+        will accept that INV (based on priority) */
+    void FlushGossipMessagesToNodes();
+
     /** Notify nodes about the existence of a message */
-    void GossipMessage(const CapdMsg &msg);
+    void GossipMessage(const CapdMsgRef &msg);
 };
 
 /** This class stores info relevant to each CNode.
@@ -641,6 +647,17 @@ public:
         if (filterInventoryKnown.checkAndSet(inv.hash))
         {
             invMsgs.push_back(inv.hash);
+            return true;
+        }
+        return false;
+    }
+    bool invMsg(const uint256 &hash)
+    {
+        LOCK(csCapdNode);
+        // Add to this send list if we haven't recently sent the same INV
+        if (filterInventoryKnown.checkAndSet(hash))
+        {
+            invMsgs.push_back(hash);
             return true;
         }
         return false;

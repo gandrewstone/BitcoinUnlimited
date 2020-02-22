@@ -24,6 +24,8 @@ class CapdProtoHandler(BUProtocolHandler):
         BUProtocolHandler.__init__(self)
         self.lastCapdGetMsg = None
         self.numCapdGetMsg = 0
+        self.lastCapdInvHashes = None
+        self.numInvMsgs = 0
 
     def on_version(self, conn, message):
         BUProtocolHandler.on_version(self,conn, message)
@@ -34,7 +36,11 @@ class CapdProtoHandler(BUProtocolHandler):
         conn.send_message(msg_xverack())
 
     def on_capdinv(self, conn, message):
-        pdb.set_trace()
+        self.lastCapdInvHashes = message.hashes
+        self.numInvMsgs += 1
+        print("CAPD INV:")
+        for m in message.hashes:
+            print("  " + m.hex())
 
     def on_capdmsg(self, conn, message):
         pdb.set_trace()
@@ -66,7 +72,6 @@ class MyTest (BitcoinTestFramework):
         self.nt.start()
 
     def run_test (self):
-
         logging.info("CAPD message pool test")
 
         # generate 1 block to kick nodes out of IBD mode
@@ -106,9 +111,25 @@ class MyTest (BitcoinTestFramework):
         getmsg = hdlr.lastCapdGetMsg
         assert_equal(len(getmsg.hashes), 1)
         assert_equal(getmsg.hashes[0],hash256(b'0'))
-        # I sent a bogus hash, no just ignore the message request
+        # I sent a bogus hash, nothing to do except ignore the message request
 
+        m = CapdMsg(b"this is a test")
+        m.solve(4)
+        print("hash: " + m.calcHash().hex() )
 
+        hdlr.send_message(msg_capdmsg([m]))
+        # Wait for the node to INV me with my own message
+        while hdlr.lastCapdInvHashes == None:
+            print("waiting for INV")
+            time.sleep(1)
+
+        # This checks the communications protocol and that both sides calculated the same hash for the same message, which
+        # tests both the message serialization integrity, the hash algorithm, and endianness when converting hash bytes to numbers
+        # because if the conversion is wrong, the incorrect hash-as-integer will be very likely to be > the target so won't be inserted or relayed
+        assert_equal(hdlr.lastCapdInvHashes[0], m.calcHash())
+
+        logging.info("CAPD test finished")
+        time.sleep(10)
         pdb.set_trace()
 
 

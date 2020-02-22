@@ -236,9 +236,36 @@ def uint256_from_bigendian(s):
 
 
 def uint256_from_compact(c):
+    """Convert compact encoding to uint256
+
+    Used for the nBits compact encoding of the target in the block header.
+    """
     nbytes = (c >> 24) & 0xFF
-    v = (c & 0xFFFFFF) << (8 * (nbytes - 3))
+    if nbytes <= 3:
+        v = (c & 0xFFFFFF) >> 8 * (3 - nbytes)
+    else:
+        v = (c & 0xFFFFFF) << (8 * (nbytes - 3))
     return v
+
+def compact_from_uint256(v):
+    """Convert uint256 to compact encoding
+    """
+    nbytes = (v.bit_length() + 7) >> 3
+    compact = 0
+    if nbytes <= 3:
+        compact = (v & 0xFFFFFF) << 8 * (3 - nbytes)
+    else:
+        compact = v >> 8 * (nbytes - 3)
+        compact = compact & 0xFFFFFF
+
+    # If the sign bit (0x00800000) is set, divide the mantissa by 256 and
+    # increase the exponent to get an encoding without it set.
+    if compact & 0x00800000:
+        compact >>= 8
+        nbytes += 1
+
+    return compact | nbytes << 24
+
 
 def deser_double(f):
     return struct.unpack("<d", f.read(8))[0]

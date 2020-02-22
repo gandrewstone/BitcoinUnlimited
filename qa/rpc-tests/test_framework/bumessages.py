@@ -2,6 +2,20 @@ import pdb
 
 from .nodemessages import *
 
+CAPD_NOMINAL_MSG_SIZE = 100
+
+CAPD_MIN_FORWARD_MSG_DIFFICULTY = 0x007fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+CAPD_MIN_LOCAL_MSG_DIFFICULTY = 0x00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+
+
+def CapdMsgPriorityToDifficultyTarget(priority, msgContentSize):
+    if msgContentSize > CAPD_NOMINAL_MSG_SIZE:
+        priority = float(priority * msgContentSize) / float(CAPD_NOMINAL_MSG_SIZE)
+
+    ret = CAPD_MIN_LOCAL_MSG_DIFFICULTY / priority;
+    return int(ret)
+
+
 class CapdMsg(object):
     FIELD_HAS_EXPIRATION  = 1
     FIELD_HAS_RESCINDHASH = 2
@@ -38,8 +52,8 @@ class CapdMsg(object):
     def serialize(self):
         flag = 0
         if self.expiration != None: flag |= FIELD_HAS_EXPIRATION
-        if self.rescingHash != None: flag |= FIELD_HAS_RESCINDHASH
-        r = bytes(chr(flag))
+        if self.rescindHash != None: flag |= FIELD_HAS_RESCINDHASH
+        r = chr(flag).encode()
         r += struct.pack("<Q", self.createTime)
         r += struct.pack("<I", self.difficultyBits)
         r += ser_string(self.nonce)
@@ -47,17 +61,45 @@ class CapdMsg(object):
         if self.rescindHash != None:
             assert(len(self.rescindHash)==20)
             r += self.rescindHash
-        r += self.data
+        r += ser_string(self.data)
         return r
+    
+    def setDifficultyBitsFromPriority(self, priority):
+        t = CapdMsgPriorityToDifficultyTarget(priority, len(self.data))
+        self.difficultyBits = compact_from_uint256(t)
+        return self.difficultyBits
 
+    def solve(self, minPriority):
+        self.createTime = int(time.time())
+        # convert priority to nBits format and back rather than straight to difficulty
+        # because rounding during the conversion
+        self.setDifficultyBitsFromPriority(minPriority)
+
+        diffTarget = uint256_from_compact(self.difficultyBits)
+        stage1 = sha256(self.serializeForHash())
+        n = 0
+        while 1:
+            self.nonce = n.to_bytes(3, "big")
+            hsh = hash256(stage1 + self.nonce)
+            hshNum = int.from_bytes(hsh, "little")
+            if hshNum <= diffTarget:
+                return True
+            n += 1
+        return False
+
+    def calcHash(self):
+        stage1data = self.serializeForHash()
+        stage1 = sha256(stage1data)
+        hsh = hash256(stage1 + self.nonce)
+        return hsh
+    
     def serializeForHash(self):
-        r = b""
-        r += self.data
+        r = ser_string(self.data)
         r += struct.pack("<Q", self.createTime)
 
         rs = self.rescindHash
         if rs == None:
-            rs = bytes(chr(0))*20
+            rs = b"\0"*20
         r += rs
 
         e = self.expiration
@@ -65,6 +107,7 @@ class CapdMsg(object):
         r += struct.pack("<H", e)
         
         r += struct.pack("<I", self.difficultyBits)
+        print("hash serialization %s" % r.hex())
         return r
 
     def toHex(self):
@@ -79,7 +122,7 @@ class msg_capdinv(object):
         self.hashes = hashes
 
     def deserialize(self, f):
-        invType = CompactSize.deserialize(f)
+        invType = int(CompactSize().deserialize(f))
         assert(invType == msg_capdinv.CAPD_MSG_TYPE)
         self.hashes = deser_hash32_vector(f)
         return self
@@ -126,8 +169,8 @@ class msg_capdmsg(object):
         return ser_vector(self.msgs)
 
     def __repr__(self):
-        if self.hashes is not None:
-            return "msg_capdmsg()"
+        if self.msgs is not None:
+            return "msg_capdmsg([%d msgs])" % len(self.msgs)
         else:
             return "msg_capdmsg()"
 
