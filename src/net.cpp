@@ -2364,7 +2364,7 @@ void ThreadMessageHandler()
         }
 
         // Pass any invs for any CAPD messages that have arrived to every node
-        if (capdEnabled.Value())
+        if (capdPoolSize.Value() > 0)
             capdProtocol.FlushGossipMessagesToNodes();
 
         if (fSleep)

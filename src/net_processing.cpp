@@ -589,7 +589,7 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         xver.set_u64c(XVer::BU_MEMPOOL_SYNC_MIN_VERSION_SUPPORTED, mempoolSyncMinVersionSupported.Value());
         xver.set_u64c(XVer::BU_XTHIN_VERSION, 2); // xthin version
 
-        if (capdEnabled.Value())
+        if (capdPoolSize.Value() > 0)
             xver.set_u64c(XVer::BU_CAPD_VERSION, 1); // capd version
 
         size_t nLimitAncestors = GetArg("-limitancestorcount", BU_DEFAULT_ANCESTOR_LIMIT);
@@ -1963,7 +1963,8 @@ bool ProcessMessage(CNode *pfrom, std::string strCommand, CDataStream &vRecv, in
         pfrom->fRelayTxes = true;
     }
 
-    else if (capdEnabled.Value() && pfrom->IsCapdEnabled() && (strCommand.substr(0, 4) == NetMsgType::CAPDPREFIX))
+    else if ((capdPoolSize.Value() > 0) && pfrom->IsCapdEnabled() &&
+             (strCommand.substr(0, 4) == NetMsgType::CAPDPREFIX))
     {
         capdProtocol.HandleCapdMessage(pfrom, strCommand, vRecv, nStopwatchTimeReceived);
     }

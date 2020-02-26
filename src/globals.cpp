@@ -14,6 +14,7 @@
 #include "blockrelay/graphene.h"
 #include "blockrelay/mempool_sync.h"
 #include "blockrelay/thinblock.h"
+#include "capd.h"
 #include "chain.h"
 #include "chainparams.h"
 #include "clientversion.h"
@@ -270,11 +271,12 @@ CTweak<uint32_t> netMagic("net.magic", "Network prefix override. If 0 use the de
 
 CTweak<uint32_t> randomlyDontInv("net.randomlyDontInv", "Skip sending an INV for some percent of transactions", 0);
 
-CTweak<bool> capdEnabled("net.capd",
-    "Enable/disable the counterparty and protocol discovery message pool.\n"
+CTweakRef<uint64_t> capdPoolSize("net.capd",
+    "Set the counterparty and protocol discovery message pool size.  0 disables.\n"
     "Note that enabling CAPD will only happen for new node connections, and\n"
     "disabling will make this node silently drop incoming CAPD messages.",
-    false);
+    &msgpoolMaxSize,
+    &CapdMsgPoolSizeValidator);
 
 CTweakRef<uint64_t> ebTweak("net.excessiveBlock",
     "Excessive block size in bytes",

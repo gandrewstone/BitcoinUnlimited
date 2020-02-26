@@ -234,7 +234,8 @@ BOOST_AUTO_TEST_CASE(capd_pool_test_vectors)
     CapdMsg msg1("this is a test");
 
     const unsigned int TEST_MSGPOOL_SIZE = 4000;
-    CapdMsgPool mp(TEST_MSGPOOL_SIZE);
+    CapdMsgPool mp;
+    mp.SetMaxSize(TEST_MSGPOOL_SIZE);
     // Empty pool must be  minimum difficulty
     BOOST_CHECK(msgpool.GetRelayDifficulty() == ArithToUint256(MIN_FORWARD_MSG_DIFFICULTY));
 
@@ -398,7 +399,8 @@ BOOST_AUTO_TEST_CASE(capd_pool_test_vectors2)
     SetMockTime(now); // Freeze the time at now
 
     const unsigned int TEST_MSGPOOL_SIZE = 2000;
-    CapdMsgPool mp(TEST_MSGPOOL_SIZE);
+    CapdMsgPool mp;
+    mp.SetMaxSize(TEST_MSGPOOL_SIZE);
 
     // Insert a high POW message
     CapdMsg msg1("!!this is a test");

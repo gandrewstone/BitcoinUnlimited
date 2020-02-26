@@ -27,6 +27,8 @@ class CapdProtoHandler(BUProtocolHandler):
         self.lastCapdInvHashes = None
         self.numInvMsgs = 0
 
+        self.msgs = {}
+
     def on_version(self, conn, message):
         BUProtocolHandler.on_version(self,conn, message)
         conn.send_message(msg_xversion({int(CAPD_XVERSION_STR,16): 1}))
@@ -38,9 +40,9 @@ class CapdProtoHandler(BUProtocolHandler):
     def on_capdinv(self, conn, message):
         self.lastCapdInvHashes = message.hashes
         self.numInvMsgs += 1
-        print("CAPD INV:")
-        for m in message.hashes:
-            print("  " + m.hex())
+        # print("CAPD INV:")
+        # for m in message.hashes:
+        #    print("  " + m.hex())
 
     def on_capdmsg(self, conn, message):
         pdb.set_trace()
@@ -49,15 +51,24 @@ class CapdProtoHandler(BUProtocolHandler):
         self.lastCapdGetMsg = message
         self.numCapdGetMsg += 1
 
+        # If test should automatically reply to this incoming message, then fill self.msgs with possible replies
+        replymsgs = []
+        for h in message.hashes:
+            if h in self.msgs:
+                replymsgs.append(self.msgs[h])
+        if len(replymsgs)>0:
+            self.send_message(msg_capdmsg(replymsgs))
+
+
 class MyTest (BitcoinTestFramework):
 
     def setup_chain(self,bitcoinConfDict=None, wallets=None):
         print("Initializing test directory "+self.options.tmpdir)
-        bitcoinConfDict.update({ "net.capd": 1})
+        bitcoinConfDict.update({ "net.capd": 100000})
         initialize_chain(self.options.tmpdir, bitcoinConfDict, wallets)
 
     def setup_network(self, split=False):
-        self.nodes = start_nodes(1, self.options.tmpdir)
+        self.nodes = start_nodes(2, self.options.tmpdir)
         # Now interconnect the nodes
         connect_nodes_full(self.nodes)
         self.is_network_split=False
@@ -128,8 +139,76 @@ class MyTest (BitcoinTestFramework):
         # because if the conversion is wrong, the incorrect hash-as-integer will be very likely to be > the target so won't be inserted or relayed
         assert_equal(hdlr.lastCapdInvHashes[0], m.calcHash())
 
+        # Test propagation protocol since node 0 and node 1 should run the INV, GETCAPDMSG, CAPDMSG protocol when I gave node 0 a new message
+        assert_equal(self.nodes[1].capd()["count"], 1)
+
+        l0 = self.nodes[0].capd("list")
+        l1 = self.nodes[1].capd("list")
+        assert_equal(l0, l1)
+
+        print("Create 300 messages")
+        # Let's create a lot of messages
+        hdlr.msgs = {}
+        EXP_MSGS = 301
+        for i in range(0,EXP_MSGS-1):
+            m = CapdMsg(i.to_bytes(2,"big") + (b" msg count %d" % i))
+            m.solve(7)
+            hdlr.msgs[m.getHash()] = m
+
+        hdlr.send_message(msg_capdinv([ x.getHash() for x in hdlr.msgs.values()]))
+
+        try:
+            waitFor(15, lambda: self.nodes[0].capd()["count"] == EXP_MSGS)
+        except TimeoutException:
+            print(self.nodes[0].capd())
+            pdb.set_trace()
+
+        try:
+            waitFor(5, lambda: sorted(self.nodes[0].capd("list")) == sorted(self.nodes[1].capd("list")))
+        except TimeoutException:
+            print ("not equal")
+
+        if 0:
+            for x in self.nodes:
+                print()
+                print(x.capd())
+                print(x.capd("list"))
+
+        l0 = self.nodes[0].capd("list")
+        l1 = self.nodes[1].capd("list")
+        assert_equal(sorted(l0),sorted(l1))
+        if sorted(l0) != sorted(l1):
+            print("incomplete propagation")
+            s0 = set(l0)
+            s1 = set(l1)
+            sleft = s0 - s1
+            print("unpropagated: ", len(sleft))
+            print (sleft)
+
+
+        # pdb.set_trace()
+        # reduce the capd message size and validate that it gets pared down
+        self.nodes[1].set("net.capd=1000")
+        st0 = self.nodes[1].capd()
+        assert(st0["size"] < 1000)
+        print(st0)
+
+        print("Create 2000 messages, overflow pool")
+        # Generate acceptable messages, given a full msg pool
+        hdlr.msgs={}
+        while i < 5000:
+            i+=1
+            st0 = self.nodes[1].capd()
+            pri = st0["relayPriority"]
+            if i&127 == 0: print("%d: priority: %f" % (i,pri))
+            m = CapdMsg(i.to_bytes(2,"big") + (b" 2nd msg count %d" % i))
+            m.solve(pri + decimal.Decimal(0.1))
+            hdlr.msgs[m.getHash()] = m
+            hdlr.send_message(msg_capdinv([ m.getHash()]))
+            # time.sleep(0.001)
+
         logging.info("CAPD test finished")
-        time.sleep(10)
+        time.sleep(1)
         pdb.set_trace()
 
 
@@ -142,7 +221,7 @@ def Test():
     t = MyTest()
     t.drop_to_pdb=True
     bitcoinConf = {
-        "debug": ["net", "blk", "thin", "mempool", "req", "bench", "evict"],
+        "debug": ["capd", "net", "blk", "thin", "mempool", "req", "bench", "evict"],
         "blockprioritysize": 2000000  # we don't want any transactions rejected due to insufficient fees...
     }
 

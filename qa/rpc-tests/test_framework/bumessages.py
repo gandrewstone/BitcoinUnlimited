@@ -26,6 +26,7 @@ class CapdMsg(object):
         self.data = data
         self.difficultyBits = 0
         self.nonce = 0
+        self.cachedHash = None
         
     def deserialize(self, f):
         if isinstance(f, str):
@@ -83,14 +84,20 @@ class CapdMsg(object):
             hsh = hash256(stage1 + self.nonce)
             hshNum = int.from_bytes(hsh, "little")
             if hshNum <= diffTarget:
+                self.cachedHash = hsh
                 return True
             n += 1
         return False
+
+    def getHash(self):
+        if self.cachedHash != None: return self.cachedHash
+        return self.getHash()
 
     def calcHash(self):
         stage1data = self.serializeForHash()
         stage1 = sha256(stage1data)
         hsh = hash256(stage1 + self.nonce)
+        self.cachedHash = hsh
         return hsh
     
     def serializeForHash(self):
@@ -107,7 +114,7 @@ class CapdMsg(object):
         r += struct.pack("<H", e)
         
         r += struct.pack("<I", self.difficultyBits)
-        print("hash serialization %s" % r.hex())
+        # print("hash serialization %s" % r.hex())
         return r
 
     def toHex(self):

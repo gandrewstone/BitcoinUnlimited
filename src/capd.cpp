@@ -22,6 +22,8 @@
 
 const CapdMsgRef nullmsgref = CapdMsgRef();
 
+uint64_t msgpoolMaxSize = 0; // off by default
+
 const long int YEAR_OF_SECONDS = 31536000;
 const uint CAPD_MAX_INV_TO_SEND = 20000;
 const uint CAPD_MAX_MSG_TO_REQUEST = 10000;
@@ -30,7 +32,7 @@ const uint CAPD_MAX_MSG_TO_SEND = 5000;
 CapdMsgPool msgpool;
 CapdProtocol capdProtocol(msgpool);
 
-uint64_t MSG_LIFETIME_SEC = 60 * 60 * 10; // expected message lifetime in seconds
+uint64_t MSG_LIFETIME_SEC = 60 * 10; // expected message lifetime in seconds
 uint64_t NOMINAL_MSG_SIZE = 100; // A message of this size or less has no penalty
 
 // Local message difficulty must be less than forwarded message difficulty
@@ -177,11 +179,12 @@ uint256 CapdMsg::CalcHash() const
     sha2.Write(stage1, sizeof(stage1));
     sha2.Write(&nonce[0], nonce.size());
     sha2.Finalize(hash.begin());
-
+    cachedHash = hash;
     return hash;
 }
 
 PriorityType CapdMsg::Priority() const { return ::Priority(difficultyBits, data.size(), GetTime() - createTime); }
+PriorityType CapdMsg::InitialPriority() const { return ::Priority(difficultyBits, data.size(), 0); }
 bool CapdMsg::DoesPowMatchDifficulty() const { return GetDifficulty() > GetHash(); }
 std::string CapdMsg::EncodeHex()
 {
@@ -295,10 +298,10 @@ bool CapdMsg::Solve(long int time)
 
 void CapdMsgPool::add(const CapdMsgRef &msg)
 {
+    bool broadcast = false;
+
     {
         WRITELOCK(csMsgPool);
-
-        // TODO clean up a message if pool is filled
 
         if (!msg->DoesPowMatchDifficulty())
         {
@@ -313,28 +316,32 @@ void CapdMsgPool::add(const CapdMsgRef &msg)
             throw CapdMsgPoolException("Message POW too low");
         }
 
-        // Free up some room
-        _pare(msg->RamSize());
-
-        msgs.insert(msg);
-        size += msg->RamSize();
+        // Insert the message if it doesn't already exist
+        if (msgs.find(msg->GetHash()) == msgs.end())
+        {
+            // Free up some room
+            _pare(msg->RamSize());
+            msgs.insert(msg);
+            size += msg->RamSize();
+            broadcast = true;
+        }
+        else
+        {
+            LOG(CAPD, "message exists: %s", msg->GetHash().GetHex());
+        }
     }
 
-    auto *p = p2p; // Throw in a temp to avoid locking
-    if (p)
-        p->GossipMessage(msg);
+    if (broadcast)
+    {
+        auto *p = p2p; // Throw in a temp to avoid locking
+        if (p)
+            p->GossipMessage(msg);
+    }
 }
 
 void CapdMsgPool::clear()
 {
     WRITELOCK(csMsgPool);
-    /*
-    cam.clear();
-    while (!heap.empty())
-    {
-        heap.pop();
-    }
-    */
     msgs.clear();
     size = 0;
 }
@@ -444,17 +451,13 @@ PriorityType CapdMsgPool::_GetLocalPriority()
     auto &priorityIndexer = msgs.get<MsgPriorityTag>();
 
     MsgIterByPriority i = priorityIndexer.begin();
-    auto last = priorityIndexer.end();
-    last--;
-    if ((*last)->Priority() < (*i)->Priority())
-    {
-        return (*last)->Priority();
-    }
-
     if (i == priorityIndexer.end())
         return MIN_LOCAL_PRIORITY;
 
-    PriorityType ret = (*i)->Priority();
+    MsgIterByPriority last = priorityIndexer.end();
+    last--;
+
+    PriorityType ret = (*last)->Priority();
     if (ret < MIN_LOCAL_PRIORITY)
         return MIN_LOCAL_PRIORITY;
     return ret;
@@ -487,6 +490,7 @@ void CapdMsgPool::_pare(int len)
 
 CapdMsgRef CapdMsgPool::find(const uint256 &hash) const
 {
+    READLOCK(csMsgPool);
     MsgIter i = msgs.find(hash);
     if (i == msgs.end())
         return nullmsgref;
@@ -588,12 +592,19 @@ bool CapdProtocol::HandleCapdMessage(CNode *pfrom,
     CDataStream &vRecv,
     int64_t stopwatchTimeReceived)
 {
+    LOG(CAPD, "Capd: process message %s from %s\n", command.c_str(), pfrom->GetLogName());
     DbgAssert(pool != nullptr, return false);
     CapdNode *cn = pfrom->capd;
     if (!pfrom->IsCapdEnabled())
+    {
+        LOG(CAPD, "Capd: received message but not enabled on node %s\n", pfrom->GetLogName());
         return false;
+    }
     if (!cn)
+    {
+        LOG(CAPD, "Capd: received message but no processing object on node %s\n", pfrom->GetLogName());
         return false;
+    }
 
     if (command == NetMsgType::CAPDINV)
     {
@@ -604,6 +615,7 @@ bool CapdProtocol::HandleCapdMessage(CNode *pfrom,
             return error(CAPD, "Received INV with unknown type %d\n", objtype);
         }
         vRecv >> vInv;
+        LOG(CAPD, "Capd: Received %d message INVs", vInv.size());
         if (vInv.size() > CAPD_MAX_INV_TO_SEND)
         {
             dosMan.Misbehaving(pfrom, 20);
@@ -612,7 +624,14 @@ bool CapdProtocol::HandleCapdMessage(CNode *pfrom,
         for (auto inv : vInv)
         {
             if (pool->find(inv) == nullptr)
+            {
+                LOG(CAPD, "received INV %s", inv.GetHex());
                 cn->getData(CInv(objtype, inv));
+            }
+            else
+            {
+                LOG(CAPD, "repeat INV %s", inv.GetHex());
+            }
         }
     }
     else if (command == NetMsgType::CAPDGETMSG)
@@ -620,51 +639,65 @@ bool CapdProtocol::HandleCapdMessage(CNode *pfrom,
         std::vector<uint256> msgIds;
         vRecv >> cn->youDontSendPriority;
         vRecv >> msgIds;
+        LOG(CAPD, "Capd: Received %d message requests", msgIds.size());
         if (msgIds.size() > CAPD_MAX_MSG_TO_REQUEST)
         {
             dosMan.Misbehaving(pfrom, 20);
-            return error(CAPD, "Received message with too many (%d) capd message requests\n", msgIds.size());
+            return error(CAPD, "Capd drop: Received message with too many (%d) capd message requests\n", msgIds.size());
         }
 
         for (auto id : msgIds)
         {
+            LOG(CAPD, "received GetMsg %s", id.GetHex());
             auto msg = pool->find(id);
-            if ((msg != nullptr) && (msg->Priority() >= cn->youDontSendPriority))
+            if (msg == nullptr)
             {
-                cn->sendMsg(msg);
+                LOG(CAPD, "Capd drop: requested unknown message\n");
+                continue;
             }
+            if (msg->Priority() < cn->youDontSendPriority)
+            {
+                LOG(CAPD, "Capd drop: message priority %f below destination relay priority %f\n", msg->Priority(),
+                    cn->youDontSendPriority);
+                continue;
+            }
+
+            cn->sendMsg(msg);
         }
     }
     else if (command == NetMsgType::CAPDMSG)
     {
         std::vector<CapdMsg> msgs; // TODO deserialize as CapdMsgRefs
         vRecv >> msgs;
+        LOG(CAPD, "Capd: Received %d messages", msgs.size());
         for (const auto msg : msgs)
         {
             auto msgRef = MakeMsgRef(CapdMsg(msg));
+            uint256 hash = msgRef->GetHash();
+            LOG(CAPD, "received Msg %s\n", hash.GetHex());
             PriorityType priority = msgRef->Priority();
+            LOG(CAPD, "Msg priority %f\n", priority);
             if (priority < cn->dontSendMePriority)
             {
                 dosMan.Misbehaving(pfrom, 1);
-                LOG(CAPD, "Capd message priority below minimum for node %s: %f %f\n", pfrom->GetLogName(), priority,
-                    cn->dontSendMePriority);
+                LOG(CAPD, "Capd drop: message %s priority below minimum for node %s: %f %f\n",
+                    msgRef->GetHash().GetHex(), pfrom->GetLogName(), priority, cn->dontSendMePriority);
                 continue;
             }
 
             try
             {
                 pool->add(msgRef);
-                relayInv.push_back(std::pair<uint256, PriorityType>(msgRef->GetHash(), priority));
+                LOG(CAPD, "relaying %s\n", hash.GetHex());
+                LOCK(csCapdProtocol);
+                relayInv.push_back(std::pair<uint256, PriorityType>(hash, priority));
+                LOG(CAPD, "relay %s pushed\n", hash.GetHex());
             }
             catch (CapdMsgPoolException &e)
             {
                 // messsage was too low priority, drop it
-                LOG(CAPD, "Capd message priority too low to add");
+                LOG(CAPD, "Capd drop: message priority too low to add");
             }
-        }
-
-        if (!relayInv.empty())
-        {
         }
     }
     else
@@ -676,6 +709,7 @@ bool CapdProtocol::HandleCapdMessage(CNode *pfrom,
 
 void CapdProtocol::GossipMessage(const CapdMsgRef &msg)
 {
+    LOCK(csCapdProtocol);
     relayInv.push_back(std::pair<uint256, PriorityType>(msg->GetHash(), msg->Priority()));
 }
 
@@ -699,11 +733,22 @@ void CapdProtocol::FlushGossipMessagesToNodes()
         LOCK(csCapdProtocol);
         for (CNode *pnode : vNodesCopy)
         {
+            CapdNode *cn = pnode->capd;
+            if (!pnode->IsCapdEnabled() || !cn)
+            {
+                LOG(CAPD, "Not relaying to non-capd node %s\n", pnode->GetLogName());
+                continue;
+            }
+
             for (auto &item : relayInv)
             {
-                CapdNode *cn = pnode->capd;
-                if (pnode->IsCapdEnabled() && cn && (item.second >= cn->youDontSendPriority))
+                if (item.second >= cn->youDontSendPriority)
                     cn->invMsg(item.first);
+                else
+                {
+                    LOG(CAPD, "Not relaying %s to node %s (priority %f < %f)\n", item.first.GetHex(),
+                        pnode->GetLogName(), item.second, cn->youDontSendPriority);
+                }
             }
         }
         relayInv.clear();
@@ -724,13 +769,18 @@ bool CapdNode::FlushMessages()
 
     if (!invMsgs.empty())
     {
+        for (auto i : invMsgs)
+        {
+            LOG(CAPD, "flush INV for %s\n", i.GetHex());
+        }
+
         unsigned int offset = 0;
-        do
+        while (offset < invMsgs.size())
         {
             node->PushMessage(NetMsgType::CAPDINV, CompactSerializer(CapdProtocol::CAPD_MSG_TYPE),
                 VectorSpan<uint256>(invMsgs, offset, CAPD_MAX_INV_TO_SEND));
             offset += CAPD_MAX_INV_TO_SEND;
-        } while (offset < invMsgs.size());
+        }
 
         invMsgs.clear();
     }
@@ -944,4 +994,18 @@ void StopCapd()
 {
     for (unsigned int i = 0; i < ARRAYLEN(uri_prefixes); i++)
         UnregisterHTTPHandler(uri_prefixes[i].prefix, false);
+}
+
+
+std::string CapdMsgPoolSizeValidator(const uint64_t &value, uint64_t *item, bool validate)
+{
+    if (validate)
+    {
+        return std::string();
+    }
+    else
+    {
+        msgpool.SetMaxSize(msgpoolMaxSize);
+    }
+    return std::string();
 }

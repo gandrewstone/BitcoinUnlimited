@@ -48,8 +48,8 @@ extern PriorityType MIN_LOCAL_PRIORITY;
 /** The maximum uint256 number (a useful constant) */
 extern arith_uint256 MAX_UINT256;
 
-/** Whether CAPD is enabled on this node */
-extern CTweak<bool> capdEnabled;
+/** Size of the capd message pool, and whether CAPD is enabled on this node (size != 0) */
+extern CTweakRef<uint64_t> capdPoolSize;
 
 
 /* When converting a double to a uint256, precision will be lost.  This is how much to keep.
@@ -170,7 +170,6 @@ protected:
 
 public:
     static const uint8_t CURRENT_VERSION = 0;
-    static const uint8_t HASHSIZE = 20;
 
     // TODO version in CDataStream could replace this
     uint8_t version; //!< (not network serialized) The expected serialization version
@@ -182,6 +181,8 @@ public:
     std::vector<uint8_t> data; //!< The message contents
     uint32_t difficultyBits = 0; //!< the message's proof of work target
     std::vector<uint8_t> nonce; //!< needed to prove this message's POW
+
+    mutable uint256 cachedHash;
 
     CapdMsg(uint8_t ver = CURRENT_VERSION) : version(ver) {}
     CapdMsg(const std::string &indata, uint8_t ver = CURRENT_VERSION)
@@ -267,7 +268,12 @@ public:
     uint256 CalcHash() const;
 
     /** Calculate or return the cached hash of this message */
-    uint256 GetHash() const { return CalcHash(); }
+    uint256 GetHash() const
+    {
+        if (cachedHash != uint256())
+            return cachedHash;
+        return CalcHash();
+    }
     /** Verify that the proof of work matches the difficulty claimed in the message */
     bool DoesPowMatchDifficulty() const;
 
@@ -311,6 +317,9 @@ public:
 
     /** Returns the message's current priority */
     PriorityType Priority() const;
+
+    /** Returns the message's original priority (without time adjustment) */
+    PriorityType InitialPriority() const;
 
     /** Serialize into a hex string */
     std::string EncodeHex();
@@ -519,11 +528,24 @@ protected:
     CapdProtocol *p2p = nullptr;
 
 public:
-    CapdMsgPool(uint64_t maxSz = DEFAULT_MSG_POOL_MAX_SIZE) : maxSize(maxSz) {}
     enum
     {
         DEFAULT_MSG_POOL_MAX_SIZE = 100 * 1024 * 1024
     };
+
+    CapdMsgPool() : maxSize(DEFAULT_MSG_POOL_MAX_SIZE) {}
+    /** Set a new maximum size for this message pool */
+    void SetMaxSize(uint64_t newSize)
+    {
+        if (newSize != maxSize)
+        {
+            maxSize = newSize;
+            if (Size() > maxSize)
+            {
+                pare(0);
+            }
+        }
+    }
 
     void setP2PprotocolHandler(CapdProtocol *protoHandler) { p2p = protoHandler; }
     /** Return the minimum difficulty for a message to be accepted into this mempool and be elligible for forwarding
@@ -569,8 +591,6 @@ public:
     /** Delete every message in the message pool */
     void clear();
 
-    /** Set the message pool size in bytes */
-    void SetMaxSize(unsigned int sz) { maxSize = sz; }
     /** Return the current size of the msg pool */
     uint64_t Size() { return size; }
     /** Return the current size of the msg pool */
@@ -578,10 +598,28 @@ public:
     /** Returns a reference to the message whose id is hash, or a null pointer */
     CapdMsgRef find(const uint256 &hash) const;
 
+    /** Iterate over every message in the pool, calling f.  f returns true to continue iterating, false to abort.
+        @returns True if every message was visited, false if f aborted. */
+    template <typename Fn>
+    bool visit(Fn f)
+    {
+        READLOCK(csMsgPool);
+        auto &priorityIndexer = msgs.get<MsgPriorityTag>();
+        auto end = priorityIndexer.end();
+        for (MsgIterByPriority i = priorityIndexer.begin(); i != end; i++)
+        {
+            CapdMsgRef m = *i;
+            if (!f(m))
+                return false;
+        }
+        return true;
+    }
+
+
     /** Content search */
     std::vector<CapdMsgRef> find(const std::vector<unsigned char> c) const;
 
-    /** Remove enough lowest priority messages to make len bytes available in the msgpool */
+    /** Remove enough lowest priority messages to make at least len bytes available in the msgpool */
     void pare(int len)
     {
         WRITELOCK(csMsgPool);
@@ -640,23 +678,14 @@ public:
     PriorityType youDontSendPriority = MIN_RELAY_PRIORITY;
 
     //! Puts this INV into a queue to be sent.  Returns true if this inv hasn't been seen before
-    bool inv(const CInv &inv)
-    {
-        LOCK(csCapdNode);
-        // Add to this send list if we haven't recently sent the same INV
-        if (filterInventoryKnown.checkAndSet(inv.hash))
-        {
-            invMsgs.push_back(inv.hash);
-            return true;
-        }
-        return false;
-    }
+    bool inv(const CInv &inv) { return invMsg(inv.hash); }
     bool invMsg(const uint256 &hash)
     {
         LOCK(csCapdNode);
         // Add to this send list if we haven't recently sent the same INV
         if (filterInventoryKnown.checkAndSet(hash))
         {
+            LOG(CAPD, "inv %s\n", hash.GetHex()); // , node->GetLogName());
             invMsgs.push_back(hash);
             return true;
         }
@@ -681,5 +710,8 @@ public:
     bool FlushMessages();
 };
 
+extern std::string CapdMsgPoolSizeValidator(const uint64_t &value, uint64_t *item, bool validate);
+
+extern uint64_t msgpoolMaxSize;
 extern CapdMsgPool msgpool;
 extern CapdProtocol capdProtocol;
