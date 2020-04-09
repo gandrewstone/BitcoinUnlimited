@@ -27,7 +27,6 @@
 #include "script/sign.h"
 #include "timedata.h"
 #include "txadmission.h"
-#include "tokengroups.h"
 #include "tokengroupwallet.h"
 #include "txmempool.h"
 #include "ui_interface.h"
@@ -2026,7 +2025,7 @@ unsigned int CWallet::FilterCoins(vector<COutput> &vCoins,
             const uint256 &wtxid = it->first;
             const CWalletTx *pcoin = &(*it).second;
 
-            if (!CheckFinalTx(*pcoin))
+            if (!CheckFinalTx(MakeTransactionRef(*pcoin)))
                 continue;
 
             if (pcoin->IsCoinBase() && pcoin->GetBlocksToMaturity() > 0)
@@ -2451,11 +2450,7 @@ bool CWallet::SignTransaction(CMutableTransaction &tx)
 {
     AssertLockHeld(cs_wallet); // mapWallet
 
-    unsigned int sighashType = SIGHASH_ALL;
-    if (IsUAHFforkActiveOnNextBlock(chainActive.Tip()->nHeight) && walletSignWithForkSig.value)
-    {
-        sighashType |= SIGHASH_FORKID;
-    }
+    unsigned int sighashType = SIGHASH_ALL | SIGHASH_FORKID;
 
     CTransaction txNewConst(tx);
     int nIn = 0;

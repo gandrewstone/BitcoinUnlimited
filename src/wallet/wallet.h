@@ -166,12 +166,12 @@ struct CGroupedOutputEntry : public COutputEntry
 {
     CTokenGroupID grp;
     CAmount grpAmount;
-    CGroupedOutputEntry(const CTokenGroupID &grp,
-        CAmount grpAmount,
+    CGroupedOutputEntry(const CTokenGroupID &_grp,
+        CAmount _grpAmount,
         const CTxDestination &dest,
         CAmount amt,
         int outidx)
-        : grp(grp), grpAmount(grpAmount)
+        : grp(_grp), grpAmount(_grpAmount)
     {
         destination = dest;
         amount = amt;
@@ -458,6 +458,13 @@ public:
 
     std::string ToString() const;
 
+    /** returns the outpoint associated with this object */
+    COutPoint GetOutPoint() const { return COutPoint(tx->GetHash(), i); }
+    /** returns the value of this output in satoshis */
+    CAmount GetValue() const { return tx->vout[i].nValue; }
+    /** returns the constraint script */
+    CScript GetScriptPubKey() const { return tx->vout[i].scriptPubKey; }
+
     inline int cmp(const COutput &rhs) const
     {
         if (tx->GetHash() == rhs.tx->GetHash())
@@ -493,12 +500,6 @@ struct TxoIterLess // : binary_function <T,T,bool>
         }
         return x->first < y->first;
     }
-
-    /** returns the outpoint associated with this object */
-    COutPoint GetOutPoint() const { return COutPoint(tx->GetHash(), i); }
-    /** returns the value of this output in satoshis */
-    CAmount GetValue() const { return tx->vout[i].nValue; }
-    CScript GetScriptPubKey() const { return tx->vout[i].scriptPubKey; }
 };
 
 typedef std::set<SpendableTxos::iterator, TxoIterLess> TxoItVec;

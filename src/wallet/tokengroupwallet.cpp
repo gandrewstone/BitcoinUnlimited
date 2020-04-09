@@ -380,9 +380,6 @@ void ConstructTx(CWalletTx &wtxNew,
     CTokenGroupID grpID,
     CWallet *wallet)
 {
-    fPrintToConsole = true;
-    LogToggleCategory(Logging::ALL, true);
-
     std::string strError;
     CMutableTransaction tx;
     CReserveKey groupChangeKeyReservation(wallet);
@@ -438,7 +435,7 @@ void ConstructTx(CWalletTx &wtxNew,
         {
             // find a fee input
             std::vector<COutput> bchcoins;
-            wallet->FilterCoins(bchcoins, [](const CWalletTx *tx, const CTxOut *out) {
+            wallet->FilterCoins(bchcoins, [](const CWalletTx *_tx, const CTxOut *out) {
                 CTokenGroupInfo tg(out->scriptPubKey);
                 return NoGroup == tg.associatedGroup;
             });
@@ -556,7 +553,6 @@ void GroupMelt(CWalletTx &wtxNew, const CTokenGroupID &grpID, CAmount totalNeede
 
     if (totalAvailable < totalNeeded)
     {
-        std::string strError;
         strError = strprintf("Not enough tokens in the wallet.  Need %d more.", totalNeeded - totalAvailable);
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, strError);
     }
@@ -990,8 +986,8 @@ extern UniValue token(const UniValue &params, bool fHelp)
         ConstructTx(wtx, chosenCoins, outputs, coin.GetValue(), 0, 0, 0, grpID, wallet);
         authKeyReservation.KeepKey();
         UniValue ret(UniValue::VOBJ);
-        ret.push_back(Pair("groupIdentifier", EncodeTokenGroup(grpID)));
-        ret.push_back(Pair("transaction", wtx.GetHash().GetHex()));
+        ret.pushKV("groupIdentifier", EncodeTokenGroup(grpID));
+        ret.pushKV("transaction", wtx.GetHash().GetHex());
         return ret;
     }
 
@@ -1091,7 +1087,7 @@ extern UniValue token(const UniValue &params, bool fHelp)
             UniValue ret(UniValue::VOBJ);
             for (const auto &item : balances)
             {
-                ret.push_back(Pair(EncodeTokenGroup(item.first), item.second));
+                ret.pushKV(EncodeTokenGroup(item.first), item.second);
             }
             return ret;
         }
@@ -1159,7 +1155,7 @@ static void MaybePushAddress(UniValue &entry, const CTxDestination &dest)
 {
     if (IsValidDestination(dest))
     {
-        entry.push_back(Pair("address", EncodeDestination(dest)));
+        entry.pushKV("address", EncodeDestination(dest));
     }
 }
 
@@ -1170,12 +1166,12 @@ static void AcentryToJSON(const CAccountingEntry &acentry, const string &strAcco
     if (fAllAccounts || acentry.strAccount == strAccount)
     {
         UniValue entry(UniValue::VOBJ);
-        entry.push_back(Pair("account", acentry.strAccount));
-        entry.push_back(Pair("category", "move"));
-        entry.push_back(Pair("time", acentry.nTime));
-        entry.push_back(Pair("amount", UniValue(acentry.nCreditDebit)));
-        entry.push_back(Pair("otheraccount", acentry.strOtherAccount));
-        entry.push_back(Pair("comment", acentry.strComment));
+        entry.pushKV("account", acentry.strAccount);
+        entry.pushKV("category", "move");
+        entry.pushKV("time", acentry.nTime);
+        entry.pushKV("amount", UniValue(acentry.nCreditDebit));
+        entry.pushKV("otheraccount", acentry.strOtherAccount);
+        entry.pushKV("comment", acentry.strComment);
         ret.push_back(entry);
     }
 }
@@ -1201,23 +1197,23 @@ void ListGroupedTransactions(const CTokenGroupID &grp,
     // Sent
     if ((!listSent.empty() || nFee != 0) && (fAllAccounts || strAccount == strSentAccount))
     {
-        BOOST_FOREACH (const COutputEntry &s, listSent)
+        for(const COutputEntry &s: listSent)
         {
             UniValue entry(UniValue::VOBJ);
             if (involvesWatchonly || (::IsMine(*pwalletMain, s.destination, chainActive.Tip()) & ISMINE_WATCH_ONLY))
-                entry.push_back(Pair("involvesWatchonly", true));
-            entry.push_back(Pair("account", strSentAccount));
+                entry.pushKV("involvesWatchonly", true);
+            entry.pushKV("account", strSentAccount);
             MaybePushAddress(entry, s.destination);
-            entry.push_back(Pair("category", "send"));
-            entry.push_back(Pair("group", EncodeTokenGroup(grp)));
-            entry.push_back(Pair("amount", UniValue(-s.amount)));
+            entry.pushKV("category", "send");
+            entry.pushKV("group", EncodeTokenGroup(grp));
+            entry.pushKV("amount", UniValue(-s.amount));
             if (pwalletMain->mapAddressBook.count(s.destination))
-                entry.push_back(Pair("label", pwalletMain->mapAddressBook[s.destination].name));
-            entry.push_back(Pair("vout", s.vout));
-            entry.push_back(Pair("fee", ValueFromAmount(-nFee)));
+                entry.pushKV("label", pwalletMain->mapAddressBook[s.destination].name);
+            entry.pushKV("vout", s.vout);
+            entry.pushKV("fee", ValueFromAmount(-nFee));
             if (fLong)
                 WalletTxToJSON(wtx, entry);
-            entry.push_back(Pair("abandoned", wtx.isAbandoned()));
+            entry.pushKV("abandoned", wtx.isAbandoned());
             ret.push_back(entry);
         }
     }
@@ -1225,7 +1221,7 @@ void ListGroupedTransactions(const CTokenGroupID &grp,
     // Received
     if (listReceived.size() > 0 && wtx.GetDepthInMainChain() >= nMinDepth)
     {
-        BOOST_FOREACH (const COutputEntry &r, listReceived)
+        for(const COutputEntry &r: listReceived)
         {
             string account;
             if (pwalletMain->mapAddressBook.count(r.destination))
@@ -1234,27 +1230,27 @@ void ListGroupedTransactions(const CTokenGroupID &grp,
             {
                 UniValue entry(UniValue::VOBJ);
                 if (involvesWatchonly || (::IsMine(*pwalletMain, r.destination, chainActive.Tip()) & ISMINE_WATCH_ONLY))
-                    entry.push_back(Pair("involvesWatchonly", true));
-                entry.push_back(Pair("account", account));
+                    entry.pushKV("involvesWatchonly", true);
+                entry.pushKV("account", account);
                 MaybePushAddress(entry, r.destination);
                 if (wtx.IsCoinBase())
                 {
                     if (wtx.GetDepthInMainChain() < 1)
-                        entry.push_back(Pair("category", "orphan"));
+                        entry.pushKV("category", "orphan");
                     else if (wtx.GetBlocksToMaturity() > 0)
-                        entry.push_back(Pair("category", "immature"));
+                        entry.pushKV("category", "immature");
                     else
-                        entry.push_back(Pair("category", "generate"));
+                        entry.pushKV("category", "generate");
                 }
                 else
                 {
-                    entry.push_back(Pair("category", "receive"));
+                    entry.pushKV("category", "receive");
                 }
-                entry.push_back(Pair("amount", UniValue(r.amount)));
-                entry.push_back(Pair("group", EncodeTokenGroup(grp)));
+                entry.pushKV("amount", UniValue(r.amount));
+                entry.pushKV("group", EncodeTokenGroup(grp));
                 if (pwalletMain->mapAddressBook.count(r.destination))
-                    entry.push_back(Pair("label", account));
-                entry.push_back(Pair("vout", r.vout));
+                    entry.pushKV("label", account);
+                entry.pushKV("vout", r.vout);
                 if (fLong)
                     WalletTxToJSON(wtx, entry);
                 ret.push_back(entry);
@@ -1535,8 +1531,8 @@ UniValue groupedlistsinceblock(const UniValue &params, bool fHelp)
     uint256 lastblock = pblockLast ? pblockLast->GetBlockHash() : uint256();
 
     UniValue ret(UniValue::VOBJ);
-    ret.push_back(Pair("transactions", transactions));
-    ret.push_back(Pair("lastblock", lastblock.GetHex()));
+    ret.pushKV("transactions", transactions);
+    ret.pushKV("lastblock", lastblock.GetHex());
 
     return ret;
 }

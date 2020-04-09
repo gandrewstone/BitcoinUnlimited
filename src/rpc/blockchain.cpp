@@ -2243,11 +2243,12 @@ UniValue scantokens(const UniValue& params, bool fHelp)
             unspent.pushKV("txid", outpoint.hash.GetHex());
             unspent.pushKV("vout", (int32_t)outpoint.n);
             if (IsValidDestination(dest)) {
-                unspent.push_back(Pair("address", EncodeDestination(dest)));
+                unspent.pushKV("address", EncodeDestination(dest));
             }
             unspent.pushKV("scriptPubKey", HexStr(txo.scriptPubKey.begin(), txo.scriptPubKey.end()));
-            unspent.pushKV("ION_Amount", ValueFromAmount(txo.nValue));
-            unspent.pushKV("token_Amount", tokenGroupInfo.quantity);
+            unspent.pushKV("amount", ValueFromAmount(txo.nValue));
+            unspent.pushKV("satoshis", txo.nValue);
+            unspent.pushKV("tokenAmount", tokenGroupInfo.quantity);
             unspent.pushKV("height", (int32_t)coin.nHeight);
 
             unspents.push_back(unspent);

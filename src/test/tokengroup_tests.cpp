@@ -7,8 +7,10 @@
 #include "miner.h"
 #include "parallel.h"
 #include "test/test_bitcoin.h"
+#include "txadmission.h"
 #include "utilstrencodings.h"
 #include "wallet/tokengroupwallet.h"
+#include "validation/validation.h"
 #include <boost/test/unit_test.hpp>
 
 BOOST_FIXTURE_TEST_SUITE(tokengroup_tests, BasicTestingSetup)
@@ -223,7 +225,7 @@ CTransaction tx1x1(const COutPoint &utxo,
     unsigned int sighashType = SIGHASH_ALL | SIGHASH_FORKID;
     std::vector<unsigned char> vchSig;
     uint256 hash = SignatureHash(prevOutScript, tx, 0, sighashType, amt, 0);
-    if (!key.Sign(hash, vchSig))
+    if (!key.SignSchnorr(hash, vchSig))
     {
         assert(0);
     }
@@ -256,7 +258,7 @@ CTransaction tx1x1(const CTransaction &prevtx,
     unsigned int sighashType = SIGHASH_ALL | SIGHASH_FORKID;
     std::vector<unsigned char> vchSig;
     uint256 hash = SignatureHash(prevtx.vout[prevout].scriptPubKey, tx, 0, sighashType, prevtx.vout[prevout].nValue, 0);
-    if (!key.Sign(hash, vchSig))
+    if (!key.SignSchnorr(hash, vchSig))
     {
         assert(0);
     }
@@ -289,7 +291,7 @@ CTransaction tx1x1_p2sh_of_p2pkh(const CTransaction &prevtx,
     unsigned int sighashType = SIGHASH_ALL | SIGHASH_FORKID;
     std::vector<unsigned char> vchSig;
     uint256 hash = SignatureHash(redeemScript, tx, 0, sighashType, prevtx.vout[prevout].nValue, 0);
-    if (!key.Sign(hash, vchSig))
+    if (!key.SignSchnorr(hash, vchSig))
     {
         assert(0);
     }
@@ -327,7 +329,7 @@ CTransaction tx1x2(const CTransaction &prevtx,
     unsigned int sighashType = SIGHASH_ALL | SIGHASH_FORKID;
     std::vector<unsigned char> vchSig;
     uint256 hash = SignatureHash(prevtx.vout[prevout].scriptPubKey, tx, 0, sighashType, prevtx.vout[prevout].nValue, 0);
-    if (!key.Sign(hash, vchSig))
+    if (!key.SignSchnorr(hash, vchSig))
     {
         assert(0);
     }
@@ -349,8 +351,8 @@ public:
     int prevout;
     CKey key;
     bool p2pkh;
-    InputData(const CTransaction &prevTx, int prevout, const CKey &key, bool p2pkh = true)
-        : prevtx(prevTx), prevout(prevout), key(key), p2pkh(p2pkh)
+    InputData(const CTransaction &_prevTx, int _prevout, const CKey &_key, bool _p2pkh = true)
+        : prevtx(_prevTx), prevout(_prevout), key(_key), p2pkh(_p2pkh)
     {
     }
 };
@@ -359,8 +361,8 @@ class InputDataCopy : public InputData
 {
 public:
     CTransaction prevtxStorage;
-    InputDataCopy(const CTransaction &prevTx, int prevout, const CKey &key, bool p2pkh = true)
-        : InputData(prevtxStorage, prevout, key, p2pkh), prevtxStorage(prevTx)
+    InputDataCopy(const CTransaction &prevTx, int _prevout, const CKey &_key, bool _p2pkh = true)
+        : InputData(prevtxStorage, _prevout, _key, _p2pkh), prevtxStorage(prevTx)
     {
     }
 };
@@ -398,7 +400,7 @@ CTransaction tx(const std::vector<InputData> in, const std::vector<OutputData> o
         std::vector<unsigned char> vchSig;
         uint256 hash = SignatureHash(
             i.prevtx.vout[i.prevout].scriptPubKey, tx, idx, sighashType, i.prevtx.vout[i.prevout].nValue, 0);
-        if (!i.key.Sign(hash, vchSig))
+        if (!i.key.SignSchnorr(hash, vchSig))
         {
             assert(0);
         }
@@ -442,7 +444,7 @@ CTransaction tx2x2(const InputData &in1,
     std::vector<unsigned char> vchSig;
     uint256 hash = SignatureHash(
         in1.prevtx.vout[in1.prevout].scriptPubKey, tx, 0, sighashType, in1.prevtx.vout[in1.prevout].nValue, 0);
-    if (!in1.key.Sign(hash, vchSig))
+    if (!in1.key.SignSchnorr(hash, vchSig))
     {
         assert(0);
     }
@@ -456,7 +458,7 @@ CTransaction tx2x2(const InputData &in1,
     std::vector<unsigned char> vchSig2;
     hash = SignatureHash(
         in2.prevtx.vout[in2.prevout].scriptPubKey, tx, 1, sighashType, in2.prevtx.vout[in2.prevout].nValue, 0);
-    if (!in2.key.Sign(hash, vchSig2))
+    if (!in2.key.SignSchnorr(hash, vchSig2))
     {
         assert(0);
     }
@@ -545,7 +547,7 @@ CTokenGroupID MakeSubgroup(CTokenGroupID g, int xtra, int size = 0)
     for (int i = 0; i < gsize; i++)
         sgbytes[i] = g.bytes()[i];
     sgbytes[gsize] = xtra;
-    for (unsigned int i = gsize + 1; i < size; i++)
+    for (int i = gsize + 1; i < size; i++)
         sgbytes[i] = 0; // just fill it out
     return CTokenGroupID(sgbytes);
 }
@@ -554,8 +556,8 @@ CTokenGroupID MakeSubgroup(CTokenGroupID g, int xtra, int size = 0)
 BOOST_AUTO_TEST_CASE(tokengroup_basicfunctions)
 {
     // Have to enable the function to test it.
-    bool opgEnforcing = miningEnforceOpGroup.value;
-    miningEnforceOpGroup.value = true;
+    bool opgEnforcing = miningEnforceOpGroup.Value();
+    miningEnforceOpGroup = true;
 
     CKey secret;
     CPubKey pubkey;
@@ -656,7 +658,8 @@ BOOST_AUTO_TEST_CASE(tokengroup_basicfunctions)
         std::vector<std::vector<uint8_t> > stack;
         BaseSignatureChecker sigchecker;
         ScriptError err = SCRIPT_ERR_OK;
-        bool r = EvalScript(stack, script, STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_VERIFY_MINIMALDATA, MAX_OPS_PER_SCRIPT,
+        //bool r =
+        EvalScript(stack, script, STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_VERIFY_MINIMALDATA, MAX_OPS_PER_SCRIPT,
             sigchecker, &err);
         // BOOST_CHECK(r);  r will be false because the signature check will fail.  What's important here is that
         // minimaldata passes
@@ -1109,7 +1112,7 @@ BOOST_AUTO_TEST_CASE(tokengroup_basicfunctions)
         ok = CheckTokenGroups(t, state, coins);
         BOOST_CHECK(!ok);
     }
-    miningEnforceOpGroup.value = opgEnforcing;
+    miningEnforceOpGroup = opgEnforcing;
 }
 
 static bool tryBlock(const std::vector<CMutableTransaction> &txns,
@@ -1118,13 +1121,13 @@ static bool tryBlock(const std::vector<CMutableTransaction> &txns,
     CValidationState &state)
 {
     const CChainParams &chainparams = Params();
-    CBlockTemplate *pblocktemplate = BlockAssembler(chainparams).CreateNewBlock(scriptPubKey);
+    std::unique_ptr<CBlockTemplate> pblocktemplate = BlockAssembler(chainparams).CreateNewBlock(scriptPubKey);
     CBlock &block = pblocktemplate->block;
 
     // Replace mempool-selected txns with just coinbase plus passed-in txns:
     block.vtx.resize(1);
-    BOOST_FOREACH (const CMutableTransaction &tx, txns)
-        block.vtx.push_back(tx);
+    for (const CMutableTransaction &tx : txns)
+        block.vtx.push_back(MakeTransactionRef(tx));
     // IncrementExtraNonce creates a valid coinbase and merkleRoot
     unsigned int extraNonce = 0;
     IncrementExtraNonce(&block, extraNonce);
@@ -1135,7 +1138,6 @@ static bool tryBlock(const std::vector<CMutableTransaction> &txns,
     bool ret;
     ret = ProcessNewBlock(state, chainparams, NULL, &block, true, NULL, false);
     result = block;
-    delete pblocktemplate;
     return ret;
 }
 
@@ -1143,7 +1145,7 @@ static bool tryMempool(const CTransaction &tx, CValidationState &state)
 {
     LOCK(cs_main);
     bool inputsMissing = false;
-    return AcceptToMemoryPool(mempool, state, tx, false, &inputsMissing, true, false);
+    return AcceptToMemoryPool(mempool, state, MakeTransactionRef(tx), false, &inputsMissing, true, false);
 }
 
 
@@ -1166,8 +1168,8 @@ CTokenGroupID findGroupId(const COutPoint &input, TokenGroupIdFlags flags, uint6
 BOOST_FIXTURE_TEST_CASE(tokengroup_blockchain, TestChain100Setup)
 {
     // Have to enable the function to test it.
-    bool opgEnforcing = miningEnforceOpGroup.value;
-    miningEnforceOpGroup.value = true;
+    bool opgEnforcing = miningEnforceOpGroup.Value();
+    miningEnforceOpGroup = true;
 
     // fPrintToConsole = true;
     // LogToggleCategory(Logging::ALL, true);
@@ -1198,12 +1200,12 @@ BOOST_FIXTURE_TEST_CASE(tokengroup_blockchain, TestChain100Setup)
 
     {
         // Should fail: bad group size
-        uint256 hash = blk1.vtx[0].GetHash();
+        uint256 hash = blk1.vtx[0]->GetHash();
         std::vector<unsigned char> fakeGrp(21);
         CScript script = CScript() << fakeGrp << OP_GROUP << OP_DROP << OP_DUP << OP_HASH160 << ToByteVector(a1.addr)
                                    << OP_EQUALVERIFY << OP_CHECKSIG;
 
-        txns[0] = tx1x1(COutPoint(hash, 0), script, blk1.vtx[0].vout[0].nValue);
+        txns[0] = tx1x1(COutPoint(hash, 0), script, blk1.vtx[0]->vout[0].nValue);
         ret = tryBlock(txns, p2pkh(a2.addr), badblk, state);
         BOOST_CHECK(!ret);
     }
@@ -1219,7 +1221,7 @@ BOOST_FIXTURE_TEST_CASE(tokengroup_blockchain, TestChain100Setup)
 
 
     // Mint tokens
-    txns[0] = tx({InputData(coinbaseTxns[1], 0, coinbaseKey, false), InputData(tipblk.vtx[1], 0, grp0AllAuth.secret)},
+    txns[0] = tx({InputData(coinbaseTxns[1], 0, coinbaseKey, false), InputData(*tipblk.vtx[1], 0, grp0AllAuth.secret)},
         {OutputData(gp2pkh(gid, grp0AllAuth.addr, authorityFlags(GroupAuthorityFlags::ALL, nonce)), 10000),
             OutputData(gp2pkh(gid, a1.addr, 1000), coinbaseTxns[1].vout[0].nValue - 10000)});
     ret = tryBlock(txns, p2pkh(a2.addr), tipblk, state);
@@ -1383,7 +1385,7 @@ BOOST_FIXTURE_TEST_CASE(tokengroup_blockchain, TestChain100Setup)
     BOOST_CHECK(ret);
 #endif
 
-    miningEnforceOpGroup.value = opgEnforcing;
+    miningEnforceOpGroup = opgEnforcing;
 }
 
 

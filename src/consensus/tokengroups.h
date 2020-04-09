@@ -15,6 +15,10 @@ class CWallet;
 /** Transaction cannot be committed on my fork */
 static const unsigned int REJECT_GROUP_IMBALANCE = 0x104;
 
+/** What block height to start enforcing groups */
+extern uint32_t enforceOpGroupStartHeight;
+/** If true, the fork will set enforceOpGroupStartHeight to the fork height */
+extern bool miningForkOpGroup;
 
 enum class TokenGroupIdFlags : uint8_t
 {
@@ -191,12 +195,12 @@ public:
     CTokenGroupInfo() : associatedGroup(), controllingGroupFlags(GroupAuthorityFlags::NONE), quantity(0), invalid(true)
     {
     }
-    CTokenGroupInfo(const CTokenGroupID &associated, const GroupAuthorityFlags controllingGroupFlags, CAmount qty = 0)
-        : associatedGroup(associated), controllingGroupFlags(controllingGroupFlags), quantity(qty), invalid(false)
+    CTokenGroupInfo(const CTokenGroupID &associated, const GroupAuthorityFlags _controllingGroupFlags, CAmount qty = 0)
+        : associatedGroup(associated), controllingGroupFlags(_controllingGroupFlags), quantity(qty), invalid(false)
     {
     }
-    CTokenGroupInfo(const CKeyID &associated, const GroupAuthorityFlags controllingGroupFlags, CAmount qty = 0)
-        : associatedGroup(associated), controllingGroupFlags(controllingGroupFlags), quantity(qty), invalid(false)
+    CTokenGroupInfo(const CKeyID &associated, const GroupAuthorityFlags _controllingGroupFlags, CAmount qty = 0)
+        : associatedGroup(associated), controllingGroupFlags(_controllingGroupFlags), quantity(qty), invalid(false)
     {
     }
     // Return the controlling (can mint and burn) and associated (OP_GROUP in script) group of a script

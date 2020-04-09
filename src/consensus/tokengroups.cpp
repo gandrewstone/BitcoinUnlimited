@@ -281,16 +281,16 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
     for (const auto &inp : tx.vin)
     {
         const COutPoint &prevout = inp.prevout;
-        const Coin &coin = view.AccessCoin(prevout);
-        if (coin.IsSpent()) // should never happen because you've already CheckInputs(tx,...)
+        CoinAccessor coin(view, prevout);
+        if (coin->IsSpent()) // should never happen because you've already CheckInputs(tx,...)
         {
             DbgAssert(!"Checking token group for spent coin", );
             return state.Invalid(false, REJECT_INVALID, "already-spent");
         }
         // no prior coins can be grouped.
-        if (coin.nHeight < miningEnforceOpGroup.value)
+        if (coin->nHeight < miningEnforceOpGroup.Value())
             continue;
-        const CScript &script = coin.out.scriptPubKey;
+        const CScript &script = coin->out.scriptPubKey;
         CTokenGroupInfo tokenGrp(script);
         // The prevout should never be invalid because that would mean that this node accepted a block with an
         // invalid OP_GROUP tx in it.

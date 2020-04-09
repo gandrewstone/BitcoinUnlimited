@@ -187,7 +187,9 @@ bool CTransaction::HasData(uint32_t dataID) const
         }
     }
     return false;
+}
 
+/*
 std::string CMutableTransaction::HexStr(void) const
 {
     CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
@@ -201,3 +203,4 @@ std::string CTransaction::HexStr(void) const
     ssTx << *this;
     return ::HexStr(ssTx.begin(), ssTx.end());
 }
+*/

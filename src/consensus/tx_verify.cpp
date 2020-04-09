@@ -233,7 +233,7 @@ bool CheckTransaction(const CTransactionRef tx, CValidationState &state)
             return state.DoS(100, false, REJECT_INVALID, "bad-cb-length");
 
         // Coinbase tx can't have group outputs because it has no group inputs or mintable outputs
-        if (IsAnyTxOutputGrouped(tx))
+        if (IsAnyTxOutputGrouped(*tx))
             return state.DoS(100, false, REJECT_INVALID, "coinbase-has-group-outputs");
     }
     else

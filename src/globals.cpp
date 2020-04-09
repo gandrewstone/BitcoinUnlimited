@@ -59,6 +59,9 @@
 
 using namespace std;
 
+uint32_t enforceOpGroupStartHeight=0;
+bool miningForkOpGroup=false;
+
 #ifdef DEBUG_LOCKORDER
 std::atomic<bool> lockdataDestructed{false};
 LockData lockdata;
@@ -309,13 +312,13 @@ CTweakRef<uint64_t> miningForkTime("consensus.forkMay2020Time",
     &nMiningForkTime,
     &ForkTimeValidator); // Fri May 15 12:00:00 UTC 2020
 
-CTweak<uint32_t> miningEnforceOpGroup("mining.opgroup",
+CTweakRef<uint32_t> miningEnforceOpGroup("mining.opgroup",
     "Enable enforcement of the OP_GROUP opcode at this block height",
-    std::numeric_limits<uint32_t>::max());
+    &enforceOpGroupStartHeight);
 
-CTweak<bool> miningForkOpGroup("mining.forkOpgroup",
+CTweakRef<bool> miningForkOpGroupTweak("mining.forkOpgroup",
     "Enable enforcement of the OP_GROUP opcode at the fork point",
-    true);
+    &miningForkOpGroup);
 
 CTweak<uint64_t> maxScriptOps("consensus.maxScriptOps",
     "Maximum number of script operations allowed.  Stack pushes are excepted.",

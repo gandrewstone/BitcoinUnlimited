@@ -56,7 +56,7 @@ public:
         const CKeyStore *keystore;
 
     public:
-        CheckTxDestination(const CKeyStore *keystore) : keystore(keystore) {}
+        CheckTxDestination(const CKeyStore *_keystore) : keystore(_keystore) {}
         bool operator()(const CKeyID &id) const { return keystore->HaveKey(id); }
         bool operator()(const CScriptID &id) const { return keystore->HaveCScript(id); }
         bool operator()(const CNoDestination &) const { return false; }
