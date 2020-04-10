@@ -11,7 +11,7 @@
 #include "checkpoints.h"
 #include "coincontrol.h"
 #include "consensus/consensus.h"
-#include "consensus/tokengroups.h"
+#include "consensus/grouptokens.h"
 #include "consensus/validation.h"
 #include "core_io.h" // Freeze for debug only
 #include "dstencode.h"
@@ -26,8 +26,8 @@
 #include "script/script.h"
 #include "script/sign.h"
 #include "timedata.h"
+#include "grouptokenwallet.h"
 #include "txadmission.h"
-#include "tokengroupwallet.h"
 #include "txmempool.h"
 #include "ui_interface.h"
 #include "util.h"
@@ -1348,7 +1348,7 @@ void CWalletTx::GetAmounts(list<COutputEntry> &listReceived,
     }
 }
 
-void CWalletTx::GetGroupAmounts(const CTokenGroupID &grp,
+void CWalletTx::GetGroupAmounts(const CGroupTokenID &grp,
     list<COutputEntry> &listReceived,
     list<COutputEntry> &listSent,
     CAmount &nFee,
@@ -1397,7 +1397,7 @@ void CWalletTx::GetGroupAmounts(const CTokenGroupID &grp,
         // Only return group outputs from this API
         if ((whichType == TX_GRP_PUBKEYHASH) || (whichType == TX_GRP_SCRIPTHASH))
         {
-            CTokenGroupInfo txgrp(txout.scriptPubKey);
+            CGroupTokenInfo txgrp(txout.scriptPubKey);
             if (grp == txgrp.associatedGroup)
             {
                 COutputEntry output = {address, txgrp.quantity, (int)i};
@@ -1459,7 +1459,7 @@ void CWalletTx::GetAmounts(list<CGroupedOutputEntry> &listReceived,
             address = CNoDestination();
         }
 
-        CTokenGroupInfo txgrp(txout.scriptPubKey); // If group is invalid, txgrp zeros its members.
+        CGroupTokenInfo txgrp(txout.scriptPubKey); // If group is invalid, txgrp zeros its members.
         CGroupedOutputEntry output(txgrp.associatedGroup, txgrp.quantity, address, txout.nValue, (int)i);
         // If we are debited by the transaction, add the output as a "sent" entry
         if (nDebit > 0)
@@ -1758,7 +1758,7 @@ CAmount CWalletTx::GetAvailableCredit(bool fUseCache) const
     uint256 hashTx = GetHash();
     for (unsigned int i = 0; i < vout.size(); i++)
     {
-        if (!pwallet->IsSpent(hashTx, i) && (GetTokenGroup(vout[i].scriptPubKey) == NoGroup))
+        if (!pwallet->IsSpent(hashTx, i) && (GetGroupToken(vout[i].scriptPubKey) == NoGroup))
         {
             const CTxOut &txout = vout[i];
             nCredit += pwallet->GetCredit(txout, ISMINE_SPENDABLE);
@@ -1801,7 +1801,7 @@ CAmount CWalletTx::GetAvailableWatchOnlyCredit(const bool &fUseCache) const
     CAmount nCredit = 0;
     for (unsigned int i = 0; i < vout.size(); i++)
     {
-        if (!pwallet->IsSpent(GetHash(), i) && (GetTokenGroup(vout[i].scriptPubKey) == NoGroup))
+        if (!pwallet->IsSpent(GetHash(), i) && (GetGroupToken(vout[i].scriptPubKey) == NoGroup))
         {
             const CTxOut &txout = vout[i];
             nCredit += pwallet->GetCredit(txout, ISMINE_WATCH_ONLY);

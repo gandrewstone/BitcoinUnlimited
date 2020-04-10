@@ -14,8 +14,8 @@
 #include "rpc/server.h"
 #include "script/sign.h"
 #include "timedata.h"
+#include "grouptokenwallet.h"
 #include "txadmission.h"
-#include "tokengroupwallet.h"
 #include "util.h"
 #include "utilmoneystr.h"
 #include "validation/validation.h"
@@ -1536,7 +1536,7 @@ void ListTransactions(const CWalletTx &wtx,
             entry.pushKV("category", "send");
             if (s.grp != NoGroup)
             {
-                entry.pushKV("group", EncodeTokenGroup(s.grp));
+                entry.pushKV("group", EncodeGroupToken(s.grp));
                 entry.pushKV("groupAmount", -s.grpAmount);
             }
             entry.pushKV("satoshi", UniValue(-s.amount));
@@ -1582,7 +1582,7 @@ void ListTransactions(const CWalletTx &wtx,
                 }
                 if (r.grp != NoGroup)
                 {
-                    entry.pushKV("group", EncodeTokenGroup(r.grp));
+                    entry.pushKV("group", EncodeGroupToken(r.grp));
                     entry.pushKV("groupAmount", r.grpAmount);
                 }
                 entry.pushKV("satoshi", UniValue(r.amount));

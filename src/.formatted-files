@@ -374,7 +374,7 @@ test/thinblock_data_tests.cpp
 test/thinblock_tests.cpp
 test/thinblock_util_tests.cpp
 test/timedata_tests.cpp
-test/tokengroup_tests.cpp
+test/grouptoken_tests.cpp
 test/transaction_tests.cpp
 test/txlookup_tests.cpp
 test/txvalidationcache_tests.cpp
@@ -394,8 +394,8 @@ wallet/db.h
 wallet/rpcdump.cpp
 wallet/rpcwallet.cpp
 wallet/rpcwallet.h
-wallet/tokengroupwallet.cpp
-wallet/tokengroupwallet.h
+wallet/grouptokenwallet.cpp
+wallet/grouptokenwallet.h
 wallet/wallet.cpp
 wallet/walletdb.cpp
 wallet/walletdb.h
@@ -417,6 +417,7 @@ script/interpreter.h
 script/ismine.cpp
 script/ismine.h
 script/script.cpp
+script/scriptattributes.cpp
 script/script_error.cpp
 script/script_error.h
 script/script.h
@@ -481,6 +482,6 @@ consensus/params.h
 consensus/tx_verify.cpp
 consensus/tx_verify.h
 consensus/validation.h
-consensus/tokengroups.h
-consensus/tokengroups.cpp
+consensus/grouptokens.h
+consensus/grouptokens.cpp
 cashlib/cashlib.cpp

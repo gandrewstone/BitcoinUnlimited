@@ -7,10 +7,13 @@
 #include "script.h"
 #include "interpreter.h"
 
+#include "consensus/grouptokens.h"
 #include "tinyformat.h"
 #include "utilstrencodings.h"
 
 #include <algorithm>
+
+extern bool IsScriptGrouped(const CScript &script, CScript::const_iterator *pcin, CGroupTokenInfo *grp);
 
 using namespace std;
 
@@ -455,20 +458,9 @@ unsigned int CScript::GetSigOpCount(const uint32_t flags, const CScript &scriptS
 
 bool CScript::IsPayToScriptHash(vector<unsigned char> *hashBytes) const
 {
-    unsigned int offset = 0;
-    if ((*this)[0] > OP_0 && (*this)[0] < OP_PUSHDATA1)
-    {
-        unsigned int len = this->size();
-        offset += (*this)[0] + 1;
-        if ((offset < len) && ((*this)[offset] > OP_0) && ((*this)[offset] < OP_PUSHDATA1))
-        {
-            offset += (*this)[offset] + 1;
-            if ((offset < len) && ((*this)[offset] != OP_GROUP))
-                offset = 0;
-            else
-                offset += 3; // 2 more bytes for OP_GROUP OP_DROP OP_DROP
-        }
-    }
+    CScript::const_iterator pc = begin();
+    IsScriptGrouped(*this, &pc);
+    unsigned int offset = &pc[0] - &begin()[0];
     // Extra-fast test for pay-to-script-hash CScripts:
     if (this->size() == offset + 23 && (*this)[offset] == OP_HASH160 && (*this)[offset + 1] == 0x14 &&
         (*this)[offset + 22] == OP_EQUAL)

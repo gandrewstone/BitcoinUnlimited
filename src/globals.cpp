@@ -59,8 +59,8 @@
 
 using namespace std;
 
-uint32_t enforceOpGroupStartHeight=0;
-bool miningForkOpGroup=false;
+uint32_t enforceOpGroupStartHeight = 0;
+bool miningForkOpGroup = false;
 
 #ifdef DEBUG_LOCKORDER
 std::atomic<bool> lockdataDestructed{false};

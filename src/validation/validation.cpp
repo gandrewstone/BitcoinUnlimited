@@ -12,7 +12,7 @@
 #include "checkpoints.h"
 #include "connmgr.h"
 #include "consensus/merkle.h"
-#include "consensus/tokengroups.h"
+#include "consensus/grouptokens.h"
 #include "consensus/tx_verify.h"
 #include "dosman.h"
 #include "expedited.h"
@@ -977,9 +977,9 @@ bool CheckInputs(const CTransactionRef &tx,
             }
             return false;
         }
-        
+
         if (((unsigned int)chainActive.Tip()->nHeight >= enforceOpGroupStartHeight) &&
-            !CheckTokenGroups(*tx, state, inputs))
+            !CheckGroupTokens(*tx, state, inputs))
         {
             return state.DoS(0, false, REJECT_MALFORMED, "token-group-imbalance", false,
                 strprintf("Token group inputs and outputs do not balance"));

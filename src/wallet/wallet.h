@@ -9,7 +9,7 @@
 
 #include "amount.h"
 #include "clientversion.h"
-#include "consensus/tokengroups.h"
+#include "consensus/grouptokens.h"
 #include "policy/policy.h"
 #include "script/ismine.h"
 #include "streams.h"
@@ -164,9 +164,9 @@ struct COutputEntry
 
 struct CGroupedOutputEntry : public COutputEntry
 {
-    CTokenGroupID grp;
+    CGroupTokenID grp;
     CAmount grpAmount;
-    CGroupedOutputEntry(const CTokenGroupID &_grp,
+    CGroupedOutputEntry(const CGroupTokenID &_grp,
         CAmount _grpAmount,
         const CTxDestination &dest,
         CAmount amt,
@@ -407,7 +407,7 @@ public:
         const isminefilter &filter) const;
 
     // Get transactions for the passed group
-    void GetGroupAmounts(const CTokenGroupID &grp,
+    void GetGroupAmounts(const CGroupTokenID &grp,
         std::list<COutputEntry> &listReceived,
         std::list<COutputEntry> &listSent,
         CAmount &nFee,
@@ -464,7 +464,6 @@ public:
     CAmount GetValue() const { return tx->vout[i].nValue; }
     /** returns the constraint script */
     CScript GetScriptPubKey() const { return tx->vout[i].scriptPubKey; }
-
     inline int cmp(const COutput &rhs) const
     {
         if (tx->GetHash() == rhs.tx->GetHash())

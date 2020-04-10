@@ -6,11 +6,12 @@
 #define TOKEN_GROUPS_H
 
 #include "chainparams.h"
-#include "coins.h"
+//#include "coins.h"
 #include "consensus/validation.h"
 #include "pubkey.h"
 #include <unordered_map>
 class CWallet;
+class CCoinsViewCache;
 
 /** Transaction cannot be committed on my fork */
 static const unsigned int REJECT_GROUP_IMBALANCE = 0x104;
@@ -20,7 +21,7 @@ extern uint32_t enforceOpGroupStartHeight;
 /** If true, the fork will set enforceOpGroupStartHeight to the fork height */
 extern bool miningForkOpGroup;
 
-enum class TokenGroupIdFlags : uint8_t
+enum class GroupTokenIdFlags : uint8_t
 {
     NONE = 0,
     SAME_SCRIPT = 1U, // covenants/ encumberances -- output script template must match input
@@ -29,41 +30,42 @@ enum class TokenGroupIdFlags : uint8_t
     DEFAULT = 0
 };
 
-inline TokenGroupIdFlags operator|(const TokenGroupIdFlags a, const TokenGroupIdFlags b)
+inline GroupTokenIdFlags operator|(const GroupTokenIdFlags a, const GroupTokenIdFlags b)
 {
-    TokenGroupIdFlags ret = (TokenGroupIdFlags)(((uint8_t)a) | ((uint8_t)b));
+    GroupTokenIdFlags ret = (GroupTokenIdFlags)(((uint8_t)a) | ((uint8_t)b));
     return ret;
 }
 
-inline TokenGroupIdFlags operator~(const TokenGroupIdFlags a)
+inline GroupTokenIdFlags operator~(const GroupTokenIdFlags a)
 {
-    TokenGroupIdFlags ret = (TokenGroupIdFlags)(~((uint8_t)a));
+    GroupTokenIdFlags ret = (GroupTokenIdFlags)(~((uint8_t)a));
     return ret;
 }
 
-inline TokenGroupIdFlags operator&(const TokenGroupIdFlags a, const TokenGroupIdFlags b)
+inline GroupTokenIdFlags operator&(const GroupTokenIdFlags a, const GroupTokenIdFlags b)
 {
-    TokenGroupIdFlags ret = (TokenGroupIdFlags)(((uint8_t)a) & ((uint8_t)b));
+    GroupTokenIdFlags ret = (GroupTokenIdFlags)(((uint8_t)a) & ((uint8_t)b));
     return ret;
 }
 
-inline TokenGroupIdFlags &operator|=(TokenGroupIdFlags &a, const TokenGroupIdFlags b)
+inline GroupTokenIdFlags &operator|=(GroupTokenIdFlags &a, const GroupTokenIdFlags b)
 {
-    a = (TokenGroupIdFlags)(((uint8_t)a) | ((uint8_t)b));
+    a = (GroupTokenIdFlags)(((uint8_t)a) | ((uint8_t)b));
     return a;
 }
 
-inline TokenGroupIdFlags &operator&=(TokenGroupIdFlags &a, const TokenGroupIdFlags b)
+inline GroupTokenIdFlags &operator&=(GroupTokenIdFlags &a, const GroupTokenIdFlags b)
 {
-    a = (TokenGroupIdFlags)(((uint8_t)a) & ((uint8_t)b));
+    a = (GroupTokenIdFlags)(((uint8_t)a) & ((uint8_t)b));
     return a;
 }
-inline bool hasTokenGroupIdFlag(TokenGroupIdFlags object, TokenGroupIdFlags flag) {
+inline bool hasGroupTokenIdFlag(GroupTokenIdFlags object, GroupTokenIdFlags flag)
+{
     return (((uint8_t)object) & ((uint8_t)flag)) == (uint8_t)flag;
 }
 
 // The definitions below are used internally.  They are defined here for use in unit tests.
-class CTokenGroupID
+class CGroupTokenID
 {
 protected:
     std::vector<unsigned char> data;
@@ -74,33 +76,33 @@ protected:
 
 public:
     //* no token group, which is distinct from the bitcoin token group
-    CTokenGroupID() {}
+    CGroupTokenID() {}
     //* for special token groups, of which there is currently only the bitcoin token group (0)
-    CTokenGroupID(unsigned char c) : data(PARENT_GROUP_ID_SIZE) { data[0] = c; }
+    CGroupTokenID(unsigned char c) : data(PARENT_GROUP_ID_SIZE) { data[0] = c; }
     //* handles CKeyID and CScriptID
-    CTokenGroupID(const uint160 &id) : data(ToByteVector(id)) {}
+    CGroupTokenID(const uint160 &id) : data(ToByteVector(id)) {}
     //* handles single mint group id, and possibly future larger size CScriptID
-    CTokenGroupID(const uint256 &id) : data(ToByteVector(id)) {}
+    CGroupTokenID(const uint256 &id) : data(ToByteVector(id)) {}
     //* Assign the groupID from a vector
-    CTokenGroupID(const std::vector<unsigned char> &id) : data(id)
+    CGroupTokenID(const std::vector<unsigned char> &id) : data(id)
     {
-        // for the conceivable future there is no possible way a group could be bigger but the spec does allow larger
-        DbgAssert(id.size() < OP_PUSHDATA1, );
+        // Token group IDs must be able to be pushed onto the stack, but this check interferes with consensus tests
+        // DbgAssert(id.size() <= MAX_SCRIPT_ELEMENT_SIZE, );
     }
 
     void NoGroup(void) { data.resize(0); }
-    bool operator==(const CTokenGroupID &id) const { return data == id.data; }
-    bool operator!=(const CTokenGroupID &id) const { return data != id.data; }
-    bool operator<(const CTokenGroupID &id) const { return data < id.data; }
-    bool operator>(const CTokenGroupID &id) const { return data > id.data; }
-    bool operator<=(const CTokenGroupID &id) const { return data <= id.data; }
-    bool operator>=(const CTokenGroupID &id) const { return data >= id.data; }
+    bool operator==(const CGroupTokenID &id) const { return data == id.data; }
+    bool operator!=(const CGroupTokenID &id) const { return data != id.data; }
+    bool operator<(const CGroupTokenID &id) const { return data < id.data; }
+    bool operator>(const CGroupTokenID &id) const { return data > id.data; }
+    bool operator<=(const CGroupTokenID &id) const { return data <= id.data; }
+    bool operator>=(const CGroupTokenID &id) const { return data >= id.data; }
     //* returns true if this is a user-defined group -- ie NOT bitcoin cash or no group
     bool isUserGroup(void) const;
     //* returns true if this is a subgroup
     bool isSubgroup(void) const;
     //* returns the parent group if this is a subgroup or itself.
-    CTokenGroupID parentGroup(void) const;
+    CGroupTokenID parentGroup(void) const;
 
     const std::vector<unsigned char> &bytes(void) const { return data; }
     //* Convert this token group ID into a mint/melt address
@@ -111,20 +113,21 @@ public:
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+    inline void SerializationOp(Stream &s, Operation ser_action, int nType, int nVersion)
+    {
         READWRITE(data);
     }
 
-    bool hasFlag(TokenGroupIdFlags flag) const;
+    bool hasFlag(GroupTokenIdFlags flag) const;
 };
 
 namespace std
 {
 template <>
-struct hash<CTokenGroupID>
+struct hash<CGroupTokenID>
 {
 public:
-    size_t operator()(const CTokenGroupID &s) const
+    size_t operator()(const CGroupTokenID &s) const
     {
         const std::vector<unsigned char> &v = s.bytes();
         int sz = v.size();
@@ -189,24 +192,33 @@ inline bool hasCapability(GroupAuthorityFlags object, const GroupAuthorityFlags 
 }
 
 inline CAmount toAmount(GroupAuthorityFlags f) { return (CAmount)f; }
-class CTokenGroupInfo
+class CGroupTokenInfo
 {
 public:
-    CTokenGroupInfo() : associatedGroup(), controllingGroupFlags(GroupAuthorityFlags::NONE), quantity(0), invalid(true)
+    CGroupTokenInfo() : associatedGroup(), controllingGroupFlags(GroupAuthorityFlags::NONE), quantity(0), invalid(true)
     {
     }
-    CTokenGroupInfo(const CTokenGroupID &associated, const GroupAuthorityFlags _controllingGroupFlags, CAmount qty = 0)
+    CGroupTokenInfo(const CGroupTokenID &associated, const GroupAuthorityFlags _controllingGroupFlags, CAmount qty = 0)
         : associatedGroup(associated), controllingGroupFlags(_controllingGroupFlags), quantity(qty), invalid(false)
     {
     }
-    CTokenGroupInfo(const CKeyID &associated, const GroupAuthorityFlags _controllingGroupFlags, CAmount qty = 0)
+    CGroupTokenInfo(const CKeyID &associated, const GroupAuthorityFlags _controllingGroupFlags, CAmount qty = 0)
         : associatedGroup(associated), controllingGroupFlags(_controllingGroupFlags), quantity(qty), invalid(false)
     {
     }
     // Return the controlling (can mint and burn) and associated (OP_GROUP in script) group of a script
-    CTokenGroupInfo(const CScript &script);
+    CGroupTokenInfo(const CScript &script);
 
-    CTokenGroupID associatedGroup; // The group announced by the script (or the bitcoin group if no OP_GROUP)
+    /** Reset the info in this object for subsequent use, equivalent to the default ctor */
+    void clear()
+    {
+        associatedGroup = CGroupTokenID();
+        controllingGroupFlags = GroupAuthorityFlags(GroupAuthorityFlags::NONE);
+        quantity = 0;
+        invalid = false;
+    }
+
+    CGroupTokenID associatedGroup; // The group announced by the script (or the bitcoin group if no OP_GROUP)
     GroupAuthorityFlags controllingGroupFlags; // if the utxo is a controller this is not NONE
     CAmount quantity; // The number of tokens specified in this script
     bool invalid;
@@ -214,7 +226,8 @@ public:
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+    inline void SerializationOp(Stream &s, Operation ser_action, int nType, int nVersion)
+    {
         READWRITE(this->associatedGroup);
         READWRITE(this->quantity);
         READWRITE(this->invalid);
@@ -227,11 +240,12 @@ public:
     }
     // return true if this object is a new token creation output.
     // Note that the group creation nonce cannot be 0
-    bool isGroupCreation(TokenGroupIdFlags tokenGroupIdFlags = TokenGroupIdFlags::NONE) const
+    bool isGroupCreation(GroupTokenIdFlags tokenGroupIdFlags = GroupTokenIdFlags::NONE) const
     {
         bool hasNonce = ((uint64_t)quantity & (uint64_t)~GroupAuthorityFlags::ALL_BITS) != 0;
 
-        return (((controllingGroupFlags & GroupAuthorityFlags::CTRL) == GroupAuthorityFlags::CTRL) && hasNonce && associatedGroup.hasFlag(tokenGroupIdFlags));
+        return (((controllingGroupFlags & GroupAuthorityFlags::CTRL) == GroupAuthorityFlags::CTRL) && hasNonce &&
+                associatedGroup.hasFlag(tokenGroupIdFlags));
     }
     // return true if this object allows minting.
     bool allowsMint() const
@@ -265,7 +279,7 @@ public:
     }
 
     bool isInvalid() const { return invalid; };
-    bool operator==(const CTokenGroupInfo &g)
+    bool operator==(const CGroupTokenInfo &g)
     {
         if (g.invalid || invalid)
             return false;
@@ -274,12 +288,13 @@ public:
 };
 
 // Verify that the token groups in this transaction properly balance
-bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCoinsViewCache &view);
+bool CheckGroupTokens(const CTransaction &tx, CValidationState &state, const CCoinsViewCache &view);
 
 // Return true if any output in this transaction is part of a group
 bool IsAnyTxOutputGrouped(const CTransaction &tx);
 
-bool IsAnyTxOutputGroupedCreation(const CTransaction &tx, const TokenGroupIdFlags tokenGroupIdFlags = TokenGroupIdFlags::NONE);
+bool IsAnyTxOutputGroupedCreation(const CTransaction &tx,
+    const GroupTokenIdFlags tokenGroupIdFlags = GroupTokenIdFlags::NONE);
 
 // Serialize a CAmount into an array of bytes.
 // This serialization does not store the length of the serialized data within the serialized data.
@@ -291,8 +306,17 @@ std::vector<unsigned char> SerializeAmount(CAmount num);
 // It is therefore useful only within a system that already identifies the length of this field (such as a CScript).
 CAmount DeserializeAmount(opcodetype opcodeQty, std::vector<unsigned char> &vec);
 
+/** Identify OP_GROUP script attribute sequence (i.e. data, data, OP_GROUP, OP_DROP, OP_DROP)
+        @param[in] The script
+        @param[inout] offsetInOut If not null, start at this offset in hashBytes, and if this a group attribute
+                           advance this "program counter" to the byte AFTER the OP_GROUP attribute.
+        @param[out] grp If not null, set to group info read from the script.
+        @return true If this pointed to an OP_GROUP attribute sequence
+*/
+bool IsScriptGrouped(const CScript &script, CScript::const_iterator *pc = nullptr, CGroupTokenInfo *grp = nullptr);
+
 // Convenience function to just extract the group from a script
-inline CTokenGroupID GetTokenGroup(const CScript &script) { return CTokenGroupInfo(script).associatedGroup; }
-extern CTokenGroupID NoGroup;
+inline CGroupTokenID GetGroupToken(const CScript &script) { return CGroupTokenInfo(script).associatedGroup; }
+extern CGroupTokenID NoGroup;
 
 #endif

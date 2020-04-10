@@ -11,6 +11,7 @@
 #include "script/script.h"
 #include "util.h"
 #include "utilstrencodings.h"
+bool MatchGroupedPayToPubkeyHash(const CScript &script, std::vector<uint8_t> &pubkeyhash, CGroupTokenInfo &grp);
 
 using namespace std;
 
@@ -214,6 +215,16 @@ static bool MatchMultisig(const CScript &script, unsigned int &required, std::ve
  */
 bool Solver(const CScript &scriptPubKey, txnouttype &typeRet, std::vector<valtype> &vSolutionsRet)
 {
+    CGroupTokenInfo grp;
+    return ExtendedSolver(scriptPubKey, typeRet, vSolutionsRet, grp);
+}
+
+bool ExtendedSolver(const CScript &scriptPubKey,
+    txnouttype &typeRet,
+    std::vector<valtype> &vSolutionsRet,
+    CGroupTokenInfo &grp)
+{
+    grp.clear();
     vSolutionsRet.clear();
 
     // Shortcut for pay-to-script-hash, which are more constrained than the other types:
@@ -228,6 +239,7 @@ bool Solver(const CScript &scriptPubKey, txnouttype &typeRet, std::vector<valtyp
     }
 
     std::vector<valtype> vData;
+
     // This need to go after general check about unspendable output (OP_RETURN)
     // otherwise all transactions of the TX_LABELPUBLIC type will be masked
     if (MatchLabelPublic(scriptPubKey, vData))
@@ -255,10 +267,25 @@ bool Solver(const CScript &scriptPubKey, txnouttype &typeRet, std::vector<valtyp
         vSolutionsRet.push_back(std::move(data));
         return true;
     }
+    /* nonstandard
+    if (MatchGroupedPayToPubkey(scriptPubKey, data, grp))
+    {
+        typeRet = TX_GRP_PUBKEY;
+        vSolutionsRet.push_back(std::move(data));
+        return true;
+    }
+    */
 
     if (MatchPayToPubkeyHash(scriptPubKey, data))
     {
         typeRet = TX_PUBKEYHASH;
+        vSolutionsRet.push_back(std::move(data));
+        return true;
+    }
+
+    if (MatchGroupedPayToPubkeyHash(scriptPubKey, data, grp))
+    {
+        typeRet = TX_GRP_PUBKEYHASH;
         vSolutionsRet.push_back(std::move(data));
         return true;
     }
@@ -291,7 +318,8 @@ bool Solver(const CScript &scriptPubKey, txnouttype &typeRet, std::vector<valtyp
 bool ExtractDestinationAndType(const CScript &scriptPubKey, CTxDestination &addressRet, txnouttype &whichType)
 {
     vector<valtype> vSolutions;
-    if (!Solver(scriptPubKey, whichType, vSolutions))
+    CGroupTokenInfo grp;
+    if (!ExtendedSolver(scriptPubKey, whichType, vSolutions, grp))
         return false;
 
     if (whichType == TX_PUBKEY)

@@ -9,7 +9,7 @@
 #include "main.h"
 #include "primitives/transaction.h"
 #include "script/interpreter.h"
-#include "tokengroups.h"
+#include "grouptokens.h"
 #include "unlimited.h"
 #include "validation.h"
 

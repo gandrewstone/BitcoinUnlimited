@@ -147,7 +147,7 @@ BITCOIN_CORE_H = \
   config.h \
   connmgr.h \
   consensus/consensus.h \
-  consensus/tokengroups.h \
+  consensus/grouptokens.h \
   consensus/tx_verify.h \
   core_io.h \
   core_memusage.h \
@@ -247,7 +247,7 @@ BITCOIN_CORE_H = \
   wallet/rpcwallet.h \
   wallet/wallet.h \
   wallet/walletdb.h \
-  wallet/tokengroupwallet.h \
+  wallet/grouptokenwallet.h \
   zmq/zmqabstractnotifier.h \
   zmq/zmqconfig.h\
   zmq/zmqnotificationinterface.h \
@@ -287,7 +287,7 @@ libbitcoin_server_a_SOURCES = \
   chain.cpp \
   checkpoints.cpp \
   connmgr.cpp \
-  consensus/tokengroups.cpp \
+  consensus/grouptokens.cpp \
   consensus/tx_verify.cpp \
   dosman.cpp \
   expedited.cpp \
@@ -327,6 +327,7 @@ libbitcoin_server_a_SOURCES = \
   respend/respenddetector.cpp \
   script/sigcache.cpp \
   script/ismine.cpp \
+  script/scriptattributes.cpp \
   timedata.cpp \
   torcontrol.cpp \
   txadmission.cpp \
@@ -365,7 +366,7 @@ libbitcoin_wallet_a_SOURCES = \
   wallet/coinselection.cpp \
   wallet/crypter.cpp \
   wallet/db.cpp \
-  wallet/tokengroupwallet.cpp \
+  wallet/grouptokenwallet.cpp \
   wallet/rpcdump.cpp \
   wallet/rpcwallet.cpp \
   wallet/wallet.cpp \
@@ -494,6 +495,7 @@ libbitcoin_consensus_a_SOURCES = \
   primitives/transaction.h \
   pubkey.cpp \
   pubkey.h \
+  script/scriptattributes.cpp \
   script/bitcoinconsensus.cpp \
   script/bitfield.cpp \
   script/bitfield.h \

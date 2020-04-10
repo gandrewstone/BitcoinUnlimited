@@ -21,6 +21,7 @@ logging.basicConfig(format='%(asctime)s.%(levelname)s: %(message)s', level=loggi
 class GroupTokensTest (BitcoinTestFramework):
 
     def setup_chain(self, bitcoinConfDict=None, wallets=None):
+        self.verbose = False
         print("Initializing test directory "+self.options.tmpdir)
         initialize_chain_clean(self.options.tmpdir, 4, bitcoinConfDict, wallets)
         # Number of nodes to initialize ----------> ^
@@ -55,12 +56,14 @@ class GroupTokensTest (BitcoinTestFramework):
         for txi in txjson["vin"]:
             txiJson = node.decoderawtransaction(node.gettransaction(txi["txid"])["hex"])
             prevOut = txiJson["vout"][txi["vout"]]
-            print("prevout %d:\n" % i)
-            pprint.pprint(prevOut, indent=2, width=200)
+            if self.verbose:
+              print("prevout %d:\n" % i)
+              pprint.pprint(prevOut, indent=2, width=200)
             i += 1
-        print("\n")
-        pprint.pprint(txjson, indent=2, width=200)
-        print("\n")
+        if self.verbose:
+          print("\n")
+          pprint.pprint(txjson, indent=2, width=200)
+          print("\n")
 
 
     def subgroupTest(self):
@@ -200,7 +203,7 @@ class GroupTokensTest (BitcoinTestFramework):
         try:
             self.nodes[1].token("mint", grp1Id, mint0_0, 1000)
         except JSONRPCException as e:
-            assert("To mint coins, an authority output with mint capability is needed." in e.error["message"])
+            assert("Not enough funds for fee" in e.error["message"])
 
         # mint from node 2 of group created by node 0 on behalf of node 2
         self.sync_all()  # node 2 has to be able to see the group new tx that node 0 made
@@ -302,13 +305,11 @@ def Test():
     t = GroupTokensTest()
     t.drop_to_pdb = True
     bitcoinConf = {
-        # "debug": ["blk", "thin", "mempool", "bench", "evict"],
-        "debug": ["mempool"],
-        "blockprioritysize": 2000000,  # we don't want any transactions rejected due to insufficient fees...
-        "mining.opgroup": 1
+        "debug": ["net", "blk", "thin", "mempool", "req", "bench", "evict"],
+        "blockprioritysize": 2000000  # we don't want any transactions rejected due to insufficient fees...
     }
-
     # you may want these additional flags:
     # "--srcdir=<out-of-source-build-dir>/debug/src"
     # "--tmpdir=/ramdisk/test"
-    t.main(["--srcdir=/fast/bitcoin/op_group/debug/src", "--nocleanup", "--noshutdown", "--tmpdir=/ramdisk/test"], bitcoinConf, None)
+    flags = standardFlags()
+    t.main(flags, bitcoinConf, None)

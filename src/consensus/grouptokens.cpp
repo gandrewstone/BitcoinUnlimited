@@ -1,7 +1,7 @@
 // Copyright (c) 2015-2017 The Bitcoin Unlimited developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-#include "tokengroups.h"
+#include "grouptokens.h"
 #include "base58.h"
 #include "cashaddrenc.h"
 #include "coincontrol.h"
@@ -15,18 +15,17 @@
 #include "rpc/server.h"
 #include "script/script.h"
 #include "script/standard.h"
+#include "streams.h"
 #include "unlimited.h"
 #include "utilmoneystr.h"
 #include "wallet/wallet.h"
 #include <algorithm>
 
-CTokenGroupID NoGroup; // No group specified.
-
 bool IsAnyTxOutputGrouped(const CTransaction &tx)
 {
     for (const CTxOut &txout : tx.vout)
     {
-        CTokenGroupInfo grp(txout.scriptPubKey);
+        CGroupTokenInfo grp(txout.scriptPubKey);
         if (grp.invalid)
             return true; // Its still grouped even if invalid
         if (grp.associatedGroup != NoGroup)
@@ -37,10 +36,10 @@ bool IsAnyTxOutputGrouped(const CTransaction &tx)
 }
 
 #if 0 // TBD
-bool IsAnyTxOutputGroupedCreation(const CTransaction &tx, const TokenGroupIdFlags tokenGroupIdFlags)
+bool IsAnyTxOutputGroupedCreation(const CTransaction &tx, const GroupTokenIdFlags tokenGroupIdFlags)
 {
     for (const CTxOut& txout : tx.vout) {
-        CTokenGroupInfo grp(txout.scriptPubKey);
+        CGroupTokenInfo grp(txout.scriptPubKey);
         if (grp.invalid)
             return false;
         if (grp.isGroupCreation(tokenGroupIdFlags))
@@ -79,137 +78,29 @@ std::vector<unsigned char> SerializeAmount(CAmount num)
     return std::vector<unsigned char>(strm.begin(), strm.end());
 }
 
-CAmount DeserializeAmount(opcodetype opcodeQty, std::vector<unsigned char> &vec)
-{
-    /* Disallow raw opcodes or single byte sizes, because having them is an unnecessary decode complication
-    if ((opcodeQty >= OP_1) && (opcodeQty <= OP_16))
-    {
-        return opcodeQty-OP_1+1;
-    }
-    if (opcodeQty == OP_1NEGATE)
-    {
-        return 0x81;
-    }
-
-    int sz = vec.size();
-    if (sz == 1)
-    {
-        return vec[0];
-    }
-    */
-    int sz = vec.size();
-    CDataStream strm(vec, SER_NETWORK, CLIENT_VERSION);
-    if (sz == 2)
-    {
-        return ser_readdata16(strm);
-    }
-    if (sz == 4)
-    {
-        return ser_readdata32(strm);
-    }
-    if (sz == 8)
-    {
-        uint64_t v = ser_readdata64(strm);
-        return (CAmount)v;
-    }
-    throw std::ios_base::failure("DeserializeAmount(): invalid format");
-}
-
 #if 0
-CTokenGroupID ExtractControllingGroup(const CScript &scriptPubKey)
+CGroupTokenID ExtractControllingGroup(const CScript &scriptPubKey)
 {
     txnouttype whichType;
     typedef std::vector<unsigned char> valtype;
     std::vector<valtype> vSolutions;
     if (!Solver(scriptPubKey, whichType, vSolutions))
-        return CTokenGroupID();
+        return CGroupTokenID();
 
     // only certain well known script types are allowed to mint or melt
     if ((whichType == TX_PUBKEYHASH) || (whichType == TX_GRP_PUBKEYHASH) || (whichType == TX_SCRIPTHASH) ||
         (whichType == TX_GRP_SCRIPTHASH))
     {
-        return CTokenGroupID(uint160(vSolutions[0]));
+        return CGroupTokenID(uint160(vSolutions[0]));
     }
-    return CTokenGroupID();
+    return CGroupTokenID();
 }
 #endif
 
-CTokenGroupInfo::CTokenGroupInfo(const CScript &script)
+CGroupTokenInfo::CGroupTokenInfo(const CScript &script)
     : associatedGroup(), controllingGroupFlags(GroupAuthorityFlags::NONE), quantity(0), invalid(false)
 {
-    CScript::const_iterator pc = script.begin();
-    std::vector<unsigned char> groupId;
-    std::vector<unsigned char> tokenQty;
-    std::vector<unsigned char> data;
-    opcodetype opcode;
-    opcodetype opcodeGrp;
-    opcodetype opcodeQty;
-
-    // mintMeltGroup = ExtractControllingGroup(script);
-
-    if (!script.GetOp(pc, opcodeGrp, groupId))
-    {
-        associatedGroup = NoGroup;
-        return;
-    }
-
-    if (!script.GetOp(pc, opcodeQty, tokenQty))
-    {
-        associatedGroup = NoGroup;
-        return;
-    }
-
-    if (!script.GetOp(pc, opcode, data))
-    {
-        associatedGroup = NoGroup;
-        return;
-    }
-
-    if (opcode != OP_GROUP)
-    {
-        associatedGroup = NoGroup;
-        return;
-    }
-    else // If OP_GROUP is used, enforce rules on the other fields
-    {
-        // group must be 32 bytes or more
-        if (opcodeGrp < 0x20)
-        {
-            invalid = true;
-            return;
-        }
-        /* Disallow amounts to be encoded as a single byte because these may need to have special encodings if
-   the SCRIPT_VERIFY_MINIMALDATA flag is set
-    // quantity must be 1, 2, 4, or 8 bytes
-    if (((opcodeQty < OP_1)||(opcodeQty > OP_16)) && (opcodeQty != OP_1NEGATE) && (opcodeQty != 1) && (opcodeQty != 2)
-   && (opcodeQty != 4) && (opcodeQty != 8))
-    {
-        invalid = true;
-        return;
-    }
-    */
-
-        // Quantity must be a 2, 4, or 8 byte number
-        if ((opcodeQty != 2) && (opcodeQty != 4) && (opcodeQty != 8))
-        {
-            invalid = true;
-            return;
-        }
-    }
-
-    try
-    {
-        quantity = DeserializeAmount(opcodeQty, tokenQty);
-    }
-    catch (std::ios_base::failure &f)
-    {
-        invalid = true;
-    }
-    if (quantity < 0)
-    {
-        controllingGroupFlags = (GroupAuthorityFlags)quantity;
-    }
-    associatedGroup = groupId;
+    IsScriptGrouped(script, nullptr, this);
 }
 
 
@@ -223,7 +114,7 @@ public:
           input(0), output(0), numOutputs(0)
     {
     }
-    // CTokenGroupInfo groups; // possible groups
+    // CGroupTokenInfo groups; // possible groups
     GroupAuthorityFlags ctrlPerms; // what permissions are provided in inputs
     GroupAuthorityFlags allowedCtrlOutputPerms; // What permissions are provided in inputs with CHILD set
     GroupAuthorityFlags allowedSubgroupCtrlOutputPerms; // What permissions are provided in inputs with CHILD set
@@ -233,9 +124,9 @@ public:
     uint64_t numOutputs;
 };
 
-bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCoinsViewCache &view)
+bool CheckGroupTokens(const CTransaction &tx, CValidationState &state, const CCoinsViewCache &view)
 {
-    std::unordered_map<CTokenGroupID, CBalance> gBalance;
+    std::unordered_map<CGroupTokenID, CBalance> gBalance;
     // This is an optimization allowing us to skip single-mint hashes if there are no output groups
     bool anyOutputGroups = false;
     bool anyOutputControlGroups = false;
@@ -246,7 +137,7 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
     for (const auto &outp : tx.vout)
     {
         const CScript &scriptPubKey = outp.scriptPubKey;
-        CTokenGroupInfo tokenGrp(scriptPubKey);
+        CGroupTokenInfo tokenGrp(scriptPubKey);
         if ((outp.nValue == 0) && (firstOpReturn.size() == 0) && (outp.scriptPubKey[0] == OP_RETURN))
         {
             firstOpReturn = outp.scriptPubKey; // Used later if this is a group creation transaction
@@ -291,7 +182,7 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
         if (coin->nHeight < miningEnforceOpGroup.Value())
             continue;
         const CScript &script = coin->out.scriptPubKey;
-        CTokenGroupInfo tokenGrp(script);
+        CGroupTokenInfo tokenGrp(script);
         // The prevout should never be invalid because that would mean that this node accepted a block with an
         // invalid OP_GROUP tx in it.
         if (tokenGrp.invalid)
@@ -322,11 +213,11 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
     // Now pass thru the outputs applying parent group capabilities to any subgroups
     for (auto &txo : gBalance)
     {
-        CTokenGroupID group = txo.first;
+        CGroupTokenID group = txo.first;
         CBalance &bal = txo.second;
         if (group.isSubgroup())
         {
-            CTokenGroupID parentgrp = group.parentGroup();
+            CGroupTokenID parentgrp = group.parentGroup();
             auto parentSearch = gBalance.find(parentgrp);
             if (parentSearch != gBalance.end()) // The parent group is part of the inputs
             {
@@ -361,7 +252,7 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
                 mintGrp << data;
             }
             mintGrp << (((uint64_t)bal.ctrlOutputPerms) & ~((uint64_t)GroupAuthorityFlags::ALL_BITS));
-            CTokenGroupID newGrpId(mintGrp.GetHash());
+            CGroupTokenID newGrpId(mintGrp.GetHash());
 
             if (newGrpId == txo.first) // This IS new group because id matches hash, so allow all authority.
             {
@@ -379,7 +270,7 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
                          "Only mint transactions can have a nonce");
                 }
             }
-#endif            
+#endif
         }
 
         if ((bal.input > bal.output) && !hasCapability(bal.ctrlPerms, GroupAuthorityFlags::MELT))
@@ -405,15 +296,16 @@ bool CheckTokenGroups(const CTransaction &tx, CValidationState &state, const CCo
 }
 
 
-bool CTokenGroupID::isUserGroup(void) const { return (!data.empty()); }
-bool CTokenGroupID::isSubgroup(void) const { return (data.size() > PARENT_GROUP_ID_SIZE); }
-CTokenGroupID CTokenGroupID::parentGroup(void) const
+bool CGroupTokenID::isUserGroup(void) const { return (!data.empty()); }
+bool CGroupTokenID::isSubgroup(void) const { return (data.size() > PARENT_GROUP_ID_SIZE); }
+CGroupTokenID CGroupTokenID::parentGroup(void) const
 {
     if (data.size() <= PARENT_GROUP_ID_SIZE)
-        return CTokenGroupID(data);
-    return CTokenGroupID(std::vector<unsigned char>(data.begin(), data.begin() + PARENT_GROUP_ID_SIZE));
+        return CGroupTokenID(data);
+    return CGroupTokenID(std::vector<unsigned char>(data.begin(), data.begin() + PARENT_GROUP_ID_SIZE));
 }
 
-bool CTokenGroupID::hasFlag(TokenGroupIdFlags flag) const {
-    return data.size() >= PARENT_GROUP_ID_SIZE ? hasTokenGroupIdFlag((TokenGroupIdFlags)data[31], flag) : false;
+bool CGroupTokenID::hasFlag(GroupTokenIdFlags flag) const
+{
+    return data.size() >= PARENT_GROUP_ID_SIZE ? hasGroupTokenIdFlag((GroupTokenIdFlags)data[31], flag) : false;
 }
