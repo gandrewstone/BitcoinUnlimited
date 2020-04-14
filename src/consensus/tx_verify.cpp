@@ -6,10 +6,10 @@
 #include "tx_verify.h"
 
 #include "consensus.h"
+#include "grouptokens.h"
 #include "main.h"
 #include "primitives/transaction.h"
 #include "script/interpreter.h"
-#include "grouptokens.h"
 #include "unlimited.h"
 #include "validation.h"
 

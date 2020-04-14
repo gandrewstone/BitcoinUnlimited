@@ -8,6 +8,7 @@
 
 #include "bitfield.h"
 #include "bitmanip.h"
+#include "consensus/grouptokens.h"
 #include "crypto/ripemd160.h"
 #include "crypto/sha1.h"
 #include "crypto/sha256.h"
@@ -792,6 +793,11 @@ bool ScriptMachine::Step()
                 break;
 
                 case OP_GROUP: // OP_GROUP is a no-op during script evaluation
+                    break;
+                case OP_TEMPLATE: // OP_TEMPLATE just pops during script evaluation
+                    if (stack.size() < 1)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    popstack(stack);
                     break;
                 case OP_IF:
                 case OP_NOTIF:
@@ -1950,7 +1956,7 @@ bool TransactionSignatureChecker::CheckSequence(const CScriptNum &nSequence) con
     return true;
 }
 
-bool VerifyScript(const CScript &scriptSig,
+bool VerifyTraditionalScript(const CScript &scriptSig,
     const CScript &scriptPubKey,
     unsigned int flags,
     unsigned int maxOps,
@@ -2065,4 +2071,58 @@ bool VerifyScript(const CScript &scriptSig,
     }
 
     return set_success(serror);
+}
+
+
+bool VerifyScript(const CScript &scriptSig,
+    const CScript &scriptPubKey,
+    unsigned int flags,
+    unsigned int maxOps,
+    const BaseSignatureChecker &checker,
+    ScriptError *serror,
+    ScriptMachineResourceTracker *tracker)
+{
+    unsigned int maxActualSigops = 0xFFFFFFFF; // TODO add sigop execution limits
+    ScriptTemplateError terror;
+    CScript::const_iterator constraintStart = scriptPubKey.begin();
+    uint256 templateHashConstraint = GetScriptTemplate(scriptPubKey, terror, &constraintStart);
+    if (terror == ScriptTemplateError::INVALID)
+    {
+        return set_error(serror, SCRIPT_ERR_TEMPLATE);
+    }
+    else if (terror == ScriptTemplateError::OK)
+    {
+        // The constraint script is everything after the script output attributes in the scriptpubkey.
+        CScript constraint(constraintStart, scriptPubKey.end());
+
+        // Grab the template script (its the first data push in the scriptSig)
+        CScript::const_iterator pc = scriptSig.begin();
+        std::vector<unsigned char> templateScriptBytes;
+        opcodetype templateDataOpcode;
+        if (!scriptSig.GetOp(pc, templateDataOpcode, templateScriptBytes))
+        {
+            return set_error(serror, SCRIPT_ERR_TEMPLATE);
+        }
+        CScript templat(templateScriptBytes.begin(), templateScriptBytes.end());
+
+        // The rest of the scriptSig is the satisfier
+        CScript satisfier(pc, scriptSig.end());
+
+        // Make sure that the template matches the constraint's hash
+        uint256 templateHash;
+        CHash256().Write(begin_ptr(templateScriptBytes), templateScriptBytes.size()).Finalize(templateHash.begin());
+        if (templateHashConstraint != templateHash)
+        {
+            return set_error(serror, SCRIPT_ERR_TEMPLATE);
+        }
+
+        return VerifyTemplate(templat, constraint, satisfier, flags, maxOps, maxActualSigops, checker, serror, tracker);
+    }
+    else if (terror == ScriptTemplateError::NOT_A_TEMPLATE)
+    {
+        return VerifyTraditionalScript(scriptSig, scriptPubKey, flags, maxOps, checker, serror, tracker);
+    }
+
+    // all cases should have been handled
+    return set_error(serror, SCRIPT_ERR_UNKNOWN_ERROR);
 }

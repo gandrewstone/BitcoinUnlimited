@@ -6,6 +6,7 @@
 
 CGroupTokenID NoGroup; // No group specified.
 
+static bool IsPushOpcode(opcodetype opcode) { return opcode <= OP_16; }
 CAmount DeserializeAmount(opcodetype opcodeQty, std::vector<unsigned char> &vec)
 {
     /* Disallow raw opcodes or single byte sizes, because having them is an unnecessary decode complication
@@ -172,6 +173,51 @@ bool MatchGroupedPayToPubkey(const CScript &script, valtype &pubkey, CGroupToken
     return false;
 }
 */
+
+uint256 GetScriptTemplate(const CScript &script, ScriptTemplateError &error, CScript::const_iterator *pcout)
+{
+    error = ScriptTemplateError::NOT_A_TEMPLATE;
+    uint256 nothing = uint256();
+    opcodetype opcode;
+    opcodetype opcodeTemplateData;
+    CScript::const_iterator pc = script.begin();
+    IsScriptGrouped(script, &pc); // Move past the group
+
+    // expecting DATA OP_TEMPLATE
+
+    // next will be the template hash if it exists
+    std::vector<unsigned char> templateId;
+    if (!script.GetOp(pc, opcodeTemplateData, templateId))
+    {
+        return nothing;
+    }
+    if (!IsPushOpcode(opcodeTemplateData))
+        return nothing;
+
+    // Now the template opcode
+    std::vector<unsigned char> betterBeNoData;
+    if (!script.GetOp(pc, opcode, betterBeNoData))
+    {
+        return nothing;
+    }
+
+    if (opcode != OP_TEMPLATE)
+    {
+        return nothing;
+    }
+
+    // template hash must be 32 bytes
+    if (opcodeTemplateData != 0x20)
+    {
+        error = ScriptTemplateError::INVALID;
+        return nothing;
+    }
+
+    if (pcout)
+        *pcout = pc;
+    error = ScriptTemplateError::OK;
+    return uint256(templateId);
+}
 
 bool MatchGroupedPayToPubkeyHash(const CScript &script, std::vector<uint8_t> &pubkeyhash, CGroupTokenInfo &grp)
 {

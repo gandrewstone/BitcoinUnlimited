@@ -10,6 +10,7 @@
 #include "crypto/common.h"
 #include "prevector.h"
 #include "script_error.h"
+#include "uint256.h"
 
 #include <assert.h>
 #include <climits>
@@ -194,6 +195,7 @@ enum opcodetype
     OP_CHECKDATASIG = 0xba,
     OP_CHECKDATASIGVERIFY = 0xbb,
 
+    OP_TEMPLATE = 0xef,
     // The first op_code value after all defined opcodes
     FIRST_UNDEFINED_OP_VALUE,
 
@@ -527,6 +529,14 @@ public:
         insert(end(), b.begin(), b.end());
         return *this;
     }
+
+    CScript &operator<<(const uint256 &data)
+    {
+        std::vector<unsigned char> v(data.begin(), data.end());
+        *this << v;
+        return *this;
+    }
+
 
     bool GetOp(iterator &pc, opcodetype &opcodeRet, std::vector<unsigned char> &vchRet)
     {

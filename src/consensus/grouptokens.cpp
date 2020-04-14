@@ -114,7 +114,6 @@ public:
           input(0), output(0), numOutputs(0)
     {
     }
-    // CGroupTokenInfo groups; // possible groups
     GroupAuthorityFlags ctrlPerms; // what permissions are provided in inputs
     GroupAuthorityFlags allowedCtrlOutputPerms; // What permissions are provided in inputs with CHILD set
     GroupAuthorityFlags allowedSubgroupCtrlOutputPerms; // What permissions are provided in inputs with CHILD set
@@ -122,7 +121,10 @@ public:
     CAmount input;
     CAmount output;
     uint64_t numOutputs;
+    // If covenant restricted, the hash of the first grouped & templated input's prevout is this group's covenant.
+    uint256 covenant;
 };
+
 
 bool CheckGroupTokens(const CTransaction &tx, CValidationState &state, const CCoinsViewCache &view)
 {
@@ -202,6 +204,20 @@ bool CheckGroupTokens(const CTransaction &tx, CValidationState &state, const CCo
             // Track what permissions this transaction has
             gBalance[tokenGrp.associatedGroup].ctrlPerms |= temp;
         }
+
+        ScriptTemplateError error;
+        uint256 templateId = GetScriptTemplate(script, error);
+        if (error == ScriptTemplateError::INVALID) // should never happen because this script is confirmed onchain
+        {
+            return state.Invalid(false, REJECT_INVALID, "invalid prevout template attribute");
+        }
+
+        // The first grouped template input is the covenant for this group (if group is covenanted).
+        if ((error == ScriptTemplateError::OK) && (gBalance[tokenGrp.associatedGroup].covenant == uint256()))
+        {
+            gBalance[tokenGrp.associatedGroup].covenant = templateId;
+        }
+
         if ((tokenGrp.associatedGroup != NoGroup) && !tokenGrp.isAuthority())
         {
             if (std::numeric_limits<CAmount>::max() - gBalance[tokenGrp.associatedGroup].input < amount)
@@ -292,6 +308,42 @@ bool CheckGroupTokens(const CTransaction &tx, CValidationState &state, const CCo
         }
     }
 
+    // Now pass thru the outputs ensuring group covenants, and that any templates are valid.
+    for (const auto &outp : tx.vout)
+    {
+        const CScript &script = outp.scriptPubKey;
+        CGroupTokenInfo grp(script);
+
+        ScriptTemplateError error;
+        uint256 templateId = GetScriptTemplate(script, error);
+        if (error == ScriptTemplateError::INVALID)
+        {
+            return state.Invalid(false, REJECT_INVALID, "template-invalid", "invalid template in constraint script");
+        }
+
+        // If this output's group is covenanted, enforce it.
+        if (grp.associatedGroup.hasFlag(GroupTokenIdFlags::SAME_SCRIPT))
+        {
+            CBalance &grpData = gBalance[grp.associatedGroup];
+
+            // All covenanted groups must use templates
+            if (error == ScriptTemplateError::NOT_A_TEMPLATE)
+            {
+                return state.Invalid(
+                    false, REJECT_INVALID, "grp-covenant-no-template", "covenanted group output is not a template");
+            }
+
+            // If no inputs have the authority to change the covenant, then this output must match the covenant
+            if (!hasCapability(grpData.ctrlPerms, GroupAuthorityFlags::RESCRIPT))
+            {
+                if (templateId != grpData.covenant)
+                {
+                    return state.Invalid(false, REJECT_INVALID, "grp-covenant-bad-template",
+                        "covenant group has incorrect output template");
+                }
+            }
+        }
+    }
     return true;
 }
 

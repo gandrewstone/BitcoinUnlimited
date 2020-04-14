@@ -30,6 +30,13 @@ enum class GroupTokenIdFlags : uint8_t
     DEFAULT = 0
 };
 
+enum class ScriptTemplateError : uint8_t
+{
+    OK = 0,
+    NOT_A_TEMPLATE = 1U,
+    INVALID = 2U
+};
+
 inline GroupTokenIdFlags operator|(const GroupTokenIdFlags a, const GroupTokenIdFlags b)
 {
     GroupTokenIdFlags ret = (GroupTokenIdFlags)(((uint8_t)a) | ((uint8_t)b));
@@ -314,6 +321,14 @@ CAmount DeserializeAmount(opcodetype opcodeQty, std::vector<unsigned char> &vec)
         @return true If this pointed to an OP_GROUP attribute sequence
 */
 bool IsScriptGrouped(const CScript &script, CScript::const_iterator *pc = nullptr, CGroupTokenInfo *grp = nullptr);
+
+/** Get the script's template hash if this script is a template
+    @param[in] script The script
+    @param[out] error Whether the script is a template, is not a template, or is an invalid template.
+    @param[out] pcout Points to the script location after the script template.
+    @return The script template's hash only if error is ScriptTemplateError::OK
+ */
+uint256 GetScriptTemplate(const CScript &script, ScriptTemplateError &error, CScript::const_iterator *pcout = nullptr);
 
 // Convenience function to just extract the group from a script
 inline CGroupTokenID GetGroupToken(const CScript &script) { return CGroupTokenInfo(script).associatedGroup; }

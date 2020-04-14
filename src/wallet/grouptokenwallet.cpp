@@ -16,6 +16,8 @@
 #include "rpc/server.h"
 #include "script/script.h"
 #include "script/standard.h"
+#include "txadmission.h"
+#include "txdebugger.h"
 #include "unlimited.h"
 #include "utilmoneystr.h"
 #include "wallet/wallet.h"
@@ -27,7 +29,6 @@
 #define FEE_FUDGE 2
 
 extern CChain chainActive;
-extern CCriticalSection cs_main;
 bool EnsureWalletIsAvailable(bool avoidException);
 UniValue groupedlistsinceblock(const UniValue &params, bool fHelp);
 UniValue groupedlisttransactions(const UniValue &params, bool fHelp);
@@ -495,7 +496,7 @@ void GroupMelt(CWalletTx &wtxNew, const CGroupTokenID &grpID, CAmount totalNeede
     CAmount totalAvailable = 0;
     CAmount totalBchAvailable = 0;
     CAmount totalBchNeeded = 0;
-    LOCK2(cs_main, wallet->cs_wallet);
+    LOCK(wallet->cs_wallet);
 
     // Find melt authority
     std::vector<COutput> coins;
@@ -575,7 +576,7 @@ void GroupSend(CWalletTx &wtxNew,
     CAmount totalNeeded,
     CWallet *wallet)
 {
-    LOCK2(cs_main, wallet->cs_wallet);
+    LOCK(wallet->cs_wallet);
     std::string strError;
     std::vector<COutput> coins;
     CAmount totalAvailable = 0;
@@ -806,7 +807,7 @@ extern UniValue token(const UniValue &params, bool fHelp)
     }
     else if (operation == "authority")
     {
-        LOCK2(cs_main, wallet->cs_wallet);
+        LOCK(wallet->cs_wallet);
         CAmount totalBchNeeded = 0;
         CAmount totalBchAvailable = 0;
         unsigned int curparam = 1;
@@ -914,7 +915,7 @@ extern UniValue token(const UniValue &params, bool fHelp)
     }
     else if (operation == "new")
     {
-        LOCK2(cs_main, wallet->cs_wallet);
+        LOCK(wallet->cs_wallet);
         unsigned int curparam = 1;
 
         // CCoinControl coinControl;
@@ -995,7 +996,6 @@ extern UniValue token(const UniValue &params, bool fHelp)
 
     else if (operation == "mint")
     {
-        LOCK(cs_main); // to maintain locking order
         LOCK(wallet->cs_wallet); // because I am reserving UTXOs for use in a tx
         CGroupTokenID grpID;
         CAmount totalTokensNeeded = 0;
@@ -1342,7 +1342,7 @@ UniValue groupedlisttransactions(const UniValue &params, bool fHelp)
             HelpExampleCli("listtransactions", "\"*\" 20 100") + "\nAs a json rpc call\n" +
             HelpExampleRpc("listtransactions", "\"*\", 20, 100"));
 
-    LOCK2(cs_main, pwalletMain->cs_wallet);
+    LOCK(pwalletMain->cs_wallet);
 
     string strAccount = "*";
 
@@ -1477,7 +1477,7 @@ UniValue groupedlistsinceblock(const UniValue &params, bool fHelp)
             HelpExampleRpc(
                 "listsinceblock", "\"000000000000000bacf66f7497b7dc45ef753ee9a7d38571037cdb1a57f663ad\", 6"));
 
-    LOCK2(cs_main, pwalletMain->cs_wallet);
+    LOCK(pwalletMain->cs_wallet);
 
     CBlockIndex *pindex = NULL;
     int target_confirms = 1;

@@ -378,7 +378,7 @@ public:
     }
 
     // Set the alt stack to the passed data
-    void setAltStack(std::vector<StackDataType> &stk) { altstack = stk; }
+    void setAltStack(const std::vector<StackDataType> &stk) { altstack = stk; }
     // Get the main stack
     const std::vector<StackDataType> &getStack() { return stack; }
     // Get the alt stack
@@ -407,6 +407,16 @@ bool VerifyScript(const CScript &scriptSig,
     const BaseSignatureChecker &checker,
     ScriptError *error = nullptr,
     ScriptMachineResourceTracker *tracker = nullptr);
+
+bool VerifyTemplate(const CScript &templat,
+    const CScript &constraint,
+    const CScript &satisfier,
+    unsigned int flags,
+    unsigned int maxOps,
+    unsigned int maxActualSigops,
+    const BaseSignatureChecker &checker,
+    ScriptError *serror,
+    ScriptMachineResourceTracker *tracker);
 
 // string prefixed to data when validating signed messages via RPC call.  This ensures
 // that the signature was intended for use on this blockchain.

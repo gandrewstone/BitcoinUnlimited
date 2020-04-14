@@ -266,6 +266,8 @@ const char *GetOpName(opcodetype opcode)
     case OP_REVERSEBYTES:
         return "OP_REVERSEBYTES";
 
+    case OP_TEMPLATE:
+        return "OP_TEMPLATE";
 
     case OP_INVALIDOPCODE:
         return "OP_INVALIDOPCODE";

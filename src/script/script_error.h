@@ -79,6 +79,8 @@ typedef enum ScriptError_t {
     SCRIPT_ERR_NUMBER_BAD_ENCODING,
     SIGCHECKS_LIMIT_EXCEEDED,
 
+    SCRIPT_ERR_TEMPLATE,
+
     SCRIPT_ERR_ERROR_COUNT
 } ScriptError;
 

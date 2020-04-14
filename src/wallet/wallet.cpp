@@ -16,6 +16,7 @@
 #include "core_io.h" // Freeze for debug only
 #include "dstencode.h"
 #include "fs.h"
+#include "grouptokenwallet.h"
 #include "key.h"
 #include "keystore.h"
 #include "main.h"
@@ -26,7 +27,6 @@
 #include "script/script.h"
 #include "script/sign.h"
 #include "timedata.h"
-#include "grouptokenwallet.h"
 #include "txadmission.h"
 #include "txmempool.h"
 #include "ui_interface.h"
@@ -2019,7 +2019,7 @@ unsigned int CWallet::FilterCoins(vector<COutput> &vCoins,
     unsigned int ret = 0;
 
     {
-        LOCK2(cs_main, cs_wallet);
+        LOCK(cs_wallet);
         for (map<uint256, CWalletTx>::const_iterator it = mapWallet.begin(); it != mapWallet.end(); ++it)
         {
             const uint256 &wtxid = it->first;
@@ -2954,54 +2954,77 @@ bool CWallet::CreateTransaction(const vector<CRecipient> &vecSend,
  */
 bool CWallet::CommitTransaction(CWalletTx &wtxNew, CReserveKey &reservekey)
 {
+    if (fBroadcastTransactions)
+    /** When the wallet is parallelized, this will higher performing, however right now its a wash.
+        Enqueuing like this will not provide feedback if the the mempool doesn't accept the tx.
+        And for RPC calls, you must FlushTxAdmission before returning
+    CTxInputData d;
+    d.tx = MakeTransactionRef(wtxNew);
+    d.whitelisted = true;
+    d.nodeName = "wallet";
+    EnqueueTxForAdmission(d);
+    */
+
+    /*
+    if (!wtxNew.AcceptToMemoryPool(AreFreeTxnsDisallowed()))
     {
-        if (fBroadcastTransactions)
+        // This must not fail. The transaction has already been signed and recorded.
+        LOGA("CommitTransaction(): Error: Transaction not valid\n");
+        return false;
+    }
+    */
+
+    {
+        auto txref = MakeTransactionRef(wtxNew);
+        CValidationDebugger debugger;
+        CValidationState state;
+        bool fMissingInputs = false;
+        std::vector<COutPoint> vCoinsToUncache;
+        bool isRespend = false;
+        const bool rejectAbsurdFee = true;
+        // Since this is our own wallet, we can use nonstandard
+        // TODO: limit nonstandard to a tweak because unless you are a miner it won't be mined
+        ParallelAcceptToMemoryPool(txHandlerSnap, mempool, state, txref, false, &fMissingInputs, false, rejectAbsurdFee,
+            TransactionClass::NONSTANDARD, vCoinsToUncache, &isRespend, &debugger);
+        if (debugger.IsValid())
         {
-            /** When the wallet is parallelized, this will higher performing, however right now its a wash.
-                Enqueuing like this will not provide feedback if the the mempool doesn't accept the tx.
-                And for RPC calls, you must FlushTxAdmission before returning
-            CTxInputData d;
-            d.tx = MakeTransactionRef(wtxNew);
-            d.whitelisted = true;
-            d.nodeName = "wallet";
-            EnqueueTxForAdmission(d);
-            */
-
-            // Broadcast
-            if (!wtxNew.AcceptToMemoryPool(AreFreeTxnsDisallowed()))
-            {
-                // This must not fail. The transaction has already been signed and recorded.
-                LOGA("CommitTransaction(): Error: Transaction not valid\n");
-                return false;
-            }
+            CTxInputData txd;
+            txd.tx = txref;
+            txd.whitelisted = true;
+            txd.nodeName = "wallet";
+            EnqueueTxForAdmission(txd);
         }
+        else // TODO return why tx is invalid (the debugger object)
+        {
+            return false;
+        }
+    }
 
+    {
         LOCK(cs_wallet);
+        // This is only to keep the database open to defeat the auto-flush for the
+        // duration of this scope.  This is the only place where this optimization
+        // maybe makes sense; please don't do it anywhere else.
+        CWalletDB *pwalletdb = fFileBacked ? new CWalletDB(strWalletFile, "r+") : nullptr;
+
+        // Take key pair from key pool so it won't be used again
+        reservekey.KeepKey();
+
+        // Add tx to wallet, because if it has change it's also ours,
+        // otherwise just for transaction history.
+        AddToWallet(wtxNew, false, pwalletdb);
+
+        // Notify that old coins are spent
+        set<CWalletTx *> setCoins;
+        for (const CTxIn &txin : wtxNew.vin)
         {
-            // This is only to keep the database open to defeat the auto-flush for the
-            // duration of this scope.  This is the only place where this optimization
-            // maybe makes sense; please don't do it anywhere else.
-            CWalletDB *pwalletdb = fFileBacked ? new CWalletDB(strWalletFile, "r+") : nullptr;
-
-            // Take key pair from key pool so it won't be used again
-            reservekey.KeepKey();
-
-            // Add tx to wallet, because if it has change it's also ours,
-            // otherwise just for transaction history.
-            AddToWallet(wtxNew, false, pwalletdb);
-
-            // Notify that old coins are spent
-            set<CWalletTx *> setCoins;
-            for (const CTxIn &txin : wtxNew.vin)
-            {
-                CWalletTx &coin = mapWallet[txin.prevout.hash];
-                coin.BindWallet(this);
-                NotifyTransactionChanged(this, coin.GetHash(), CT_UPDATED);
-            }
-
-            if (fFileBacked)
-                delete pwalletdb;
+            CWalletTx &coin = mapWallet[txin.prevout.hash];
+            coin.BindWallet(this);
+            NotifyTransactionChanged(this, coin.GetHash(), CT_UPDATED);
         }
+
+        if (fFileBacked)
+            delete pwalletdb;
 
         // Track how many getdata requests our transaction gets
         mapRequestCount[wtxNew.GetHash()] = 0;
@@ -3012,7 +3035,19 @@ bool CWallet::CommitTransaction(CWalletTx &wtxNew, CReserveKey &reservekey)
             wtxNew.RelayWalletTransaction();
         }
     }
-    return true;
+
+
+    // Wait for tx to be admitted
+    for (int i = 0; i < 50; i++)
+    {
+        if (mempool.exists(wtxNew.GetHash()))
+        {
+            return true;
+        }
+        MilliSleep(100);
+    }
+
+    return false; // TX was not admitted
 }
 
 bool CWallet::AddAccountingEntry(const CAccountingEntry &acentry, CWalletDB &pwalletdb)
