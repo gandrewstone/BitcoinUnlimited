@@ -2625,67 +2625,97 @@ BOOST_AUTO_TEST_CASE(IsWitnessProgram)
 
 BOOST_AUTO_TEST_CASE(script_debugger)
 {
-    CScript testScript = CScript() << 0 << 1;
-    CScript testRedeemScript = CScript() << OP_IF << OP_IF << 1 << OP_ELSE << 2 << OP_ENDIF << OP_ELSE << 3 << OP_ENDIF;
-    BaseSignatureChecker sigChecker;
-    ScriptMachine sm(0, sigChecker, 0xffffffff, 0xffffffff);
-
-    bool result = sm.Eval(testScript);
-    BOOST_CHECK(result);
-    sm.BeginStep(testRedeemScript);
-    while (sm.isMoreSteps())
     {
-        unsigned int pos = sm.getPos();
-        auto info = sm.Peek();
-        if (pos == 4)
+        CScript testScript = CScript() << 0 << 1;
+        CScript testRedeemScript = CScript() << OP_IF << OP_IF << 1 << OP_ELSE << 2 << OP_ENDIF << OP_ELSE << 3
+                                             << OP_ENDIF;
+        BaseSignatureChecker sigChecker;
+        ScriptMachine sm(0, sigChecker, 0xffffffff, 0xffffffff);
+
+        bool result = sm.Eval(testScript);
+        BOOST_CHECK(result);
+        sm.BeginStep(testRedeemScript);
+        while (sm.isMoreSteps())
         {
-            BOOST_CHECK(std::get<0>(info) == true);
-            BOOST_CHECK(std::get<1>(info) == OP_2);
+            unsigned int pos = sm.getPos();
+            auto info = sm.Peek();
+            if (pos == 4)
+            {
+                BOOST_CHECK(std::get<0>(info) == true);
+                BOOST_CHECK(std::get<1>(info) == OP_2);
+            }
+            // you could print stepping info:
+            // printf("pos %d: %s %s datalen: %d stack len: %d\n", pos, std::get<0>(info) ? "running" : "skipping",
+            //       GetOpName(std::get<1>(info)), std::get<2>(info).size(), sm.getStack().size());
+            if (!sm.Step())
+                break;
         }
-        // you could print stepping info:
-        // printf("pos %d: %s %s datalen: %d stack len: %d\n", pos, std::get<0>(info) ? "running" : "skipping",
-        //       GetOpName(std::get<1>(info)), std::get<2>(info).size(), sm.getStack().size());
-        if (!sm.Step())
-            break;
+        sm.EndStep();
+
+        auto finalStack = sm.getStack();
+        BOOST_CHECK(finalStack.size() == 1);
+        BOOST_CHECK(finalStack[0][0] == 2);
+
+        testRedeemScript = CScript() << OP_IF << OP_IF << OP_FROMALTSTACK << OP_ELSE << OP_INVALIDOPCODE << OP_ENDIF
+                                     << OP_ELSE << 3 << OP_ENDIF;
+        sm.Reset();
+        sm.Eval(CScript() << 0 << 1);
+        result = sm.Eval(testRedeemScript);
+        BOOST_CHECK(result == false); // should get stuck at OP_INVALIDOPCODE
+        auto error = sm.getError();
+        BOOST_CHECK(error == SCRIPT_ERR_BAD_OPCODE);
+        unsigned int pos = sm.getPos();
+        BOOST_CHECK(pos == 5);
+
+        sm.Reset();
+        sm.Eval(CScript() << 1 << 1);
+        result = sm.Eval(testRedeemScript);
+        BOOST_CHECK(result == false); // should get stuck at OP_FROMALTSTACK, because nothing in altstack
+        error = sm.getError();
+        BOOST_CHECK(error == SCRIPT_ERR_INVALID_ALTSTACK_OPERATION);
+        pos = sm.getPos();
+        BOOST_CHECK(pos == 3);
+
+        std::vector<StackDataType> altStack;
+        StackDataType item;
+        item.push_back(4);
+        altStack.push_back(item);
+        sm.Reset();
+        sm.Eval(CScript() << 1 << 1);
+        sm.setAltStack(altStack);
+        result = sm.Eval(testRedeemScript);
+        BOOST_CHECK(result == true); // should work because altstack was seeded
+        auto &stk = sm.getStack();
+        BOOST_CHECK(stk.size() == 1);
+        BOOST_CHECK(stk[0][0] == 4);
     }
-    sm.EndStep();
 
-    auto finalStack = sm.getStack();
-    BOOST_CHECK(finalStack.size() == 1);
-    BOOST_CHECK(finalStack[0][0] == 2);
+    // Check the values of the resource tracker
+    {
+        CScript testScript = CScript() << vector<unsigned char>(5) << vector<unsigned char>(10) << 1 << 1;
+        CScript testRedeemScript = CScript() << OP_IF << OP_IF << OP_CHECKSIG << OP_ELSE << 2 << OP_ENDIF << OP_ELSE
+                                             << 3 << OP_ENDIF;
+        BaseSignatureChecker sigChecker;
+        ScriptMachine sm(0, sigChecker, 0xffffffff, 0xffffffff);
 
-    testRedeemScript = CScript() << OP_IF << OP_IF << OP_FROMALTSTACK << OP_ELSE << OP_INVALIDOPCODE << OP_ENDIF
-                                 << OP_ELSE << 3 << OP_ENDIF;
-    sm.Reset();
-    sm.Eval(CScript() << 0 << 1);
-    result = sm.Eval(testRedeemScript);
-    BOOST_CHECK(result == false); // should get stuck at OP_INVALIDOPCODE
-    auto error = sm.getError();
-    BOOST_CHECK(error == SCRIPT_ERR_BAD_OPCODE);
-    unsigned int pos = sm.getPos();
-    BOOST_CHECK(pos == 5);
+        // Evaluate this twice, combine the trackers via update and verify that the proper values come out.
+        sm.Reset();
+        sm.Eval(testScript);
+        BOOST_CHECK(sm.getStats().nOpCount == 0); // pushes have no op count
+        sm.Eval(testRedeemScript);
+        ScriptMachineResourceTracker t1 = sm.getStats();
+        BOOST_CHECK(sm.getStats().nOpCount == 7);
+        BOOST_CHECK(sm.getStats().consensusSigCheckCount == 1);
+        sm.Reset();
 
-    sm.Reset();
-    sm.Eval(CScript() << 1 << 1);
-    result = sm.Eval(testRedeemScript);
-    BOOST_CHECK(result == false); // should get stuck at OP_FROMALTSTACK, because nothing in altstack
-    error = sm.getError();
-    BOOST_CHECK(error == SCRIPT_ERR_INVALID_ALTSTACK_OPERATION);
-    pos = sm.getPos();
-    BOOST_CHECK(pos == 3);
+        sm.Eval(testScript);
+        sm.Eval(testRedeemScript);
+        ScriptMachineResourceTracker t2 = sm.getStats();
 
-    std::vector<StackDataType> altStack;
-    StackDataType item;
-    item.push_back(4);
-    altStack.push_back(item);
-    sm.Reset();
-    sm.Eval(CScript() << 1 << 1);
-    sm.setAltStack(altStack);
-    result = sm.Eval(testRedeemScript);
-    BOOST_CHECK(result == true); // should work because altstack was seeded
-    auto &stk = sm.getStack();
-    BOOST_CHECK(stk.size() == 1);
-    BOOST_CHECK(stk[0][0] == 4);
+        t2.update(t1);
+        BOOST_CHECK(t2.nOpCount == 14);
+        BOOST_CHECK(t2.consensusSigCheckCount == 2);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(script_can_append_self)

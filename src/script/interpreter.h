@@ -246,7 +246,7 @@ public:
     void update(const ScriptMachineResourceTracker &stats)
     {
         consensusSigCheckCount += stats.consensusSigCheckCount;
-        nOpCount = stats.nOpCount;
+        nOpCount += stats.nOpCount;
         sighashtype |= stats.sighashtype;
     }
 

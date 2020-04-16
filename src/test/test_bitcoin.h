@@ -11,6 +11,7 @@
 #include "net.h"
 #include "pubkey.h"
 #include "random.h"
+#include "script/interpreter.h"
 #include "txdb.h"
 #include "txmempool.h"
 
@@ -140,5 +141,38 @@ struct TestMemPoolEntryHelper
 std::ostream &operator<<(std::ostream &os, const uint256 &num);
 
 CService ipaddress(uint32_t i, uint32_t port);
+
+
+// Useful class for tests that will always return that signatures are valid
+class AlwaysGoodSignatureChecker : public BaseSignatureChecker
+{
+protected:
+    unsigned int nFlags = SCRIPT_ENABLE_SIGHASH_FORKID;
+
+public:
+    //! Verifies a signature given the pubkey, signature and sighash
+    virtual bool VerifySignature(const std::vector<uint8_t> &vchSig,
+        const CPubKey &vchPubKey,
+        const uint256 &sighash) const
+    {
+        if (vchSig.size() > 0)
+            return true;
+        return false;
+    }
+
+    //! Verifies a signature given the pubkey, signature, script, and transaction (member var)
+    virtual bool CheckSig(const std::vector<unsigned char> &scriptSig,
+        const std::vector<unsigned char> &vchPubKey,
+        const CScript &scriptCode) const
+    {
+        if (scriptSig.size() > 0)
+            return true;
+        return false;
+    }
+
+    virtual bool CheckLockTime(const CScriptNum &nLockTime) const { return true; }
+    virtual bool CheckSequence(const CScriptNum &nSequence) const { return true; }
+    virtual ~AlwaysGoodSignatureChecker() {}
+};
 
 #endif
