@@ -2392,3 +2392,28 @@ void CStatusString::Clear(const std::string &yourStatus)
     LOCK(cs_status_string);
     strSet.erase(yourStatus);
 }
+
+
+#include "core_io.h"
+#include "utilstrencodings.h"
+
+void dbgDumpStack(const std::vector<StackDataType> &stack)
+{
+    printf("stack %lu items (bottom to top): \n", stack.size());
+    auto sz = stack.size();
+    for (unsigned int i = 0; i < stack.size(); i++)
+    {
+        auto item = stack[i];
+        try
+        {
+            CScriptNum itemAsInt(item, false);
+            printf("%u (top%d) Num: %u Hex: %s Script: %s\n", i, (int)i - (int)sz, itemAsInt.getint(),
+                HexStr(item, true).c_str(), ScriptToAsmStr(CScript(item.begin(), item.end()), false).c_str());
+        }
+        catch (scriptnum_error)
+        {
+            printf("%u (top%d) Num: NaN Hex: %s Script: %s\n", i, (int)i - (int)sz, HexStr(item, true).c_str(),
+                ScriptToAsmStr(CScript(item.begin(), item.end()), false).c_str());
+        }
+    }
+}

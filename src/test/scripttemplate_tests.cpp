@@ -66,6 +66,8 @@ std::vector<unsigned char> vch(const CScript& script)
 BOOST_AUTO_TEST_CASE(verifytemplate)
 {
     AlwaysGoodSignatureChecker ck;
+    ScriptError error;
+    ScriptMachineResourceTracker tracker;
     auto flags = MANDATORY_SCRIPT_VERIFY_FLAGS;
     CScript templat = CScript() << OP_FROMALTSTACK << OP_SUB;
     CScript templat2 = CScript() << OP_FROMALTSTACK << OP_ADD;
@@ -76,8 +78,6 @@ BOOST_AUTO_TEST_CASE(verifytemplate)
     CScript badConstraint = CScript() << OP_10;
     bool ret;
 
-    ScriptError error;
-    ScriptMachineResourceTracker tracker;
     ret = VerifyTemplate(templat, constraint, satisfier, flags, 100, 0, ck, &error, &tracker);
     BOOST_CHECK(ret == true);
     ret = VerifyTemplate(templat, constraint, badSatisfier, flags, 100, 0, ck, &error, &tracker);
@@ -103,10 +103,117 @@ BOOST_AUTO_TEST_CASE(verifytemplate)
     BOOST_CHECK(!ret);
     ret = VerifyScript(scriptSig, badScriptPubKey, flags, 100, ck, &error, &tracker);
     BOOST_CHECK(!ret);
-    
-
-        
 }
 
+BOOST_AUTO_TEST_CASE(opexec)
+{
+    AlwaysGoodSignatureChecker ck;
+    ScriptError error;
+    ScriptMachineResourceTracker tracker;
+    auto flags = MANDATORY_SCRIPT_VERIFY_FLAGS;
+    bool ret;
+
+    {
+    CScript execed = CScript() << OP_ADD;
+    CScript scriptSig = CScript() << vch(execed) << OP_4 << OP_6;
+    CScript scriptPubKey = CScript() << OP_2 << OP_1 << OP_EXEC << OP_10 << OP_EQUAL;
+
+    ret = VerifyScript(scriptSig, scriptPubKey, flags, 100, ck, &error, &tracker);
+    BOOST_CHECK(ret);
+
+    ret = VerifyScript(CScript() << vch(execed) << OP_5 << OP_6, scriptPubKey, flags, 100, ck, &error, &tracker);
+    BOOST_CHECK(!ret);
+
+    ret = VerifyScript(CScript() << vch(execed) << OP_5, scriptPubKey, flags, 100, ck, &error, &tracker);
+    BOOST_CHECK(!ret);
+
+    ret = VerifyScript(CScript() << vch(execed), scriptPubKey, flags, 100, ck, &error, &tracker);
+    BOOST_CHECK(!ret);
+
+    ret = VerifyScript(CScript(), scriptPubKey, flags, 100, ck, &error, &tracker);
+    BOOST_CHECK(!ret);
+
+    ret = VerifyScript(CScript() << OP_FALSE << OP_5 << OP_5, scriptPubKey, flags, 100, ck, &error, &tracker);
+    BOOST_CHECK(!ret);
+    ret = VerifyScript(CScript() << vch(CScript() << OP_CHECKSIGVERIFY) << OP_5 << OP_5, scriptPubKey, flags, 100, ck, &error, &tracker);
+    BOOST_CHECK(!ret);
+    }
+
+    {
+        CScript execed = CScript() << OP_1;
+        CScript execedFalse = CScript() << OP_0;
+        CScript scriptSig = CScript();
+        CScript scriptPubKey = CScript() << vch(execed) << OP_0 << OP_1 << OP_EXEC;
+        CScript scriptPubKeyF = CScript() << vch(execedFalse) << OP_0 << OP_1 << OP_EXEC;
+
+        ret = VerifyScript(scriptSig, scriptPubKey, flags, 100, ck, &error, &tracker);
+        BOOST_CHECK(ret);
+        // execed script returns OP_O so script should fail because that false is left on the stack
+        ret = VerifyScript(scriptSig, scriptPubKeyF, flags, 100, ck, &error, &tracker);
+        BOOST_CHECK(!ret);
+    }
+
+    {
+        CScript execed = CScript();
+        CScript scriptSig = CScript();
+        CScript scriptPubKey = CScript() << vch(execed) << OP_0 << OP_0 << OP_EXEC << OP_TRUE;
+        CScript scriptPubKeyRet1 = CScript() << vch(execed) << OP_0 << OP_1 << OP_EXEC << OP_TRUE;
+
+        ret = VerifyScript(scriptSig, scriptPubKey, flags, 100, ck, &error, &tracker);
+        BOOST_CHECK(ret);
+
+        // Expecting more returned data than the subscript provides
+        ret = VerifyScript(scriptSig, scriptPubKeyRet1, flags, 100, ck, &error, &tracker);
+        BOOST_CHECK(!ret);
+        BOOST_CHECK(error == SCRIPT_ERR_INVALID_STACK_OPERATION);
+    }
+
+    {
+        CScript execed = CScript() << OP_DUP << OP_0 << OP_0 << OP_EXEC;
+        CScript scriptSig = CScript();
+        CScript scriptPubKey = CScript() << vch(execed) << OP_DUP << OP_0 << OP_0 << OP_EXEC;
+
+        // script was expecting 1 param
+        ret = VerifyScript(scriptSig, scriptPubKey, flags, 100, ck, &error, &tracker);
+        BOOST_CHECK(!ret);
+        BOOST_CHECK(error == SCRIPT_ERR_INVALID_STACK_OPERATION);
+    }
+    {
+        CScript execed = CScript() << OP_DUP << OP_1 << OP_0 << OP_EXEC;
+        CScript scriptSig = CScript();
+        CScript scriptPubKey = CScript() << vch(execed) << OP_DUP << OP_1 << OP_0 << OP_EXEC;
+
+        // test that a recursive script fails
+        ret = VerifyScript(scriptSig, scriptPubKey, flags, 100, ck, &error, &tracker);
+        BOOST_CHECK(!ret);
+        BOOST_CHECK(error == SCRIPT_ERR_EXEC_DEPTH_EXCEEDED);
+    }
+
+    {
+        // This script recursively calls itself the number of times passed as a parameter, and ends by pushing true to the stack.
+        CScript execed = CScript() << OP_DUP << OP_IF << OP_1 << OP_SUB << OP_SWAP << OP_TUCK << OP_2 << OP_1 << OP_EXEC << OP_ELSE << OP_1 << OP_ENDIF;
+        CScript scriptSig = CScript();
+        CScript scriptPubKey2 = CScript() << vch(execed) << OP_DUP << OP_2 << OP_SWAP << OP_2 << OP_1 << OP_EXEC;
+        CScript scriptPubKey3 = CScript() << vch(execed) << OP_DUP << OP_3 << OP_SWAP << OP_2 << OP_1 << OP_EXEC;
+
+        // test that the max recursion depth succeeds
+        tracker.clear();
+        ret = VerifyScript(scriptSig, scriptPubKey2, flags, 100, ck, &error, &tracker);
+        BOOST_CHECK(ret);
+        // test that 1+max recursion depth fails
+        tracker.clear();
+        ret = VerifyScript(scriptSig, scriptPubKey3, flags, 100, ck, &error, &tracker);
+        BOOST_CHECK(!ret);
+        BOOST_CHECK(error == SCRIPT_ERR_EXEC_DEPTH_EXCEEDED);
+
+        // test that max operations can be exceeded
+        ret = VerifyScript(scriptSig, scriptPubKey2, flags, 25, ck, &error, &tracker);
+        BOOST_CHECK(!ret);
+        BOOST_CHECK(error == SCRIPT_ERR_OP_COUNT);
+        
+    }
+
+
+}
 
 BOOST_AUTO_TEST_SUITE_END()

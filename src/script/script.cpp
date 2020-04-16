@@ -250,8 +250,8 @@ const char *GetOpName(opcodetype opcode)
         return "OP_NOP5";
     case OP_NOP6:
         return "OP_NOP6";
-    case OP_GROUP:
-        return "OP_GROUP";
+    case OP_NOP7:
+        return "OP_NOP7";
     case OP_NOP8:
         return "OP_NOP8";
     case OP_NOP9:
@@ -266,6 +266,10 @@ const char *GetOpName(opcodetype opcode)
     case OP_REVERSEBYTES:
         return "OP_REVERSEBYTES";
 
+    case OP_GROUP:
+        return "OP_GROUP";
+    case OP_EXEC:
+        return "OP_EXEC";
     case OP_TEMPLATE:
         return "OP_TEMPLATE";
 

@@ -44,6 +44,12 @@ static const int MAX_STACK_SIZE = 1000;
 // otherwise as UNIX timestamp.
 static const unsigned int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20 1985 UTC
 
+// Maximum OP_EXEC recursion level
+const unsigned int MAX_EXEC_DEPTH = 3;
+// Maximum OP_EXEC calls in a script execution (including in subscripts)
+const unsigned int MAX_OP_EXEC = 20;
+
+
 template <typename T>
 std::vector<unsigned char> ToByteVector(const T &in)
 {
@@ -182,8 +188,7 @@ enum opcodetype
     OP_NOP4 = 0xb3,
     OP_NOP5 = 0xb4,
     OP_NOP6 = 0xb5,
-    OP_GROUP = 0xb6,
-    OP_NOP7 = OP_GROUP,
+    OP_NOP7 = 0xb6,
     OP_NOP8 = 0xb7,
     OP_NOP9 = 0xb8,
     OP_NOP10 = 0xb9,
@@ -195,6 +200,8 @@ enum opcodetype
     OP_CHECKDATASIG = 0xba,
     OP_CHECKDATASIGVERIFY = 0xbb,
 
+    OP_EXEC = 0xed,
+    OP_GROUP = 0xee,
     OP_TEMPLATE = 0xef,
     // The first op_code value after all defined opcodes
     FIRST_UNDEFINED_OP_VALUE,

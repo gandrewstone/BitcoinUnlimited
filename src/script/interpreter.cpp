@@ -799,6 +799,67 @@ bool ScriptMachine::Step()
                         return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
                     popstack(stack);
                     break;
+                case OP_EXEC:
+                {
+                    if (execDepth >= MAX_EXEC_DEPTH)
+                        return set_error(serror, SCRIPT_ERR_EXEC_DEPTH_EXCEEDED);
+                    if (stats.nOpExec >= MAX_OP_EXEC)
+                        return set_error(serror, SCRIPT_ERR_EXEC_COUNT_EXCEEDED);
+
+                    if (stack.size() < 2)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    // current script (template) generally pushes this since it subsequently uses the return values
+                    CScriptNum returnedParamQty(stacktop(-1), fRequireMinimal);
+                    CScriptNum paramQty(stacktop(-2), fRequireMinimal);
+                    // the parameters to the function are pushed here
+                    int v = paramQty.getint();
+                    if (v < 0)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    if ((int)stack.size() < 3 + v) // 3 because 2 qty params and code
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+
+                    valtype code = stacktop(-3 - v);
+
+                    popstack(stack); // remove returnedParamQty
+                    popstack(stack); // remove paramQty
+
+                    ScriptMachine sm(
+                        flags, checker, maxOps - stats.nOpCount, maxConsensusSigOps - stats.consensusSigCheckCount);
+                    sm.execDepth = execDepth + 1;
+                    auto &smStk = sm.modifyStack();
+                    smStk.reserve(v);
+                    for (int i = 0; i < v; i++)
+                    {
+                        smStk.push_back(stacktop(-1));
+                        popstack(stack);
+                    }
+                    popstack(stack); // remove code
+
+                    stats.nOpExec++;
+                    sm.Eval(CScript(code.begin(), code.end()));
+                    stats.update(sm.stats);
+                    // If the evaluation of the subscript results in too many op_exec abort
+                    if (stats.nOpExec > MAX_OP_EXEC)
+                        return set_error(serror, SCRIPT_ERR_EXEC_COUNT_EXCEEDED);
+
+                    ScriptError result = sm.getError();
+                    if (result != SCRIPT_ERR_OK)
+                        return set_error(serror, result);
+
+                    // transfer the top paramQty stack items from the subscript's stack to the caller's stack
+                    auto &outStack = sm.getStack();
+                    int sz = outStack.size();
+                    v = returnedParamQty.getint();
+                    if (v < 0)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    if (sz < v)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    for (int i = sz - v; i < sz; i++)
+                    {
+                        stack.push_back(outStack[i]);
+                    }
+                }
+                break;
                 case OP_IF:
                 case OP_NOTIF:
                 {

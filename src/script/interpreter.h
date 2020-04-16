@@ -14,7 +14,6 @@
 #include <string>
 #include <vector>
 
-
 class CPubKey;
 class CScript;
 class CTransaction;
@@ -240,14 +239,17 @@ public:
     unsigned char sighashtype = 0;
     /** Number of instructions executed */
     unsigned int nOpCount = 0;
+    /** Number of op_execs executed */
+    unsigned int nOpExec = 0;
 
     ScriptMachineResourceTracker() {}
     /** Combine the results of this tracker and another tracker */
     void update(const ScriptMachineResourceTracker &stats)
     {
         consensusSigCheckCount += stats.consensusSigCheckCount;
-        nOpCount = stats.nOpCount;
+        nOpCount += stats.nOpCount;
         sighashtype |= stats.sighashtype;
+        nOpExec += stats.nOpExec;
     }
 
     /** Set all tracked values to zero */
@@ -256,6 +258,7 @@ public:
         consensusSigCheckCount = 0;
         sighashtype = 0;
         nOpCount = 0;
+        nOpExec = 0;
     }
 };
 
@@ -310,6 +313,9 @@ public:
           pend(CScript().end()), pbegincodehash(CScript().end()), maxOps(_maxOps), maxConsensusSigOps(_maxSigOps)
     {
     }
+
+    // How many OP_EXECs have been called recursively
+    unsigned int execDepth = 0;
 
     // Execute the passed script starting at the current machine state (stack and altstack are not cleared).
     bool Eval(const CScript &_script);
@@ -377,6 +383,10 @@ public:
         }
     }
 
+    // Load or modify the main stack
+    std::vector<StackDataType> &modifyStack() { return stack; }
+    // Load or modify the alt stack
+    std::vector<StackDataType> &modifyAltStack() { return stack; }
     // Set the alt stack to the passed data
     void setAltStack(const std::vector<StackDataType> &stk) { altstack = stk; }
     // Get the main stack
