@@ -24,8 +24,8 @@ CAmount authorityFlags(GroupAuthorityFlags f, uint64_t amt = 0)
 // create a group pay to public key hash script
 CScript gp2pkh(const CGroupTokenID &group, const CKeyID &dest, CAmount amt)
 {
-    CScript script = CScript() << group.bytes() << SerializeAmount(amt) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
-                               << OP_HASH160 << ToByteVector(dest) << OP_EQUALVERIFY << OP_CHECKSIG;
+    CScript script = CScript() << group.bytes() << SerializeAmount(amt) << OP_GROUP << OP_DUP << OP_HASH160
+                               << ToByteVector(dest) << OP_EQUALVERIFY << OP_CHECKSIG;
     return script;
 }
 
@@ -55,8 +55,8 @@ std::vector<unsigned char> breakable_SerializeAmount(CAmount amt)
 
 CScript breakable_gp2pkh(const CGroupTokenID &group, const CKeyID &dest, CAmount amt)
 {
-    CScript script = CScript() << group.bytes() << breakable_SerializeAmount(amt) << OP_GROUP << OP_DROP << OP_DROP
-                               << OP_DUP << OP_HASH160 << ToByteVector(dest) << OP_EQUALVERIFY << OP_CHECKSIG;
+    CScript script = CScript() << group.bytes() << breakable_SerializeAmount(amt) << OP_GROUP << OP_DUP << OP_HASH160
+                               << ToByteVector(dest) << OP_EQUALVERIFY << OP_CHECKSIG;
     return script;
 }
 
@@ -81,8 +81,7 @@ CScript gp2sh(const CGroupTokenID &group, const CScriptID &dest, CAmount amt)
 {
     CScript script;
     script.clear();
-    script << group.bytes() << SerializeAmount(amt) << OP_GROUP << OP_DROP << OP_DROP << OP_HASH160
-           << ToByteVector(dest) << OP_EQUAL;
+    script << group.bytes() << SerializeAmount(amt) << OP_GROUP << OP_HASH160 << ToByteVector(dest) << OP_EQUAL;
     return script;
 }
 
@@ -570,44 +569,44 @@ BOOST_AUTO_TEST_CASE(grouptoken_basicfunctions)
 
     { // check incorrect group length
         std::vector<unsigned char> fakeGrp(21);
-        CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
-                                   << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
+        CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DUP << OP_HASH160
+                                   << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CGroupTokenInfo ret(script);
         BOOST_CHECK(ret.isInvalid());
     }
     { // check incorrect group length
         std::vector<unsigned char> fakeGrp(19);
-        CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
-                                   << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
+        CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DUP << OP_HASH160
+                                   << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CGroupTokenInfo ret(script);
         BOOST_CHECK(ret.isInvalid());
     }
     { // check incorrect group length
         std::vector<unsigned char> fakeGrp(1);
-        CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
-                                   << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
+        CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DUP << OP_HASH160
+                                   << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CGroupTokenInfo ret(script);
         BOOST_CHECK(ret.isInvalid());
     }
     { // check incorrect group length
         std::vector<unsigned char> fakeGrp(31);
-        CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
-                                   << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
+        CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DUP << OP_HASH160
+                                   << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CGroupTokenInfo ret(script);
         BOOST_CHECK(ret.isInvalid());
     }
 
     { // check incorrect group length
         std::vector<unsigned char> fakeGrp(20);
-        CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
-                                   << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
+        CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DUP << OP_HASH160
+                                   << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CGroupTokenInfo ret(script);
         BOOST_CHECK(ret.isInvalid());
     }
     { // check correct group length
         std::vector<unsigned char> fakeGrp(32);
-        CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
-                                   << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
+        CScript script = CScript() << fakeGrp << SerializeAmount(100) << OP_GROUP << OP_DUP << OP_HASH160
+                                   << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CGroupTokenInfo ret(script);
         BOOST_CHECK(!ret.isInvalid());
         BOOST_CHECK(ret == CGroupTokenInfo(CGroupTokenID(fakeGrp), GroupAuthorityFlags::NONE));
@@ -646,8 +645,7 @@ BOOST_AUTO_TEST_CASE(grouptoken_basicfunctions)
     { // check GP2PKH
         CScript script = CScript() << ToByteVector(grpAddr);
         script << SerializeAmount(qty);
-        script << OP_GROUP << OP_DROP << OP_DROP << OP_DUP << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY
-               << OP_CHECKSIG;
+        script << OP_GROUP << OP_DUP << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CGroupTokenInfo ret(script);
         BOOST_CHECK(ret == CGroupTokenInfo(grpAddr, GroupAuthorityFlags::NONE, qty));
         CTxDestination resultAddr;
@@ -673,8 +671,7 @@ BOOST_AUTO_TEST_CASE(grouptoken_basicfunctions)
         tmp[0] = i;
         CScript script = CScript() << ToByteVector(grpAddr);
         script << tmp; // Serialize the amount by hand because these serialization methods are illegal
-        script << OP_GROUP << OP_DROP << OP_DROP << OP_DUP << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY
-               << OP_CHECKSIG;
+        script << OP_GROUP << OP_DUP << OP_HASH160 << ToByteVector(addr) << OP_EQUALVERIFY << OP_CHECKSIG;
         CGroupTokenInfo ret(script);
         BOOST_CHECK(ret.invalid == true);
     }
@@ -689,8 +686,8 @@ BOOST_AUTO_TEST_CASE(grouptoken_basicfunctions)
     { // check GP2SH
         // cheating here a bit because of course addr should the the hash160 of a script not a pubkey but for this test
         // its just bytes
-        CScript script = CScript() << ToByteVector(grpAddr) << SerializeAmount(1000000000UL) << OP_GROUP << OP_DROP
-                                   << OP_DROP << OP_HASH160 << ToByteVector(addr) << OP_EQUAL;
+        CScript script = CScript() << ToByteVector(grpAddr) << SerializeAmount(1000000000UL) << OP_GROUP << OP_HASH160
+                                   << ToByteVector(addr) << OP_EQUAL;
         CGroupTokenInfo ret(script);
         BOOST_CHECK(ret == CGroupTokenInfo(grpAddr, GroupAuthorityFlags::NONE, 1000000000UL));
         CTxDestination resultAddr;
@@ -705,8 +702,8 @@ BOOST_AUTO_TEST_CASE(grouptoken_basicfunctions)
     }
 
     { // check GP2TSH
-        CScript script = CScript() << ToByteVector(grpAddr) << SerializeAmount(1234567UL) << OP_GROUP << OP_DROP
-                                   << OP_DROP << OP_HASH256 << ToByteVector(eAddr) << OP_EQUAL;
+        CScript script = CScript() << ToByteVector(grpAddr) << SerializeAmount(1234567UL) << OP_GROUP << OP_HASH256
+                                   << ToByteVector(eAddr) << OP_EQUAL;
         CGroupTokenInfo ret(script);
         BOOST_CHECK(ret == CGroupTokenInfo(grpAddr, GroupAuthorityFlags::NONE, 1234567));
     }
@@ -1202,7 +1199,7 @@ BOOST_FIXTURE_TEST_CASE(grouptoken_blockchain, TestChain100Setup)
         // Should fail: bad group size
         uint256 hash = blk1.vtx[0]->GetHash();
         std::vector<unsigned char> fakeGrp(21);
-        CScript script = CScript() << fakeGrp << OP_GROUP << OP_DROP << OP_DUP << OP_HASH160 << ToByteVector(a1.addr)
+        CScript script = CScript() << fakeGrp << OP_GROUP << OP_DUP << OP_HASH160 << ToByteVector(a1.addr)
                                    << OP_EQUALVERIFY << OP_CHECKSIG;
 
         txns[0] = tx1x1(COutPoint(hash, 0), script, blk1.vtx[0]->vout[0].nValue);

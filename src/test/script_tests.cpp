@@ -270,13 +270,6 @@ void DoTest(const CScript &scriptPubKey,
     CMutableTransaction tx2 = tx;
     bool result = VerifyScript(scriptSig, scriptPubKey, flags, MAX_OPS_PER_SCRIPT,
         MutableTransactionSignatureChecker(&tx, 0, txCredit.vout[0].nValue, flags), &err);
-    if (result != expect)
-    {
-        printf("oops\n");
-        bool result2 = VerifyScript(scriptSig, scriptPubKey, flags, MAX_OPS_PER_SCRIPT,
-            MutableTransactionSignatureChecker(&tx, 0, txCredit.vout[0].nValue, flags), &err);
-        printf("%d", result2);
-    }
     BOOST_CHECK_MESSAGE(result == expect, message);
     BOOST_CHECK_MESSAGE(err == scriptError, std::string(FormatScriptError(err)) + " where " +
                                                 std::string(FormatScriptError((ScriptError_t)scriptError)) +

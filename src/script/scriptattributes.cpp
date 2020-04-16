@@ -112,6 +112,7 @@ bool IsScriptGrouped(const CScript &script, CScript::const_iterator *pcin, CGrou
             return false;
         }
 
+        /* Group pops 2 items from the stack
         for (int i = 0; i < 2; i++) // 2 op_drops
         {
             if (!script.GetOp(pc, opcode, data))
@@ -125,6 +126,7 @@ bool IsScriptGrouped(const CScript &script, CScript::const_iterator *pcin, CGrou
                 return false;
             }
         }
+        */
     }
 
     try

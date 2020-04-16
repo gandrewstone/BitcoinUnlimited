@@ -783,6 +783,7 @@ bool ScriptMachine::Step()
                 case OP_NOP4:
                 case OP_NOP5:
                 case OP_NOP6:
+                case OP_NOP7:
                 case OP_NOP8:
                 case OP_NOP9:
                 case OP_NOP10:
@@ -792,7 +793,11 @@ bool ScriptMachine::Step()
                 }
                 break;
 
-                case OP_GROUP: // OP_GROUP is a no-op during script evaluation
+                case OP_GROUP: // OP_GROUP just pops its args during script evaluation
+                    if (stack.size() < 2)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    popstack(stack);
+                    popstack(stack);
                     break;
                 case OP_TEMPLATE: // OP_TEMPLATE just pops during script evaluation
                     if (stack.size() < 1)
