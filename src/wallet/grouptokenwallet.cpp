@@ -46,7 +46,6 @@ GP2PKH:
 OP_DATA(group identifier)
 OP_DATA(SerializeAmount(amount))
 OP_GROUP
-OP_DROP
 OP_DUP
 OP_HASH160
 OP_DATA(pubkeyhash)
@@ -58,7 +57,6 @@ GP2SH:
 OP_DATA(group identifier)
 OP_DATA(CompactSize(amount))
 OP_GROUP
-OP_DROP
 OP_HASH160 [20-byte-hash-value] OP_EQUAL
 
 FUTURE: GP2SH version 2:
@@ -66,7 +64,6 @@ FUTURE: GP2SH version 2:
 OP_DATA(group identifier)
 OP_DATA(CompactSize(amount))
 OP_GROUP
-OP_DROP
 OP_HASH256 [32-byte-hash-value] OP_EQUAL
 */
 
@@ -131,7 +128,7 @@ public:
         script->clear();
         if (group.isUserGroup())
         {
-            *script << group.bytes() << SerializeAmount(quantity) << OP_GROUP << OP_DROP << OP_DROP << OP_DUP
+            *script << group.bytes() << SerializeAmount(quantity) << OP_GROUP << OP_DUP
                     << OP_HASH160 << ToByteVector(keyID) << OP_EQUALVERIFY << OP_CHECKSIG;
         }
         else
@@ -146,7 +143,7 @@ public:
         script->clear();
         if (group.isUserGroup())
         {
-            *script << group.bytes() << SerializeAmount(quantity) << OP_GROUP << OP_DROP << OP_DROP << OP_HASH160
+            *script << group.bytes() << SerializeAmount(quantity) << OP_GROUP << OP_HASH160
                     << ToByteVector(scriptID) << OP_EQUAL;
         }
         else
