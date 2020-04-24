@@ -287,7 +287,7 @@ BOOST_AUTO_TEST_CASE(bignum_test)
     // BOOST_CHECK_EXCEPTION(biggest + 1_BN, OutOfBounds, [](auto &e) -> bool { return strcmp(e.what(), "Numerical upper
     // bound exceeded")==0; });
 
-    BigNum smallest = (-biggest) - 1_BN;
+    // BigNum smallest = (-biggest) - 1_BN;
     // printf("%s\n", smallest.str().c_str());
     // BOOST_CHECK_EXCEPTION(smallest - 1_BN, OutOfBounds, [](auto &e) -> bool { return strcmp(e.what(), "Numerical
     // lower bound exceeded")==0; });
@@ -298,6 +298,7 @@ BOOST_AUTO_TEST_CASE(bignum_test)
 
     unsigned char buf[520];
     memset(buf, 0xff, 520);
+    VchType buf2;
 
     BigNum b2;
     auto b1 = 1000_BN;
@@ -306,6 +307,19 @@ BOOST_AUTO_TEST_CASE(bignum_test)
     BOOST_CHECK(buf[1] == 3);
     BOOST_CHECK(buf[2] == 0); // Check sign
     BOOST_CHECK(buf[3] == 0xff); // Check untouched
+
+    buf2 = b1.serialize(2);
+    BOOST_CHECK(buf2.size() == 3);
+    BOOST_CHECK(buf2[0] == 232); // Check LE
+    BOOST_CHECK(buf2[1] == 3);
+    BOOST_CHECK(buf2[2] == 0); // Check sign
+    buf2 = b1.serialize(3);
+    BOOST_CHECK(buf2.size() == 4);
+    BOOST_CHECK(buf2[0] == 232); // Check LE
+    BOOST_CHECK(buf2[1] == 3);
+    BOOST_CHECK(buf2[2] == 0); // Check zero-extend
+    BOOST_CHECK(buf2[3] == 0); // Check sign
+
     b2.deserialize(buf, 3);
     BOOST_CHECK(b1 == b2);
 
@@ -317,6 +331,18 @@ BOOST_AUTO_TEST_CASE(bignum_test)
     BOOST_CHECK(buf[3] == 0xff); // Check untouched
     b2.deserialize(buf, 3);
     BOOST_CHECK(b1 == b2);
+
+    buf2 = b1.serialize(2);
+    BOOST_CHECK(buf2.size() == 3);
+    BOOST_CHECK(buf2[0] == 208); // Check LE
+    BOOST_CHECK(buf2[1] == 7);
+    BOOST_CHECK(buf2[2] == 0x80); // Check sign
+    buf2 = b1.serialize(3);
+    BOOST_CHECK(buf2.size() == 4);
+    BOOST_CHECK(buf2[0] == 208); // Check LE
+    BOOST_CHECK(buf2[1] == 7);
+    BOOST_CHECK(buf2[2] == 0); // Check zero-extend
+    BOOST_CHECK(buf2[3] == 0x80); // Check sign
 
     b1.serialize(buf, 4);
     BOOST_CHECK(buf[0] == 208); // Check LE

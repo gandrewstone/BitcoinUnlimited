@@ -19,6 +19,17 @@
 #include "script/script_error.h"
 #include "uint256.h"
 #include "util.h"
+
+/** Implements script binary arithmetic and comparison opcodes that use BigNums.
+    Declared here because its only needed in the interpreter even though it is implemented in BigNum.cpp
+*/
+bool BigNumScriptOp(BigNum &bn,
+    opcodetype opcode,
+    const BigNum &bn1,
+    const BigNum &bn2,
+    const BigNum &bmd,
+    ScriptError *serror);
+
 const std::string strMessageMagic = "Bitcoin Signed Message:\n";
 
 extern uint256 SignatureHashLegacy(const CScript &scriptCode,
@@ -68,8 +79,8 @@ static uint32_t GetHashType(const valtype &vchSig)
 #define altstacktop(i) (altstack.at(altstack.size() + (i)).mdata())
 
 /* Return StackItem objects */
-#define stackItem(i) (stack.at(stack.size() + (i)))
-#define altstackItem(i) (altstack.at(altstack.size() + (i)))
+#define stackItemAt(i) (stack.at(stack.size() + (i)))
+#define altstackItemAt(i) (altstack.at(altstack.size() + (i)))
 
 static inline void popstack(Stack &stack)
 {
@@ -563,10 +574,10 @@ bool EvalScript(Stack &stack,
 }
 
 
-static const CScriptNum bnZero(0);
-static const CScriptNum bnOne(1);
-static const CScriptNum bnFalse(0);
-static const CScriptNum bnTrue(1);
+static const CScriptNum snZero(0);
+static const CScriptNum snOne(1);
+static const CScriptNum snFalse(0);
+static const CScriptNum snTrue(1);
 static const StackItem vchFalse(VchStack, 0);
 static const StackItem vchTrue(VchStack, 1, 1);
 
@@ -1236,23 +1247,23 @@ bool ScriptMachine::Step()
                     switch (opcode)
                     {
                     case OP_1ADD:
-                        bn += bnOne;
+                        bn += snOne;
                         break;
                     case OP_1SUB:
-                        bn -= bnOne;
+                        bn -= snOne;
                         break;
                     case OP_NEGATE:
                         bn = -bn;
                         break;
                     case OP_ABS:
-                        if (bn < bnZero)
+                        if (bn < snZero)
                             bn = -bn;
                         break;
                     case OP_NOT:
-                        bn = (bn == bnZero);
+                        bn = (bn == snZero);
                         break;
                     case OP_0NOTEQUAL:
-                        bn = (bn != bnZero);
+                        bn = (bn != snZero);
                         break;
                     default:
                         assert(!"invalid opcode");
@@ -1284,81 +1295,97 @@ bool ScriptMachine::Step()
                     {
                         return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
                     }
-                    CScriptNum bn1(stacktop(-2), fRequireMinimal);
-                    CScriptNum bn2(stacktop(-1), fRequireMinimal);
-                    CScriptNum bn(0);
-                    switch (opcode)
+
+                    StackItem &a = stackItemAt(-1);
+                    StackItem &b = stackItemAt(-2);
+                    if (a.isBigNum() || b.isBigNum())
                     {
-                    case OP_ADD:
-                        bn = bn1 + bn2;
-                        break;
-
-                    case OP_SUB:
-                        bn = bn1 - bn2;
-                        break;
-
-                    case OP_DIV:
-                        // denominator must not be 0
-                        if (bn2 == 0)
-                        {
-                            return set_error(serror, SCRIPT_ERR_DIV_BY_ZERO);
-                        }
-                        bn = bn1 / bn2;
-                        break;
-
-                    case OP_MOD:
-                        // divisor must not be 0
-                        if (bn2 == 0)
-                        {
-                            return set_error(serror, SCRIPT_ERR_MOD_BY_ZERO);
-                        }
-                        bn = bn1 % bn2;
-                        break;
-
-                    case OP_BOOLAND:
-                        bn = (bn1 != bnZero && bn2 != bnZero);
-                        break;
-                    case OP_BOOLOR:
-                        bn = (bn1 != bnZero || bn2 != bnZero);
-                        break;
-                    case OP_NUMEQUAL:
-                        bn = (bn1 == bn2);
-                        break;
-                    case OP_NUMEQUALVERIFY:
-                        bn = (bn1 == bn2);
-                        break;
-                    case OP_NUMNOTEQUAL:
-                        bn = (bn1 != bn2);
-                        break;
-                    case OP_LESSTHAN:
-                        bn = (bn1 < bn2);
-                        break;
-                    case OP_GREATERTHAN:
-                        bn = (bn1 > bn2);
-                        break;
-                    case OP_LESSTHANOREQUAL:
-                        bn = (bn1 <= bn2);
-                        break;
-                    case OP_GREATERTHANOREQUAL:
-                        bn = (bn1 >= bn2);
-                        break;
-                    case OP_MIN:
-                        bn = (bn1 < bn2 ? bn1 : bn2);
-                        break;
-                    case OP_MAX:
-                        bn = (bn1 > bn2 ? bn1 : bn2);
-                        break;
-                    default:
-                        assert(!"invalid opcode");
-                        break;
+                        BigNum ret;
+                        if (!BigNumScriptOp(
+                                ret, opcode, a.asBigNum(bigNumModulo), b.asBigNum(bigNumModulo), bigNumModulo, serror))
+                            return false;
+                        popstack(stack);
+                        popstack(stack);
+                        stack.push_back(StackItem(ret));
                     }
-                    popstack(stack);
-                    popstack(stack);
-                    stack.push_back(bn.getvch());
+                    else
+                    {
+                        CScriptNum bn1(stacktop(-2), fRequireMinimal);
+                        CScriptNum bn2(stacktop(-1), fRequireMinimal);
+                        CScriptNum bn(0);
+                        switch (opcode)
+                        {
+                        case OP_ADD:
+                            bn = bn1 + bn2;
+                            break;
+
+                        case OP_SUB:
+                            bn = bn1 - bn2;
+                            break;
+
+                        case OP_DIV:
+                            // denominator must not be 0
+                            if (bn2 == 0)
+                            {
+                                return set_error(serror, SCRIPT_ERR_DIV_BY_ZERO);
+                            }
+                            bn = bn1 / bn2;
+                            break;
+
+                        case OP_MOD:
+                            // divisor must not be 0
+                            if (bn2 == 0)
+                            {
+                                return set_error(serror, SCRIPT_ERR_MOD_BY_ZERO);
+                            }
+                            bn = bn1 % bn2;
+                            break;
+
+                        case OP_BOOLAND:
+                            bn = (bn1 != snZero && bn2 != snZero);
+                            break;
+                        case OP_BOOLOR:
+                            bn = (bn1 != snZero || bn2 != snZero);
+                            break;
+                        case OP_NUMEQUAL:
+                            bn = (bn1 == bn2);
+                            break;
+                        case OP_NUMEQUALVERIFY:
+                            bn = (bn1 == bn2);
+                            break;
+                        case OP_NUMNOTEQUAL:
+                            bn = (bn1 != bn2);
+                            break;
+                        case OP_LESSTHAN:
+                            bn = (bn1 < bn2);
+                            break;
+                        case OP_GREATERTHAN:
+                            bn = (bn1 > bn2);
+                            break;
+                        case OP_LESSTHANOREQUAL:
+                            bn = (bn1 <= bn2);
+                            break;
+                        case OP_GREATERTHANOREQUAL:
+                            bn = (bn1 >= bn2);
+                            break;
+                        case OP_MIN:
+                            bn = (bn1 < bn2 ? bn1 : bn2);
+                            break;
+                        case OP_MAX:
+                            bn = (bn1 > bn2 ? bn1 : bn2);
+                            break;
+                        default:
+                            assert(!"invalid opcode");
+                            break;
+                        }
+                        popstack(stack);
+                        popstack(stack);
+                        stack.push_back(bn.getvch());
+                    }
 
                     if (opcode == OP_NUMEQUALVERIFY)
                     {
-                        if (CastToBool(stacktop(-1)))
+                        if ((bool)stackItemAt(-1))
                             popstack(stack);
                         else
                             return set_error(serror, SCRIPT_ERR_NUMEQUALVERIFY);
@@ -1802,6 +1829,24 @@ bool ScriptMachine::Step()
                 }
                 break;
 
+                case OP_BIN2BIGNUM:
+                {
+                    if (stack.size() < 1)
+                    {
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    }
+                    StackItem &top = stackItemAt(-1);
+                    if (top.isBigNum()) // [op_bin2bignum.md#BIN2BIGNUM.O3]
+                    {
+                        top.mnum() = top.num().tdiv(bigNumModulo);
+                    }
+                    else // [op_bin2bignum.md#BIN2BIGNUM.O1]
+                    {
+                        top = BigNum().deserialize(top.asVch()).tdiv(bigNumModulo);
+                    }
+                }
+                break;
+
                 //
                 // Conversion operations
                 //
@@ -1813,7 +1858,19 @@ bool ScriptMachine::Step()
                         return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
                     }
 
-                    uint64_t size = CScriptNum(stacktop(-1), fRequireMinimal).getint();
+                    uint64_t size = stackItemAt(-1).asUint64(fRequireMinimal);
+
+                    if (stackItemAt(-2).isBigNum()) // Implement OP_BIGNUM2BIN
+                    {
+                        if (size > MAX_BIGNUM_MAGNITUDE_SIZE + 1)
+                            return set_error(serror, SCRIPT_ERR_PUSH_SIZE);
+                        popstack(stack);
+                        StackItem &bn = stackItemAt(-1);
+                        std::vector<unsigned char> buf = bn.num().serialize(size);
+                        bn.assign(buf);
+                        break;
+                    }
+
                     if (size > MAX_SCRIPT_ELEMENT_SIZE)
                     {
                         return set_error(serror, SCRIPT_ERR_PUSH_SIZE);

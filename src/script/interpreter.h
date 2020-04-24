@@ -272,6 +272,7 @@ protected:
     unsigned int flags;
     Stack stack;
     Stack altstack;
+    BigNum bigNumModulo = 0x10000000000000000_BN; // 64 bit magnitude
     const CScript *script;
     const BaseSignatureChecker &checker;
     ScriptError error;

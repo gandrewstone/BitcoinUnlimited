@@ -408,6 +408,8 @@ zmq/zmqnotificationinterface.cpp
 zmq/zmqnotificationinterface.h
 zmq/zmqpublishnotifier.cpp
 zmq/zmqpublishnotifier.h
+script/bignum.cpp
+script/bignum.h
 script/bitcoinconsensus.cpp
 script/bitcoinconsensus.h
 script/bitfield.cpp
@@ -426,6 +428,8 @@ script/sigcache.h
 script/sigcommon.cpp
 script/sign.cpp
 script/sign.h
+script/stackitem.cpp
+script/stackitem.h
 script/standard.cpp
 script/standard.h
 respend/respendaction.h
