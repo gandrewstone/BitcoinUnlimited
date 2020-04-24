@@ -188,7 +188,7 @@ BOOST_AUTO_TEST_CASE(minimaldata_creation)
         CScript script = CScript() << vec << OP_DROP << OP_1;
 
         // Verify that the script passes standard checks, especially the data coding
-        std::vector<std::vector<uint8_t> > stack;
+        Stack stack;
         BaseSignatureChecker sigchecker;
         ScriptError err = SCRIPT_ERR_OK;
         bool r = EvalScript(stack, script, MANDATORY_SCRIPT_VERIFY_FLAGS | SCRIPT_VERIFY_MINIMALDATA,
@@ -208,7 +208,7 @@ BOOST_AUTO_TEST_CASE(minimaldata_creation)
 
         vec.resize(size);
         CScript script = CScript() << vec << OP_DROP << OP_1;
-        std::vector<std::vector<uint8_t> > stack;
+        Stack stack;
         BaseSignatureChecker sigchecker;
         ScriptError err = SCRIPT_ERR_OK;
         bool r = EvalScript(stack, script, MANDATORY_SCRIPT_VERIFY_FLAGS | SCRIPT_VERIFY_MINIMALDATA,
@@ -1987,24 +1987,24 @@ BOOST_AUTO_TEST_CASE(script_PushData)
     static const unsigned char pushdata4[] = {OP_PUSHDATA4, 1, 0, 0, 0, 0x5a};
 
     ScriptError err;
-    vector<vector<unsigned char> > directStack;
+    Stack directStack;
     BOOST_CHECK(EvalScript(directStack, CScript(&direct[0], &direct[sizeof(direct)]), SCRIPT_VERIFY_P2SH,
         MAX_OPS_PER_SCRIPT, BaseSignatureChecker(), &err));
     BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
 
-    vector<vector<unsigned char> > pushdata1Stack;
+    Stack pushdata1Stack;
     BOOST_CHECK(EvalScript(pushdata1Stack, CScript(&pushdata1[0], &pushdata1[sizeof(pushdata1)]), SCRIPT_VERIFY_P2SH,
         MAX_OPS_PER_SCRIPT, BaseSignatureChecker(), &err));
     BOOST_CHECK(pushdata1Stack == directStack);
     BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
 
-    vector<vector<unsigned char> > pushdata2Stack;
+    Stack pushdata2Stack;
     BOOST_CHECK(EvalScript(pushdata2Stack, CScript(&pushdata2[0], &pushdata2[sizeof(pushdata2)]), SCRIPT_VERIFY_P2SH,
         MAX_OPS_PER_SCRIPT, BaseSignatureChecker(), &err));
     BOOST_CHECK(pushdata2Stack == directStack);
     BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
 
-    vector<vector<unsigned char> > pushdata4Stack;
+    Stack pushdata4Stack;
     BOOST_CHECK(EvalScript(pushdata4Stack, CScript(&pushdata4[0], &pushdata4[sizeof(pushdata4)]), SCRIPT_VERIFY_P2SH,
         MAX_OPS_PER_SCRIPT, BaseSignatureChecker(), &err));
     BOOST_CHECK(pushdata4Stack == directStack);

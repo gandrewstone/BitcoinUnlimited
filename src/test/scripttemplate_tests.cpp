@@ -139,6 +139,42 @@ BOOST_AUTO_TEST_CASE(opexec)
     BOOST_CHECK(!ret);
     }
 
+    // Verify op_exec.md:T.o2 (empty script is valid)
+    {
+        CScript execed = CScript();
+        CScript scriptSig = CScript() << vch(execed);
+        CScript scriptPubKey = CScript() << OP_0 << OP_0 << OP_EXEC << OP_1;
+        ret = VerifyScript(scriptSig, scriptPubKey, flags, 100, ck, &error, &tracker);
+        BOOST_CHECK(ret);
+    }
+
+    // Verify op_exec.md:T.L4
+    {
+        // This script simply pushes the parameters needed for the next op_exec so that the constraint script
+        // can be 20 OP_EXEC in a row.
+        CScript execed = CScript() << OP_DUP << OP_1 << OP_4;
+        CScript scriptSig = CScript() << vch(execed);
+        CScript scriptPubKeyOk = CScript() << OP_DUP << OP_1 << OP_4
+                                         << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC
+                                         << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC
+                                         << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC
+                                         << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC
+                                         << OP_DROP << OP_DROP << OP_DROP << OP_DROP << OP_1;
+        CScript scriptPubKeyNok = CScript() << OP_DUP << OP_1 << OP_4
+                                         << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC
+                                         << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC
+                                         << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC
+                                         << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC << OP_EXEC
+                                         << OP_DROP << OP_DROP << OP_DROP << OP_DROP << OP_1;
+        ret = VerifyScript(scriptSig, scriptPubKeyOk, flags, 100, ck, &error, &tracker);
+        BOOST_CHECK(ret);
+
+        ret = VerifyScript(scriptSig, scriptPubKeyNok, flags, 100, ck, &error, &tracker);
+        BOOST_CHECK(!ret);
+        BOOST_CHECK(error == SCRIPT_ERR_EXEC_COUNT_EXCEEDED);
+    }
+
+
     {
         CScript execed = CScript() << OP_1;
         CScript execedFalse = CScript() << OP_0;

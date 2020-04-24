@@ -128,8 +128,8 @@ public:
         script->clear();
         if (group.isUserGroup())
         {
-            *script << group.bytes() << SerializeAmount(quantity) << OP_GROUP << OP_DUP
-                    << OP_HASH160 << ToByteVector(keyID) << OP_EQUALVERIFY << OP_CHECKSIG;
+            *script << group.bytes() << SerializeAmount(quantity) << OP_GROUP << OP_DUP << OP_HASH160
+                    << ToByteVector(keyID) << OP_EQUALVERIFY << OP_CHECKSIG;
         }
         else
         {
@@ -143,8 +143,8 @@ public:
         script->clear();
         if (group.isUserGroup())
         {
-            *script << group.bytes() << SerializeAmount(quantity) << OP_GROUP << OP_HASH160
-                    << ToByteVector(scriptID) << OP_EQUAL;
+            *script << group.bytes() << SerializeAmount(quantity) << OP_GROUP << OP_HASH160 << ToByteVector(scriptID)
+                    << OP_EQUAL;
         }
         else
         {

@@ -156,7 +156,7 @@ bool AreInputsStandard(const CTransactionRef tx, const CCoinsViewCache &mapInput
 
         if (whichType == TX_SCRIPTHASH)
         {
-            std::vector<std::vector<unsigned char> > stack;
+            Stack stack;
             // convert the scriptSig into a stack, so we can inspect the redeemScript
             // This is only parsing the scriptSig which should not have any non-push opcodes in it anyway,
             // and it matches the P2SH script template, so we know that it won't have any ops, only pushes
@@ -166,7 +166,7 @@ bool AreInputsStandard(const CTransactionRef tx, const CCoinsViewCache &mapInput
                 return false;
             if (stack.empty())
                 return false;
-            CScript subscript(stack.back().begin(), stack.back().end());
+            CScript subscript(stack.back());
             if (subscript.GetSigOpCount(STANDARD_SCRIPT_VERIFY_FLAGS, true) > MAX_P2SH_SIGOPS)
             {
                 return false;

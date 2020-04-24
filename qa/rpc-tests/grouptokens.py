@@ -293,7 +293,6 @@ class GroupTokensTest (BitcoinTestFramework):
             assert("To melt coins")
 
         self.subgroupTest()
-        # pdb.set_trace()
         self.descDocTest()
 
 

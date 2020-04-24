@@ -6,6 +6,7 @@
 
 #include "interpreter.h"
 
+#include "bignum.h"
 #include "bitfield.h"
 #include "bitmanip.h"
 #include "consensus/grouptokens.h"
@@ -60,9 +61,17 @@ static uint32_t GetHashType(const valtype &vchSig)
  * Script is a stack machine (like Forth) that evaluates a predicate
  * returning a bool indicating valid or not.  There are no loops.
  */
-#define stacktop(i) (stack.at(stack.size() + (i)))
-#define altstacktop(i) (altstack.at(altstack.size() + (i)))
-static inline void popstack(vector<valtype> &stack)
+
+/* For backwards compatibility reasons and to minimize script engine changes these API calls only return
+   vch type items from the stack top. */
+#define stacktop(i) (stack.at(stack.size() + (i)).mdata())
+#define altstacktop(i) (altstack.at(altstack.size() + (i)).mdata())
+
+/* Return StackItem objects */
+#define stackItem(i) (stack.at(stack.size() + (i)))
+#define altstackItem(i) (altstack.at(altstack.size() + (i)))
+
+static inline void popstack(Stack &stack)
 {
     if (stack.empty())
         throw runtime_error("popstack(): stack empty");
@@ -534,7 +543,7 @@ static inline bool IsOpcodeDisabled(opcodetype opcode, uint32_t flags)
     return false;
 }
 
-bool EvalScript(vector<vector<unsigned char> > &stack,
+bool EvalScript(Stack &stack,
     const CScript &script,
     unsigned int flags,
     unsigned int maxOps,
@@ -558,24 +567,23 @@ static const CScriptNum bnZero(0);
 static const CScriptNum bnOne(1);
 static const CScriptNum bnFalse(0);
 static const CScriptNum bnTrue(1);
-static const StackDataType vchFalse(0);
-static const StackDataType vchZero(0);
-static const StackDataType vchTrue(1, 1);
+static const StackItem vchFalse(VchStack, 0);
+static const StackItem vchTrue(VchStack, 1, 1);
 
 // Returns info about the next instruction to be run
-std::tuple<bool, opcodetype, StackDataType, ScriptError> ScriptMachine::Peek()
+std::tuple<bool, opcodetype, StackItem, ScriptError> ScriptMachine::Peek()
 {
     ScriptError err;
     opcodetype opcode;
-    StackDataType vchPushValue;
+    StackItem vchPushValue;
     auto oldpc = pc;
     if (!script->GetOp(pc, opcode, vchPushValue))
         set_error(&err, SCRIPT_ERR_BAD_OPCODE);
-    else if (vchPushValue.size() > MAX_SCRIPT_ELEMENT_SIZE)
+    else if (vchPushValue.isVch() && vchPushValue.size() > MAX_SCRIPT_ELEMENT_SIZE)
         set_error(&err, SCRIPT_ERR_PUSH_SIZE);
     pc = oldpc;
     bool fExec = !count(vfExec.begin(), vfExec.end(), false);
-    return std::tuple<bool, opcodetype, StackDataType, ScriptError>(fExec, opcode, vchPushValue, err);
+    return std::tuple<bool, opcodetype, StackItem, ScriptError>(fExec, opcode, vchPushValue, err);
 }
 
 
@@ -634,7 +642,7 @@ bool ScriptMachine::Step()
 {
     bool fRequireMinimal = (flags & SCRIPT_VERIFY_MINIMALDATA) != 0;
     opcodetype opcode;
-    StackDataType vchPushValue;
+    StackItem vchPushValue;
     ScriptError *serror = &error;
     try
     {
@@ -646,7 +654,7 @@ bool ScriptMachine::Step()
             //
             if (!script->GetOp(pc, opcode, vchPushValue))
                 return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
-            if (vchPushValue.size() > MAX_SCRIPT_ELEMENT_SIZE)
+            if (vchPushValue.isVch() && (vchPushValue.size() > MAX_SCRIPT_ELEMENT_SIZE))
                 return set_error(serror, SCRIPT_ERR_PUSH_SIZE);
 
             // Note how OP_RESERVED does not count towards the opcode limit.
@@ -661,7 +669,7 @@ bool ScriptMachine::Step()
 
             if (fExec && 0 <= opcode && opcode <= OP_PUSHDATA4)
             {
-                if (fRequireMinimal && !CheckMinimalPush(vchPushValue, opcode))
+                if (fRequireMinimal && !CheckMinimalPush(vchPushValue.data(), opcode))
                 {
                     return set_error(serror, SCRIPT_ERR_MINIMALDATA);
                 }
@@ -694,7 +702,7 @@ bool ScriptMachine::Step()
                 {
                     // ( -- value)
                     CScriptNum bn((int)opcode - (int)(OP_1 - 1));
-                    stack.push_back(bn.getvch());
+                    stack.push_back(bn.vchStackItem());
                     // The result of these opcodes should always be the minimal way to push the data
                     // they push, so no need for a CheckMinimalPush here.
                 }
@@ -2037,7 +2045,7 @@ bool VerifyTraditionalScript(const CScript &scriptSig,
         return set_error(serror, SCRIPT_ERR_SIG_PUSHONLY);
     }
 
-    vector<vector<unsigned char> > stackCopy;
+    Stack stackCopy;
     ScriptMachine sm(flags, checker, maxOps, 0xffffffff);
     if (!sm.Eval(scriptSig))
     {
@@ -2057,12 +2065,12 @@ bool VerifyTraditionalScript(const CScript &scriptSig,
     }
 
     {
-        const vector<vector<unsigned char> > &smStack = sm.getStack();
+        const Stack &smStack = sm.getStack();
         if (smStack.empty())
         {
             return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
         }
-        if (CastToBool(smStack.back()) == false)
+        if (((bool)smStack.back()) == false)
         {
             return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
         }
@@ -2083,8 +2091,7 @@ bool VerifyTraditionalScript(const CScript &scriptSig,
         // an empty stack and the EvalScript above would return false.
         assert(!stackCopy.empty());
 
-        const valtype &pubKeySerialized = stackCopy.back();
-        CScript pubKey2(pubKeySerialized.begin(), pubKeySerialized.end());
+        CScript pubKey2(stackCopy.back());
         sm.PopStack();
 
         // Bail out early if SCRIPT_DISALLOW_SEGWIT_RECOVERY is not set, the
@@ -2104,12 +2111,12 @@ bool VerifyTraditionalScript(const CScript &scriptSig,
         }
 
         {
-            const vector<vector<unsigned char> > &smStack = sm.getStack();
+            const Stack &smStack = sm.getStack();
             if (smStack.empty())
             {
                 return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
             }
-            if (!CastToBool(smStack.back()))
+            if (!((bool)smStack.back()))
             {
                 return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
             }

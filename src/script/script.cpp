@@ -447,7 +447,7 @@ unsigned int CScript::GetSigOpCount(const uint32_t flags, const CScript &scriptS
     // get the last item that the scriptSig
     // pushes onto the stack:
     const_iterator pc = scriptSig.begin();
-    vector<unsigned char> data;
+    StackItem data;
     while (pc < scriptSig.end())
     {
         opcodetype opcode;
@@ -458,7 +458,7 @@ unsigned int CScript::GetSigOpCount(const uint32_t flags, const CScript &scriptS
     }
 
     /// ... and return its opcount:
-    CScript subscript(data.begin(), data.end());
+    CScript subscript(data);
     return subscript.GetSigOpCount(flags, true);
 }
 

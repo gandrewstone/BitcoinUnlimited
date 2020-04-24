@@ -14,8 +14,8 @@
 #include <array>
 #include <bitset>
 
-typedef std::vector<uint8_t> valtype;
-typedef std::vector<valtype> stacktype;
+typedef StackItem valtype;
+typedef Stack stacktype;
 
 const unsigned int MAXOPS = 100000; // not relevant for these tests
 

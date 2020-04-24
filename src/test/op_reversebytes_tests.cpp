@@ -10,8 +10,8 @@
 
 #include <boost/test/unit_test.hpp>
 
-typedef std::vector<uint8_t> valtype;
-typedef std::vector<valtype> stacktype;
+typedef StackItem valtype;
+typedef Stack stacktype;
 
 BOOST_FIXTURE_TEST_SUITE(op_reversebytes_tests, BasicTestingSetup)
 
@@ -115,8 +115,8 @@ BOOST_AUTO_TEST_CASE(op_reversebytes_tests)
             random_data.emplace_back(lcg.next() % 256);
             palindrome.emplace_back((item < (datasize + 1) / 2 ? item : datasize - item - 1) % 256);
         }
-        test_cases.push_back({iota_data, {iota_data.rbegin(), iota_data.rend()}});
-        test_cases.push_back({random_data, {random_data.rbegin(), random_data.rend()}});
+        test_cases.push_back({iota_data, valtype(iota_data.data().rbegin(), iota_data.data().rend())});
+        test_cases.push_back({random_data, valtype(random_data.data().rbegin(), random_data.data().rend())});
         palindromes.push_back(palindrome);
     }
 

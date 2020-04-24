@@ -13,13 +13,14 @@
 #include "crypto/sha256.h"
 #include "primitives/transaction.h"
 #include "pubkey.h"
+#include "interpreter.h"
 #include "script/script.h"
 #include "script/script_error.h"
 #include "uint256.h"
 #include "util.h"
 
 typedef std::vector<unsigned char> valtype;
-extern bool CastToBool(const valtype &vch);
+extern bool CastToBool(const StackItem &vch);
 
 bool VerifyTemplate(const CScript &templat,
     const CScript &constraint,
@@ -94,14 +95,14 @@ bool VerifyTemplate(const CScript &templat,
         tracker->update(smStats);
     }
 
-    const std::vector<std::vector<unsigned char> > &smStack = sm.getStack();
+    const Stack &smStack = sm.getStack();
     if (smStack.size() > 1)
         return set_error(serror, SCRIPT_ERR_CLEANSTACK);
     if (smStack.size() == 0)
     {
         return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
     }
-    if (!CastToBool(smStack.back()))
+    if (!((bool)smStack.back()))
     {
         return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
     }

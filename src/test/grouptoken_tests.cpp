@@ -653,7 +653,7 @@ BOOST_AUTO_TEST_CASE(grouptoken_basicfunctions)
         BOOST_CHECK(worked && (resultAddr == CTxDestination(addr)));
 
         // Verify that the script passes standard checks, especially the data coding
-        std::vector<std::vector<uint8_t> > stack;
+        Stack stack;
         BaseSignatureChecker sigchecker;
         ScriptError err = SCRIPT_ERR_OK;
         // bool r =

@@ -32,7 +32,7 @@ if ENABLE_JAVACASHLIB
 JNI_CXXFLAGS = -I$(JAVA_HOME)/include/linux -I$(JAVA_HOME)/include -DJAVA
 endif
 
-EXTRA_LIBRARIES =
+EXTRA_LIBRARIES = libgmp.a
 
 BITCOIN_CONFIG_INCLUDES=-I$(builddir)/config
 BITCOIN_INCLUDES=-I$(builddir) -I$(builddir)/obj $(BDB_CPPFLAGS) $(BOOST_CPPFLAGS) $(LEVELDB_CPPFLAGS) $(CRYPTO_CFLAGS) $(SSL_CFLAGS)
@@ -204,10 +204,13 @@ BITCOIN_CORE_H = \
   respend/respendlogger.h \
   respend/respendrelayer.h \
   respend/respenddetector.h \
+  script/bignum.h \
   script/sigcache.h \
   script/sign.h \
   script/standard.h \
   script/ismine.h \
+  script/scripttemplate.h \
+  script/stackitem.h \
   streams.h \
   support/allocators/secure.h \
   support/allocators/zeroafterfree.h \
@@ -406,6 +409,8 @@ libbitcoincash_a_SOURCES = \
   script/interpreter.h \
   script/standard.cpp \
   script/standard.h \
+  script/stackitem.cpp \
+  script/stackitem.h \
   script/script.cpp \
   script/script.h \
   script/scripttemplate.cpp \
@@ -500,8 +505,12 @@ libbitcoin_consensus_a_SOURCES = \
   script/bitcoinconsensus.cpp \
   script/bitfield.cpp \
   script/bitfield.h \
+  script/bignum.cpp \
+  script/bignum.h \
   script/interpreter.cpp \
   script/interpreter.h \
+  script/stackitem.cpp \
+  script/stackitem.h \
   script/sigcommon.cpp \
   script/script.cpp \
   script/script.h \

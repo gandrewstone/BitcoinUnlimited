@@ -494,32 +494,46 @@ SLAPI void SmSetStackItem(void *smId, unsigned int stack, int index, const unsig
 {
     ScriptMachineData *smd = (ScriptMachineData *)smId;
 
-    const std::vector<StackDataType> &stk = (stack == 0) ? smd->sm->getStack() : smd->sm->getAltStack();
+    const std::vector<StackItem> &stk = (stack == 0) ? smd->sm->getStack() : smd->sm->getAltStack();
     if (((int)stk.size()) <= index)
         return;
     if (stack == 0)
     {
-        smd->sm->setStackItem(index, StackDataType(value, value + valsize));
+        smd->sm->setStackItem(index, StackItem(value, value + valsize));
     }
     else if (stack == 1)
     {
-        smd->sm->setAltStackItem(index, StackDataType(value, value + valsize));
+        smd->sm->setAltStackItem(index, StackItem(value, value + valsize));
     }
 }
 
 // Get a stack item, 0 = stack, 1 = altstack,  pass a buffer at least 520 bytes in size
 // returns length of the item or -1 if no item.  0 is the stack top
-SLAPI int SmGetStackItem(void *smId, unsigned int stack, unsigned int index, unsigned char *result)
+SLAPI int SmGetStackItem(void *smId, unsigned int stack, unsigned int index, StackElementType *t, unsigned char *result)
 {
     ScriptMachineData *smd = (ScriptMachineData *)smId;
 
-    const std::vector<StackDataType> &stk = (stack == 0) ? smd->sm->getStack() : smd->sm->getAltStack();
+    const std::vector<StackItem> &stk = (stack == 0) ? smd->sm->getStack() : smd->sm->getAltStack();
     if (stk.size() <= index)
         return -1;
     index = stk.size() - index - 1; // reverse it so 0 is stack top
-    int sz = stk[index].size();
-    memcpy(result, stk[index].data(), sz);
-    return sz;
+
+    const StackItem &item = stk[index];
+
+    *t = item.type;
+    if (item.type == StackElementType::VCH)
+    {
+        int sz = stk[index].size();
+        memcpy(result, stk[index].data().data(), sz);
+        return sz;
+    }
+    else if (item.type == StackElementType::BIGNUM)
+    {
+        int sz = item.num().serialize(result, 512);
+        return (sz);
+    }
+    else
+        return 0;
 }
 
 // Returns the last error generated during script evaluation (if any)

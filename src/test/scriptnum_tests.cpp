@@ -4,6 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "script/script.h"
+#include "script/bignum.h"
 #include "scriptnum10.h"
 #include "test/test_bitcoin.h"
 
@@ -257,6 +258,87 @@ BOOST_AUTO_TEST_CASE(minimize_encoding_test)
         negkpadded[negkpadded.size() - 1] &= 0x7f;
         negkpadded.push_back(0x80);
     }
+}
+
+BOOST_AUTO_TEST_CASE(bignum_test)
+{
+    BigNumInit();
+
+    BigNum m1;
+
+    m1 = BigNum(100) * 10_BN;
+    BOOST_CHECK(m1 == 1000_BN);
+
+    m1 = BigNum(100) * 0x10_BN;
+    BOOST_CHECK(m1 == 1600_BN);
+
+    m1 = BigNum(12345678910111213) * 1234567891011121314151617181920_BN;
+    BOOST_CHECK(m1 == 15241578775156478982436124619934121108852868960_BN);
+
+    // check multiplication and constructor equivalence
+    BOOST_CHECK(m1 * BigNum(12345) == m1 * 12345_BN);
+    BOOST_CHECK(m1 * BigNum(-12345) == m1 * -12345_BN);
+
+    BOOST_CHECK(m1 * 3_BN == m1 + m1 + m1);
+    BOOST_CHECK(m1 * 3_BN - m1 == m1 + m1);
+
+    BigNum biggest =
+        0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff_BN;
+    // BOOST_CHECK_EXCEPTION(biggest + 1_BN, OutOfBounds, [](auto &e) -> bool { return strcmp(e.what(), "Numerical upper
+    // bound exceeded")==0; });
+
+    BigNum smallest = (-biggest) - 1_BN;
+    // printf("%s\n", smallest.str().c_str());
+    // BOOST_CHECK_EXCEPTION(smallest - 1_BN, OutOfBounds, [](auto &e) -> bool { return strcmp(e.what(), "Numerical
+    // lower bound exceeded")==0; });
+
+    // Check truncated division "modulo"
+    BOOST_CHECK((1234_BN).tdiv(123) == 4_BN);
+    BOOST_CHECK((-1234_BN).tdiv(123) == -4_BN);
+
+    unsigned char buf[520];
+    memset(buf, 0xff, 520);
+
+    BigNum b2;
+    auto b1 = 1000_BN;
+    b1.serialize(buf, 2);
+    BOOST_CHECK(buf[0] == 232); // Check LE
+    BOOST_CHECK(buf[1] == 3);
+    BOOST_CHECK(buf[2] == 0); // Check sign
+    BOOST_CHECK(buf[3] == 0xff); // Check untouched
+    b2.deserialize(buf, 3);
+    BOOST_CHECK(b1 == b2);
+
+    b1 = -2000_BN;
+    BOOST_CHECK(b1.serialize(buf, 2) == 3);
+    BOOST_CHECK(buf[0] == 208); // Check LE
+    BOOST_CHECK(buf[1] == 7);
+    BOOST_CHECK(buf[2] == 0x80); // Check sign
+    BOOST_CHECK(buf[3] == 0xff); // Check untouched
+    b2.deserialize(buf, 3);
+    BOOST_CHECK(b1 == b2);
+
+    b1.serialize(buf, 4);
+    BOOST_CHECK(buf[0] == 208); // Check LE
+    BOOST_CHECK(buf[1] == 7);
+    BOOST_CHECK(buf[2] == 0); // Check pad
+    BOOST_CHECK(buf[3] == 0);
+    BOOST_CHECK(buf[4] == 0x80); // Check sign
+    BOOST_CHECK(buf[5] == 0xff); // Check untouched
+    b2.deserialize(buf, 5);
+    BOOST_CHECK(b1 == b2);
+
+    std::vector<unsigned char> vec = CScriptNum::serialize(1000);
+    b2 = 0_BN;
+    b2.deserialize(&vec[0], vec.size());
+    BOOST_CHECK(b2 == 1000_BN);
+
+    vec = CScriptNum::serialize(-1234);
+    b2 = 0_BN;
+    b2.deserialize(&vec[0], vec.size());
+    BOOST_CHECK(b2 == -1234_BN);
+
+    BOOST_CHECK(biggest.serialize(buf, 10) == -513); // Check correct requested size error
 }
 
 BOOST_AUTO_TEST_SUITE_END()

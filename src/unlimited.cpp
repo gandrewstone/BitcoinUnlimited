@@ -2397,23 +2397,31 @@ void CStatusString::Clear(const std::string &yourStatus)
 #include "core_io.h"
 #include "utilstrencodings.h"
 
-void dbgDumpStack(const std::vector<StackDataType> &stack)
+void dbgDumpStack(const Stack &stack)
 {
     printf("stack %lu items (bottom to top): \n", stack.size());
     auto sz = stack.size();
     for (unsigned int i = 0; i < stack.size(); i++)
     {
         auto item = stack[i];
-        try
+        if (item.isVch())
         {
-            CScriptNum itemAsInt(item, false);
-            printf("%u (top%d) Num: %u Hex: %s Script: %s\n", i, (int)i - (int)sz, itemAsInt.getint(),
-                HexStr(item, true).c_str(), ScriptToAsmStr(CScript(item.begin(), item.end()), false).c_str());
+            try
+            {
+                CScriptNum itemAsInt(item, false);
+                printf("%u (top%d) Num: %u Hex: %s Script: %s\n", i, (int)i - (int)sz, itemAsInt.getint(),
+                    item.hex().c_str(), ScriptToAsmStr(CScript(item), false).c_str());
+            }
+            catch (scriptnum_error)
+            {
+                printf("%u (top%d) Num: NaN Hex: %s Script: %s\n", i, (int)i - (int)sz, item.hex().c_str(),
+                    ScriptToAsmStr(CScript(item), false).c_str());
+            }
         }
-        catch (scriptnum_error)
+        else if (item.type == StackElementType::BIGNUM)
         {
-            printf("%u (top%d) Num: NaN Hex: %s Script: %s\n", i, (int)i - (int)sz, HexStr(item, true).c_str(),
-                ScriptToAsmStr(CScript(item.begin(), item.end()), false).c_str());
+            const BigNum &bn = item.num();
+            printf("%u (top%d) BigNum: %s Hex: %s\n", i, (int)i - (int)sz, bn.str().c_str(), bn.str(16).c_str());
         }
     }
 }

@@ -9,7 +9,8 @@
 
 #include "crypto/common.h"
 #include "prevector.h"
-#include "script_error.h"
+#include "script/script_error.h"
+#include "script/stackitem.h"
 #include "uint256.h"
 
 #include <assert.h>
@@ -238,6 +239,11 @@ public:
     static const size_t MAXIMUM_ELEMENT_SIZE = 4;
 
     explicit CScriptNum(const int64_t &n) { m_value = n; }
+    explicit CScriptNum(const StackItem &vch, bool fRequireMinimal, const size_t nMaxNumSize = MAXIMUM_ELEMENT_SIZE)
+        : CScriptNum(vch.data(), fRequireMinimal, nMaxNumSize)
+    {
+    }
+
     explicit CScriptNum(const std::vector<uint8_t> &vch,
         bool fRequireMinimal,
         const size_t nMaxNumSize = MAXIMUM_ELEMENT_SIZE)
@@ -329,6 +335,7 @@ public:
     }
     int64_t getint64() const { return m_value; }
     std::vector<unsigned char> getvch() const { return serialize(m_value); }
+    StackItem vchStackItem() const { return StackItem(serialize(m_value)); }
     static std::vector<unsigned char> serialize(const int64_t &value)
     {
         if (value == 0)
@@ -427,6 +434,11 @@ public:
     CScript(std::vector<unsigned char>::const_iterator pbegin, std::vector<unsigned char>::const_iterator pend)
         : CScriptBase(pbegin, pend)
     {
+    }
+
+    CScript(const StackItem &s) : CScriptBase(s.data().begin(), s.data().end())
+    {
+        // already called: s.requireType(StackElementType::VCH);
     }
     CScript(const unsigned char *pbegin, const unsigned char *pend) : CScriptBase(pbegin, pend) {}
     CScript &operator+=(const CScript &b)
@@ -544,8 +556,21 @@ public:
         return *this;
     }
 
+    bool GetOp(const_iterator &pcRet, opcodetype &opcodeRet, VchType &vchRet) const
+    {
+        StackItem data;
+        const_iterator pc = pcRet;
+        opcodeRet = OP_VER; // initialize this to something broken
+        opcodetype opcode = opcodeRet;
+        bool ret = GetOp2(pc, opcode, &data);
+        vchRet = data.data(); // will throw if not a vch
+        // If it didn't throw I can advance the pc
+        pcRet = pc;
+        opcodeRet = opcode;
+        return ret;
+    }
 
-    bool GetOp(iterator &pc, opcodetype &opcodeRet, std::vector<unsigned char> &vchRet)
+    bool GetOp(iterator &pc, opcodetype &opcodeRet, StackItem &vchRet)
     {
         // Wrapper so it can be called with either iterator or const_iterator
         const_iterator pc2 = pc;
@@ -562,13 +587,13 @@ public:
         return fRet;
     }
 
-    bool GetOp(const_iterator &pc, opcodetype &opcodeRet, std::vector<unsigned char> &vchRet) const
+    bool GetOp(const_iterator &pc, opcodetype &opcodeRet, StackItem &vchRet) const
     {
         return GetOp2(pc, opcodeRet, &vchRet);
     }
 
     bool GetOp(const_iterator &pc, opcodetype &opcodeRet) const { return GetOp2(pc, opcodeRet, nullptr); }
-    bool GetOp2(const_iterator &pc, opcodetype &opcodeRet, std::vector<unsigned char> *pvchRet) const
+    bool GetOp2(const_iterator &pc, opcodetype &opcodeRet, StackItem *pvchRet) const
     {
         opcodeRet = OP_INVALIDOPCODE;
         if (pvchRet)

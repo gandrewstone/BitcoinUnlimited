@@ -8,6 +8,7 @@
 #include "dstencode.h"
 #include "primitives/transaction.h"
 #include "script/script.h"
+#include "script/stackitem.h"
 #include "script/standard.h"
 #include "serialize.h"
 #include "streams.h"
@@ -28,8 +29,8 @@ string FormatScript(const CScript &script)
     while (it != script.end())
     {
         CScript::const_iterator it2 = it;
-        vector<unsigned char> vch;
-        if (script.GetOp2(it, op, &vch))
+        StackItem data;
+        if (script.GetOp2(it, op, &data))
         {
             if (op == OP_0)
             {
@@ -51,8 +52,9 @@ string FormatScript(const CScript &script)
                     continue;
                 }
             }
-            if (vch.size() > 0)
+            if (data.size() > 0)
             {
+                const vector<unsigned char> &vch = data.data();
                 ret += strprintf("0x%x 0x%x ", HexStr(it2, it - vch.size()), HexStr(it - vch.size(), it));
             }
             else

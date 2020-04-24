@@ -8,6 +8,8 @@
 #define BITCOIN_SCRIPT_INTERPRETER_H
 
 #include "primitives/transaction.h"
+#include "script/bignum.h"
+#include "script/stackitem.h"
 #include "script_error.h"
 
 #include <stdint.h>
@@ -224,7 +226,8 @@ public:
     }
 };
 
-typedef std::vector<unsigned char> StackDataType;
+typedef StackItem StackDataType;
+typedef std::vector<StackItem> Stack;
 
 /**
  * Class that keeps track of number of signature operations
@@ -267,8 +270,8 @@ class ScriptMachine
 {
 protected:
     unsigned int flags;
-    std::vector<StackDataType> stack;
-    std::vector<StackDataType> altstack;
+    Stack stack;
+    Stack altstack;
     const CScript *script;
     const BaseSignatureChecker &checker;
     ScriptError error;
@@ -334,7 +337,7 @@ public:
 
     // Returns info about the next instruction to be run:
     // first bool is true if the instruction will be executed (false if this is passing across a not-taken branch)
-    std::tuple<bool, opcodetype, StackDataType, ScriptError> Peek();
+    std::tuple<bool, opcodetype, StackItem, ScriptError> Peek();
 
     // Remove all items from the altstack
     void ClearAltStack() { altstack.clear(); }
@@ -358,10 +361,10 @@ public:
     }
 
     // Set the main stack to the passed data
-    void setStack(const std::vector<StackDataType> &stk) { stack = stk; }
+    void setStack(const Stack &stk) { stack = stk; }
     // Overwrite a stack entry with the passed data.  0 is the stack top, -1 is a special number indicating to push
     // an item onto the stack top.
-    void setStackItem(int idx, const StackDataType &item)
+    void setStackItem(int idx, const StackItem &item)
     {
         if (idx == -1)
             stack.push_back(item);
@@ -373,7 +376,7 @@ public:
 
     // Overwrite an altstack entry with the passed data.  0 is the stack top, -1 is a special number indicating to push
     // the item onto the top.
-    void setAltStackItem(int idx, const StackDataType &item)
+    void setAltStackItem(int idx, const StackItem &item)
     {
         if (idx == -1)
             altstack.push_back(item);
@@ -384,15 +387,15 @@ public:
     }
 
     // Load or modify the main stack
-    std::vector<StackDataType> &modifyStack() { return stack; }
+    Stack &modifyStack() { return stack; }
     // Load or modify the alt stack
-    std::vector<StackDataType> &modifyAltStack() { return stack; }
+    Stack &modifyAltStack() { return stack; }
     // Set the alt stack to the passed data
-    void setAltStack(const std::vector<StackDataType> &stk) { altstack = stk; }
+    void setAltStack(const Stack &stk) { altstack = stk; }
     // Get the main stack
-    const std::vector<StackDataType> &getStack() { return stack; }
+    const Stack &getStack() { return stack; }
     // Get the alt stack
-    const std::vector<StackDataType> &getAltStack() { return altstack; }
+    const Stack &getAltStack() { return altstack; }
     // Get any error that may have occurred
     const ScriptError &getError() { return error; }
     // Get the bitwise OR of all sighashtype bytes that occurred in the script
@@ -403,7 +406,7 @@ public:
     const ScriptMachineResourceTracker &getStats() { return stats; }
 };
 
-bool EvalScript(std::vector<std::vector<unsigned char> > &stack,
+bool EvalScript(Stack &stack,
     const CScript &script,
     unsigned int flags,
     unsigned int maxOps,

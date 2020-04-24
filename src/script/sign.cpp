@@ -189,31 +189,31 @@ bool SignSignature(const CKeyStore &keystore,
     return SignSignature(keystore, txout.scriptPubKey, txTo, nIn, txout.nValue, nHashType);
 }
 
-static CScript PushAll(const vector<valtype> &values)
+static CScript PushAll(const Stack &values)
 {
     CScript result;
-    for (const valtype &v : values)
-        result << v;
+    for (const StackItem &v : values)
+        result << v.data(); // Every item must be a vch or data() throws
     return result;
 }
 
 static CScript CombineMultisig(const CScript &scriptPubKey,
     const BaseSignatureChecker &checker,
     const vector<valtype> &vSolutions,
-    const vector<valtype> &sigs1,
-    const vector<valtype> &sigs2)
+    const Stack &sigs1,
+    const Stack &sigs2)
 {
     // Combine all the signatures we've got:
     set<valtype> allsigs;
-    for (const valtype &v : sigs1)
+    for (const StackItem &v : sigs1)
     {
         if (!v.empty())
-            allsigs.insert(v);
+            allsigs.insert(v.data());
     }
-    for (const valtype &v : sigs2)
+    for (const StackItem &v : sigs2)
     {
         if (!v.empty())
-            allsigs.insert(v);
+            allsigs.insert(v.data());
     }
 
     // Build a map of pubkey -> signature by matching sigs to pubkeys:
@@ -259,8 +259,8 @@ static CScript CombineSignatures(const CScript &scriptPubKey,
     const BaseSignatureChecker &checker,
     const txnouttype txType,
     const vector<valtype> &vSolutions,
-    vector<valtype> &sigs1,
-    vector<valtype> &sigs2)
+    Stack &sigs1,
+    Stack &sigs2)
 {
     switch (txType)
     {
@@ -287,7 +287,7 @@ static CScript CombineSignatures(const CScript &scriptPubKey,
         else
         {
             // Recur to combine:
-            valtype spk = sigs1.back();
+            valtype spk = sigs1.back().data();
             CScript pubKey2(spk.begin(), spk.end());
 
             txnouttype txType2;
@@ -318,11 +318,11 @@ CScript CombineSignatures(const CScript &scriptPubKey,
     vector<vector<unsigned char> > vSolutions;
     Solver(scriptPubKey, txType, vSolutions);
 
-    vector<valtype> stack1;
+    Stack stack1;
     // scriptSig should have no ops in them, only data pushes.  Send MAX_OPS_PER_SCRIPT to mirror existing
     // behavior exactly.
     EvalScript(stack1, scriptSig1, SCRIPT_VERIFY_STRICTENC, MAX_OPS_PER_SCRIPT, BaseSignatureChecker());
-    vector<valtype> stack2;
+    Stack stack2;
     EvalScript(stack2, scriptSig2, SCRIPT_VERIFY_STRICTENC, MAX_OPS_PER_SCRIPT, BaseSignatureChecker());
 
     return CombineSignatures(scriptPubKey, checker, txType, vSolutions, stack1, stack2);

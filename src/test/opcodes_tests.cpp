@@ -12,8 +12,8 @@
 
 #include <array>
 
-typedef std::vector<uint8_t> valtype;
-typedef std::vector<valtype> stacktype;
+typedef StackItem valtype;
+typedef Stack stacktype;
 
 BOOST_FIXTURE_TEST_SUITE(nov152018_opcodes_tests, BasicTestingSetup)
 
@@ -83,9 +83,9 @@ static valtype NegativeValtype(const valtype &v)
     valtype r(v);
     if (r.size() > 0)
     {
-        r[r.size() - 1] ^= 0x80;
+        r.mdata()[r.size() - 1] ^= 0x80;
     }
-    CScriptNum::MinimallyEncode(r);
+    CScriptNum::MinimallyEncode(r.mdata());
     return r;
 }
 
@@ -96,7 +96,7 @@ static valtype to_bitpattern(const char *str)
 {
     size_t len = strlen(str);
 
-    valtype val((len - 1) / 8 + 1, 0);
+    valtype val(VchStack, (len - 1) / 8 + 1, 0);
 
     const char *pin = &str[len - 1];
     for (size_t i = 0; i < len; i++)
@@ -108,11 +108,11 @@ static valtype to_bitpattern(const char *str)
 
         if (*pin == '0')
         {
-            val[byte_idx] &= ~mask;
+            val.mdata()[byte_idx] &= ~mask;
         }
         else
         {
-            val[byte_idx] |= mask;
+            val.mdata()[byte_idx] |= mask;
         }
         pin--;
     }
@@ -242,8 +242,8 @@ BOOST_AUTO_TEST_CASE(bitwise_opcodes_test)
     RunTestForAllBitwiseOpcodes({}, {}, {}, {}, {});
 
     // Run all variations of zeros and ones.
-    valtype allzeros(MAX_SCRIPT_ELEMENT_SIZE, 0);
-    valtype allones(MAX_SCRIPT_ELEMENT_SIZE, 0xff);
+    valtype allzeros(VchStack, MAX_SCRIPT_ELEMENT_SIZE, 0);
+    valtype allones(VchStack, MAX_SCRIPT_ELEMENT_SIZE, 0xff);
 
     BOOST_CHECK_EQUAL(allzeros.size(), MAX_SCRIPT_ELEMENT_SIZE);
     BOOST_CHECK_EQUAL(allones.size(), MAX_SCRIPT_ELEMENT_SIZE);
@@ -589,7 +589,7 @@ BOOST_AUTO_TEST_CASE(type_conversion_test)
     CheckBin2NumError({{0x00, 0x00, 0x00, 0x80, 0x80}}, SCRIPT_ERR_INVALID_NUMBER_RANGE);
 
     // NUM2BIN must not generate oversized push.
-    valtype largezero(MAX_SCRIPT_ELEMENT_SIZE, 0);
+    valtype largezero(VchStack, MAX_SCRIPT_ELEMENT_SIZE, 0);
     BOOST_CHECK_EQUAL(largezero.size(), MAX_SCRIPT_ELEMENT_SIZE);
     CheckTypeConversionOp(largezero, {});
 
