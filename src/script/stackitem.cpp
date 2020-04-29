@@ -11,7 +11,12 @@ VchStackType VchStack;
 uint64_t StackItem::asUint64(bool requireMinimal) const
 {
     if (isVch())
-        return CScriptNum(vch, requireMinimal).getint();
+    {
+        int64_t ret = CScriptNum(vch, requireMinimal).getint();
+        if (ret < 0)
+            throw BadOpOnType("Impossible conversion of negative ScriptNum to uint64");
+        return ret;
+    }
     if (isBigNum())
     {
         if (n < 0_BN)

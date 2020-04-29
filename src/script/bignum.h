@@ -12,11 +12,7 @@
 #include <vector>
 
 #define MAX_BIGNUM_MAGNITUDE_SIZE 512
-
-extern mpz_t bigNumUpperLimit; // if (x > upperLimit) throw NUMBER_OUT_OF_RANGE;
-extern mpz_t bigNumLowerLimit; // if (x < lowerLimit) throw NUMBER_OUT_OF_RANGE;
-
-extern void BigNumInit();
+#define MAX_BIGNUM_BITSHIFT_SIZE (MAX_BIGNUM_MAGNITUDE_SIZE * 8)
 
 class OutOfBounds : std::exception
 {
@@ -48,15 +44,7 @@ public:
     }
 
     BigNum(long int i = 0) { mpz_init_set_si(n, i); }
-    BigNum checkLimits() const
-    {
-        if (mpz_cmp(n, bigNumUpperLimit) > 0)
-            throw OutOfBounds("Numerical upper bound exceeded");
-        if (mpz_cmp(n, bigNumLowerLimit) < 0)
-            throw OutOfBounds("Numerical lower bound exceeded");
-        return *this;
-    }
-
+    BigNum checkLimits() const { return *this; }
     /** Modulo where the remainder gets the sign of the dividend */
     BigNum tdiv(const BigNum &d) const
     {
@@ -107,6 +95,17 @@ public:
         return ret.checkLimits();
     }
 
+    BigNum operator<<(const unsigned long int amt) const
+    {
+        BigNum ret;
+        if (amt > MAX_BIGNUM_BITSHIFT_SIZE)
+            throw OutOfBounds("Left shift too far");
+        mpz_mul_2exp(ret.n, n, amt);
+        return ret.checkLimits();
+    }
+    BigNum operator>>(const unsigned long int amt) const;
+
+    BigNum operator>>(const BigNum &amt) const { return *this >> amt.asUint64(); }
     std::string str(int base = 10) const
     {
         std::string ret;
@@ -206,5 +205,21 @@ inline BigNum operator"" _BN(const char *str)
     return BigNum(str, 10);
 }
 
+extern BigNum bigNumUpperLimit; // if (!(x < upperLimit)) throw NUMBER_OUT_OF_RANGE;
+extern BigNum bigNumLowerLimit; // if (!(x > lowerLimit)) throw NUMBER_OUT_OF_RANGE;
+
+extern const BigNum bnZero;
+extern const BigNum bnOne;
+extern const BigNum &bnFalse;
+extern const BigNum &bnTrue;
+
+inline BigNum BigNum::operator>>(const unsigned long int amt) const
+{
+    BigNum ret;
+    if (amt > MAX_BIGNUM_BITSHIFT_SIZE)
+        return bnZero; // It must be zero because the bignum cannot be any bigger
+    mpz_tdiv_q_2exp(ret.n, n, amt);
+    return ret.checkLimits();
+}
 
 #endif

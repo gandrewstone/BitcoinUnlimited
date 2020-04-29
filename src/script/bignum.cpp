@@ -5,23 +5,13 @@
 #include "script/bignum.h"
 #include "script/script.h"
 
-mpz_t bigNumUpperLimit; // if (x > upperLimit) throw NUMBER_OUT_OF_RANGE;
-mpz_t bigNumLowerLimit; // if (x < lowerLimit) throw NUMBER_OUT_OF_RANGE;
+const BigNum bnZero = 0_BN;
+const BigNum bnOne = 1_BN;
+const BigNum &bnFalse(bnZero);
+const BigNum &bnTrue(bnOne);
 
-void BigNumInit()
-{
-    mpz_init_set_ui(bigNumUpperLimit, 1);
-    mpz_mul_2exp(bigNumUpperLimit, bigNumUpperLimit, 4096);
-    mpz_neg(bigNumLowerLimit, bigNumUpperLimit);
-    mpz_sub_ui(bigNumUpperLimit, bigNumUpperLimit, 1);
-    mpz_add_ui(bigNumLowerLimit, bigNumLowerLimit, 1);
-}
-
-static const BigNum bnZero = 0_BN;
-static const BigNum bnOne = 1_BN;
-static const BigNum &bnFalse(bnZero);
-static const BigNum &bnTrue(bnOne);
-
+BigNum bigNumUpperLimit = bnOne << 4096; // if !(x < upperLimit) throw NUMBER_OUT_OF_RANGE;
+BigNum bigNumLowerLimit = -bigNumUpperLimit; // if !(x > lowerLimit) throw NUMBER_OUT_OF_RANGE;
 
 bool BigNumScriptOp(BigNum &bn,
     opcodetype opcode,
@@ -90,6 +80,9 @@ bool BigNumScriptOp(BigNum &bn,
         break;
     case OP_MAX:
         bn = (bn1 > bn2 ? bn1 : bn2);
+        break;
+    case OP_MUL:
+        bn = bn1 * bn2;
         break;
     default:
         assert(!"invalid opcode");

@@ -5,6 +5,7 @@
 
 #include "script/script.h"
 #include "script/bignum.h"
+#include "script/interpreter.h"
 #include "scriptnum10.h"
 #include "test/test_bitcoin.h"
 
@@ -262,8 +263,6 @@ BOOST_AUTO_TEST_CASE(minimize_encoding_test)
 
 BOOST_AUTO_TEST_CASE(bignum_test)
 {
-    BigNumInit();
-
     BigNum m1;
 
     m1 = BigNum(100) * 10_BN;
@@ -366,5 +365,72 @@ BOOST_AUTO_TEST_CASE(bignum_test)
 
     BOOST_CHECK(biggest.serialize(buf, 10) == -513); // Check correct requested size error
 }
+
+std::vector<unsigned char> bns(long int i, size_t pad = 8) { return BigNum(i).serialize(pad); }
+void testScript(const CScript &s, bool expectedRet, bool expectedStackTF, ScriptError expectedError)
+{
+    BaseSignatureChecker sigChecker;
+    ScriptMachine sm(0, sigChecker, 0xffffffff, 0xffffffff);
+    bool ret = sm.Eval(s);
+    BOOST_CHECK(ret == expectedRet);
+    if (expectedRet)
+    {
+        BOOST_CHECK(sm.getStack().size() == 1);
+        BOOST_CHECK(((bool)sm.getStack()[0]) == expectedStackTF);
+    }
+    else
+    {
+        BOOST_CHECK_MESSAGE(sm.getError() == expectedError, "got: " << ScriptErrorString(sm.getError()) << " ("
+                                                                    << sm.getError() << ")");
+    }
+}
+
+void testScript(const CScript &s, bool expectedStackTF) { testScript(s, true, expectedStackTF, SCRIPT_ERR_OK); }
+void testScript(const CScript &s, ScriptError expectedError) { testScript(s, false, false, expectedError); }
+BOOST_AUTO_TEST_CASE(bignumscript_test)
+{
+    // Should wrap due to mod
+    testScript(CScript() << 0x1000 << OP_SETBMD << bns(0xfff) << OP_BIN2BIGNUM << OP_1 << OP_ADD, false);
+    // Should not wrap
+    testScript(CScript() << 0x1000 << OP_SETBMD << bns(0xffe) << OP_BIN2BIGNUM << OP_1 << OP_ADD, true);
+
+    // Check equality
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << bns(0xffeff) << OP_BIN2BIGNUM << OP_EQUAL, true);
+
+    testScript(CScript() << bns(0xffeff) << bns(0xefeff) << OP_BIN2BIGNUM << OP_EQUAL, false);
+
+    testScript(
+        CScript() << bns(0xffeff) << OP_BIN2BIGNUM << OP_4 << OP_RSHIFT << bns(0xffef) << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << bns(4) << OP_BIN2BIGNUM << OP_RSHIFT << bns(0xffef)
+                         << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+
+    testScript(
+        CScript() << bns(0xffeff) << OP_BIN2BIGNUM << OP_4 << OP_LSHIFT << bns(0xffeff0) << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << bns(4) << OP_BIN2BIGNUM << OP_LSHIFT << bns(0xffeff0)
+                         << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+
+    // Can't shift by negative numbers
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << -20 << OP_RSHIFT, SCRIPT_ERR_BAD_OPERATION_ON_TYPE);
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << bns(-20) << OP_BIN2BIGNUM << OP_LSHIFT,
+        SCRIPT_ERR_BAD_OPERATION_ON_TYPE);
+
+    // Shift too big
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << 10000 << OP_LSHIFT, SCRIPT_ERR_INVALID_NUMBER_RANGE);
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << 10000 << OP_BIN2BIGNUM << OP_LSHIFT,
+        SCRIPT_ERR_INVALID_NUMBER_RANGE);
+
+    // Big right shift becomes 0
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << 10000 << OP_BIN2BIGNUM << OP_RSHIFT, false);
+    testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << 10000 << OP_BIN2BIGNUM << OP_RSHIFT, false);
+
+
+    CScript() << (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141_BN).serialize(256 / 8)
+              << OP_SETBMD;
+}
+
 
 BOOST_AUTO_TEST_SUITE_END()

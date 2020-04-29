@@ -542,9 +542,6 @@ static inline bool IsOpcodeDisabled(opcodetype opcode, uint32_t flags)
     case OP_2MUL:
     case OP_2DIV:
     case OP_INVERT:
-    case OP_MUL:
-    case OP_LSHIFT:
-    case OP_RSHIFT:
         // disabled opcodes
         return true;
     default:
@@ -809,6 +806,89 @@ bool ScriptMachine::Step()
                 {
                     if (flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS)
                         return set_error(serror, SCRIPT_ERR_DISCOURAGE_UPGRADABLE_NOPS);
+                }
+                break;
+
+                case OP_MUL: // (x1 x2 -- out)
+                {
+                    if (stack.size() < 2)
+                    {
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    }
+
+                    StackItem &a = stackItemAt(-1);
+                    StackItem &b = stackItemAt(-2);
+                    if (a.isBigNum() || b.isBigNum())
+                    {
+                        BigNum ret;
+                        if (!BigNumScriptOp(
+                                ret, opcode, a.asBigNum(bigNumModulo), b.asBigNum(bigNumModulo), bigNumModulo, serror))
+                            return false;
+                        popstack(stack);
+                        popstack(stack);
+                        stack.push_back(StackItem(ret));
+                    }
+                    else
+                    {
+                        return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE);
+                    }
+                }
+                break;
+
+                case OP_LSHIFT:
+                {
+                    if (stack.size() < 2)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+
+                    StackItem &a = stackItemAt(-1); // Shift amount
+                    StackItem &b = stackItemAt(-2); // number
+                    if (b.isBigNum())
+                    {
+                        BigNum ret = b.num() << a.asUint64(fRequireMinimal);
+                        ret = ret.tdiv(bigNumModulo);
+                        popstack(stack);
+                        popstack(stack);
+                        stack.push_back(StackItem(ret));
+                    }
+                    else
+                    {
+                        return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE);
+                    }
+                }
+                break;
+                case OP_RSHIFT:
+                {
+                    if (stack.size() < 2)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+
+                    StackItem &a = stackItemAt(-1); // Shift amount
+                    StackItem &b = stackItemAt(-2); // number
+                    BigNum ret;
+                    if (b.isBigNum())
+                    {
+                        if (a.isBigNum())
+                        {
+                            if (a.num() < 0_BN)
+                                throw BadOpOnType("Negative shift");
+                            if (a.num() > MAX_BIGNUM_BITSHIFT_SIZE)
+                                ret = bnZero;
+                            else
+                                ret = b.num() >> a.asUint64(fRequireMinimal);
+                        }
+                        else
+                        {
+                            ret = b.num() >> a.asUint64(fRequireMinimal);
+                        }
+
+                        ret = ret.tdiv(bigNumModulo); // If the BMD changed, this may need to occur
+                        popstack(stack);
+                        popstack(stack);
+                        stack.push_back(StackItem(ret));
+                    }
+                    else
+                    {
+                        return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE);
+                    }
                 }
                 break;
 
@@ -1205,17 +1285,33 @@ bool ScriptMachine::Step()
                 case OP_EQUALVERIFY:
                     // case OP_NOTEQUAL: // use OP_NUMNOTEQUAL
                     {
+                        bool fEqual = false;
                         // (x1 x2 - bool)
                         if (stack.size() < 2)
                             return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
-                        valtype &vch1 = stacktop(-2);
-                        valtype &vch2 = stacktop(-1);
-                        bool fEqual = (vch1 == vch2);
-                        // OP_NOTEQUAL is disabled because it would be too easy to say
-                        // something like n != 1 and have some wiseguy pass in 1 with extra
-                        // zero bytes after it (numerically, 0x01 == 0x0001 == 0x000001)
-                        // if (opcode == OP_NOTEQUAL)
-                        //    fEqual = !fEqual;
+
+                        StackItem &a = stackItemAt(-1);
+                        StackItem &b = stackItemAt(-2);
+                        if (a.isBigNum() && b.isBigNum())
+                        {
+                            fEqual = (a.num() == b.num());
+                        }
+                        else if (a.isVch() && b.isVch())
+                        {
+                            valtype &vch1 = stacktop(-2);
+                            valtype &vch2 = stacktop(-1);
+                            fEqual = (vch1 == vch2);
+                            // OP_NOTEQUAL is disabled because it would be too easy to say
+                            // something like n != 1 and have some wiseguy pass in 1 with extra
+                            // zero bytes after it (numerically, 0x01 == 0x0001 == 0x000001)
+                            // if (opcode == OP_NOTEQUAL)
+                            //    fEqual = !fEqual;
+                        }
+                        else // different types are never equal
+                        {
+                            fEqual = false;
+                        }
+
                         popstack(stack);
                         popstack(stack);
                         stack.push_back(fEqual ? vchTrue : vchFalse);
@@ -1829,6 +1925,29 @@ bool ScriptMachine::Step()
                 }
                 break;
 
+                case OP_SETBMD:
+                {
+                    if (stack.size() < 1)
+                    {
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    }
+
+                    StackItem &top = stackItemAt(-1);
+                    BigNum bn;
+                    if (top.isBigNum())
+                        bn = top.num();
+                    else if (top.isVch())
+                        bn.deserialize(top.data());
+                    else
+                    {
+                        return set_error(serror, SCRIPT_ERR_BAD_OPERATION_ON_TYPE);
+                    }
+                    if (bn > bigNumUpperLimit)
+                        return set_error(serror, SCRIPT_ERR_INVALID_NUMBER_RANGE);
+                    bigNumModulo = bn;
+                    popstack(stack);
+                }
+                break;
                 case OP_BIN2BIGNUM:
                 {
                     if (stack.size() < 1)
@@ -1944,6 +2063,14 @@ bool ScriptMachine::Step()
     catch (scriptnum_error &e)
     {
         return set_error(serror, e.errNum);
+    }
+    catch (BadOpOnType &e)
+    {
+        return set_error(serror, SCRIPT_ERR_BAD_OPERATION_ON_TYPE);
+    }
+    catch (OutOfBounds &e)
+    {
+        return set_error(serror, SCRIPT_ERR_INVALID_NUMBER_RANGE);
     }
     catch (...)
     {

@@ -201,6 +201,7 @@ enum opcodetype
     OP_CHECKDATASIG = 0xba,
     OP_CHECKDATASIGVERIFY = 0xbb,
 
+    OP_SETBMD = 0xeb,
     OP_BIN2BIGNUM = 0xec,
     OP_EXEC = 0xed,
     OP_GROUP = 0xee,
