@@ -389,6 +389,7 @@ void testScript(const CScript &s, bool expectedStackTF) { testScript(s, true, ex
 void testScript(const CScript &s, ScriptError expectedError) { testScript(s, false, false, expectedError); }
 BOOST_AUTO_TEST_CASE(bignumscript_test)
 {
+    CScript s;
     // Should wrap due to mod
     testScript(CScript() << 0x1000 << OP_SETBMD << bns(0xfff) << OP_BIN2BIGNUM << OP_1 << OP_ADD, false);
     // Should not wrap
@@ -427,6 +428,41 @@ BOOST_AUTO_TEST_CASE(bignumscript_test)
     testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << 10000 << OP_BIN2BIGNUM << OP_RSHIFT, false);
     testScript(CScript() << bns(0xffeff) << OP_BIN2BIGNUM << 10000 << OP_BIN2BIGNUM << OP_RSHIFT, false);
 
+    // multiply only enabled for bignum
+    testScript(CScript() << 10 << 20 << OP_MUL, SCRIPT_ERR_DISABLED_OPCODE);
+    // Try 1 bignum arg
+    testScript(CScript() << 10 << OP_BIN2BIGNUM << 20 << OP_MUL << 1 << OP_NUM2BIN << 200 << OP_EQUAL, true);
+    testScript(CScript() << 10 << 20 << OP_BIN2BIGNUM << OP_MUL << 200 << OP_BIN2BIGNUM << OP_EQUAL, true);
+    // Try negative
+    testScript(CScript() << 10 << -20 << OP_BIN2BIGNUM << OP_MUL << -200 << OP_BIN2BIGNUM << OP_EQUAL, true);
+
+    s = CScript() << (0x100000000000000000000000000000000_BN).serialize(256 / 8) << OP_SETBMD
+                  << (0x123456789abcdef_BN).serialize(256 / 8) << OP_BIN2BIGNUM
+                  << (0xfedcba9876543210_BN).serialize(256 / 8) << OP_BIN2BIGNUM << OP_MUL
+                  << (1505644448203263502622459810266844400_BN).serialize(256 / 8) << OP_BIN2BIGNUM << OP_EQUAL;
+    testScript(s, true);
+
+    // Test mul with BMD modular operation
+    testScript(CScript() << (0x100000000000000000000000000000000_BN).serialize(256 / 8) << OP_SETBMD
+                         << (0x123456789abcdef_BN).serialize(256 / 8) << OP_BIN2BIGNUM
+                         << (0xfedcba9876543210_BN).serialize(256 / 8) << OP_BIN2BIGNUM
+                         << (0x123456789a_BN).serialize(256 / 8) << OP_SETBMD << OP_MUL << bns(46379439580)
+                         << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+
+    // This is the same as prior because MOD kind-of-distributes through *, (A*B)%C == ((A%C)*(B%C))%C
+    testScript(CScript() << (0x123456789a_BN).serialize(256 / 8) << OP_SETBMD
+                         << (0x123456789abcdef_BN).serialize(256 / 8) << OP_BIN2BIGNUM
+                         << (0xfedcba9876543210_BN).serialize(256 / 8) << OP_BIN2BIGNUM << OP_MUL << bns(46379439580)
+                         << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
+
+    // Try negative mul with BMD mod
+    testScript(CScript() << (0x123456789a_BN).serialize(256 / 8) << OP_SETBMD
+                         << (-0x123456789abcdef_BN).serialize(256 / 8) << OP_BIN2BIGNUM
+                         << (0xfedcba9876543210_BN).serialize(256 / 8) << OP_BIN2BIGNUM << OP_MUL << bns(-46379439580)
+                         << OP_BIN2BIGNUM << OP_EQUAL,
+        true);
 
     CScript() << (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141_BN).serialize(256 / 8)
               << OP_SETBMD;

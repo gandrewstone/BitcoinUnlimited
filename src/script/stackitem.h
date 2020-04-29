@@ -148,8 +148,15 @@ public:
         throw BadOpOnType("cannot represent this item as a BigNum");
     }
 
-    /** Converts this stackitem into a uint64 if it is a ScriptNum compatible buffer or vch, or if it is a BigNum */
+    /** Converts this stackitem into a uint64 if it is a ScriptNum compatible buffer or vch, or if it is a BigNum.
+        @throws BadOpOnType if the number is out of range.
+    */
     uint64_t asUint64(bool requireMinimal) const;
+
+    /** Converts this stackitem into an int64 if it is a ScriptNum compatible buffer or vch, or if it is a BigNum.
+        @throws BadOpOnType if the number is out of range.
+    */
+    int64_t asInt64(bool requireMinimal) const;
 
     // Returns 0xhexnum if this is a BigNum, or the straight hex if its a vch
     std::string hex()

@@ -5,6 +5,8 @@
 #include "script/stackitem.h"
 #include "script/script.h"
 
+#include <limits>
+
 
 VchStackType VchStack;
 
@@ -23,6 +25,21 @@ uint64_t StackItem::asUint64(bool requireMinimal) const
             throw BadOpOnType("Impossible conversion of negative BigNum to uint64");
         if (n >= 0x10000000000000000_BN)
             throw BadOpOnType("Impossible conversion of large BigNum to uint64");
+        return n.asUint64();
+    }
+    throw BadOpOnType("Impossible conversion of stack item to uint64");
+}
+
+int64_t StackItem::asInt64(bool requireMinimal) const
+{
+    if (isVch())
+    {
+        return CScriptNum(vch, requireMinimal).getint();
+    }
+    if (isBigNum())
+    {
+        if (n > BigNum(std::numeric_limits<int64_t>::max()))
+            throw BadOpOnType("Impossible conversion of large BigNum to int64");
         return n.asUint64();
     }
     throw BadOpOnType("Impossible conversion of stack item to uint64");

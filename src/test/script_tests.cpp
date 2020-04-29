@@ -106,6 +106,7 @@ static ScriptErrorDesc script_errors[] = {
     {SCRIPT_ERR_NUMBER_BAD_ENCODING, "NUMBER_BAD_ENCODING"},
     {SCRIPT_ERR_INVALID_BITFIELD_SIZE, "BITFIELD_SIZE"},
     {SCRIPT_ERR_INVALID_BIT_RANGE, "BIT_RANGE"},
+    {SCRIPT_ERR_BAD_OPERATION_ON_TYPE, "SCRIPT_ERR_BAD_OPERATION_ON_TYPE"}
 };
 // clang-format on
 
@@ -274,6 +275,11 @@ void DoTest(const CScript &scriptPubKey,
     BOOST_CHECK_MESSAGE(err == scriptError, std::string(FormatScriptError(err)) + " where " +
                                                 std::string(FormatScriptError((ScriptError_t)scriptError)) +
                                                 " expected: " + message);
+    if (err != scriptError)
+    {
+        result = VerifyScript(scriptSig, scriptPubKey, flags, MAX_OPS_PER_SCRIPT,
+            MutableTransactionSignatureChecker(&tx, 0, txCredit.vout[0].nValue, flags), &err);
+    }
 
     // Verify that removing flags from a passing test or adding flags to a
     // failing test does not change the result, except for some special flags.

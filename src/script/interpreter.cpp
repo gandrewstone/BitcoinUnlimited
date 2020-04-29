@@ -1977,7 +1977,10 @@ bool ScriptMachine::Step()
                         return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
                     }
 
-                    uint64_t size = stackItemAt(-1).asUint64(fRequireMinimal);
+                    int64_t size = stackItemAt(-1).asInt64(fRequireMinimal);
+
+                    if (size < 0)
+                        return set_error(serror, SCRIPT_ERR_PUSH_SIZE);
 
                     if (stackItemAt(-2).isBigNum()) // Implement OP_BIGNUM2BIN
                     {
