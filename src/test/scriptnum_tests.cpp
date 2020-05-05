@@ -369,8 +369,7 @@ BOOST_AUTO_TEST_CASE(bignum_test)
 std::vector<unsigned char> bns(long int i, size_t pad = 8) { return BigNum(i).serialize(pad); }
 void testScript(const CScript &s, bool expectedRet, bool expectedStackTF, ScriptError expectedError)
 {
-    BaseSignatureChecker sigChecker;
-    ScriptMachine sm(0, sigChecker, 0xffffffff, 0xffffffff);
+    ScriptMachine sm(0, ScriptImportedState(), 0xffffffff, 0xffffffff);
     bool ret = sm.Eval(s);
     BOOST_CHECK(ret == expectedRet);
     if (expectedRet)
@@ -463,9 +462,6 @@ BOOST_AUTO_TEST_CASE(bignumscript_test)
                          << (0xfedcba9876543210_BN).serialize(256 / 8) << OP_BIN2BIGNUM << OP_MUL << bns(-46379439580)
                          << OP_BIN2BIGNUM << OP_EQUAL,
         true);
-
-    CScript() << (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141_BN).serialize(256 / 8)
-              << OP_SETBMD;
 }
 
 

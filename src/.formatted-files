@@ -348,6 +348,7 @@ test/pmt_tests.cpp
 test/policyestimator_tests.cpp
 test/pow_tests.cpp
 test/prevector_tests.cpp
+test/pushtxstate_tests.cpp
 test/requestmanager_tests.cpp
 test/reverselock_tests.cpp
 test/rpc_tests.cpp
@@ -414,6 +415,8 @@ script/bitcoinconsensus.cpp
 script/bitcoinconsensus.h
 script/bitfield.cpp
 script/bitfield.h
+script/pushtxstate.cpp
+script/pushtxstate.h
 script/interpreter.cpp
 script/interpreter.h
 script/ismine.cpp

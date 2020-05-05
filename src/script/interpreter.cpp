@@ -555,11 +555,11 @@ bool EvalScript(Stack &stack,
     const CScript &script,
     unsigned int flags,
     unsigned int maxOps,
-    const BaseSignatureChecker &checker,
+    const ScriptImportedState &sis,
     ScriptError *serror,
     unsigned char *sighashtype)
 {
-    ScriptMachine sm(flags, checker, maxOps, 0xffffffff);
+    ScriptMachine sm(flags, sis, maxOps, 0xffffffff);
     sm.setStack(stack);
     bool result = sm.Eval(script);
     stack = sm.getStack();
@@ -755,7 +755,9 @@ bool ScriptMachine::Step()
                         return set_error(serror, SCRIPT_ERR_NEGATIVE_LOCKTIME);
 
                     // Actually compare the specified lock time with the transaction.
-                    if (!checker.CheckLockTime(nLockTime))
+                    if (!sis.checker)
+                        return set_error(serror, SCRIPT_ERR_DATA_REQUIRED);
+                    if (!sis.checker->CheckLockTime(nLockTime))
                         return set_error(serror, SCRIPT_ERR_UNSATISFIED_LOCKTIME);
 
                     break;
@@ -789,7 +791,9 @@ bool ScriptMachine::Step()
                         break;
 
                     // Compare the specified sequence number with the input.
-                    if (!checker.CheckSequence(nSequence))
+                    if (!sis.checker)
+                        return set_error(serror, SCRIPT_ERR_DATA_REQUIRED);
+                    if (!sis.checker->CheckSequence(nSequence))
                         return set_error(serror, SCRIPT_ERR_UNSATISFIED_LOCKTIME);
 
                     break;
@@ -892,6 +896,21 @@ bool ScriptMachine::Step()
                 }
                 break;
 
+                case OP_PUSH_TX_STATE:
+                {
+                    if (stack.size() < 1)
+                        return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                    StackItem &s = stackItemAt(-1);
+                    if (!s.isVch())
+                        return set_error(serror, SCRIPT_ERR_BAD_OPERATION_ON_TYPE);
+                    VchType specifier = s.asVch();
+                    popstack(stack);
+                    ScriptError err = EvalPushTxState(specifier, sis, stack);
+                    if (err != SCRIPT_ERR_OK)
+                        return set_error(serror, err);
+                }
+                break;
+
                 case OP_GROUP: // OP_GROUP just pops its args during script evaluation
                     if (stack.size() < 2)
                         return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
@@ -928,7 +947,7 @@ bool ScriptMachine::Step()
                     popstack(stack); // remove paramQty
 
                     ScriptMachine sm(
-                        flags, checker, maxOps - stats.nOpCount, maxConsensusSigOps - stats.consensusSigCheckCount);
+                        flags, sis, maxOps - stats.nOpCount, maxConsensusSigOps - stats.consensusSigCheckCount);
                     sm.execDepth = execDepth + 1;
                     auto &smStk = sm.modifyStack();
                     smStk.reserve(v);
@@ -1573,7 +1592,9 @@ bool ScriptMachine::Step()
                         // serror is set
                         return false;
                     }
-                    bool fSuccess = checker.CheckSig(vchSig, vchPubKey, scriptCode);
+                    if (!sis.checker)
+                        return set_error(serror, SCRIPT_ERR_DATA_REQUIRED);
+                    bool fSuccess = sis.checker->CheckSig(vchSig, vchPubKey, scriptCode);
 
                     if (!fSuccess && (flags & SCRIPT_VERIFY_NULLFAIL) && vchSig.size())
                         return set_error(serror, SCRIPT_ERR_SIG_NULLFAIL);
@@ -1699,7 +1720,9 @@ bool ScriptMachine::Step()
                             }
 
                             // Check signature
-                            if (!checker.CheckSig(vchSig, vchPubKey, scriptCode))
+                            if (!sis.checker)
+                                return set_error(serror, SCRIPT_ERR_DATA_REQUIRED);
+                            if (!sis.checker->CheckSig(vchSig, vchPubKey, scriptCode))
                             {
                                 // This can fail if the signature is empty, which also is a NULLFAIL error as the
                                 // bitfield should have been null in this situation.
@@ -1761,7 +1784,9 @@ bool ScriptMachine::Step()
                             }
 
                             // Check signature
-                            bool fOk = checker.CheckSig(vchSig, vchPubKey, scriptCode);
+                            if (!sis.checker)
+                                return set_error(serror, SCRIPT_ERR_DATA_REQUIRED);
+                            bool fOk = sis.checker->CheckSig(vchSig, vchPubKey, scriptCode);
 
                             if (fOk)
                             {
@@ -1831,7 +1856,9 @@ bool ScriptMachine::Step()
                         CSHA256().Write(vchMessage.data(), vchMessage.size()).Finalize(vchHash.data());
                         uint256 messagehash(vchHash);
                         CPubKey pubkey(vchPubKey);
-                        fSuccess = checker.VerifySignature(vchSig, pubkey, messagehash);
+                        if (!sis.checker)
+                            return set_error(serror, SCRIPT_ERR_DATA_REQUIRED);
+                        fSuccess = sis.checker->VerifySignature(vchSig, pubkey, messagehash);
                         stats.consensusSigCheckCount += 1; // 2020-05-15 sigchecks consensus rule
                     }
 
@@ -2004,7 +2031,7 @@ bool ScriptMachine::Step()
                     // Try to see if we can fit that number in the number of
                     // byte requested.
                     CScriptNum::MinimallyEncode(rawnum);
-                    if (rawnum.size() > size)
+                    if ((int64_t)rawnum.size() > size)
                     {
                         // We definitively cannot.
                         return set_error(serror, SCRIPT_ERR_IMPOSSIBLE_ENCODING);
@@ -2012,7 +2039,7 @@ bool ScriptMachine::Step()
 
                     // We already have an element of the right size, we
                     // don't need to do anything.
-                    if (rawnum.size() == size)
+                    if ((int64_t)rawnum.size() == size)
                     {
                         break;
                     }
@@ -2025,7 +2052,7 @@ bool ScriptMachine::Step()
                     }
 
                     rawnum.reserve(size);
-                    while (rawnum.size() < size - 1)
+                    while ((int)rawnum.size() < size - 1)
                     {
                         rawnum.push_back(0x00);
                     }
@@ -2221,7 +2248,7 @@ bool VerifyTraditionalScript(const CScript &scriptSig,
     const CScript &scriptPubKey,
     unsigned int flags,
     unsigned int maxOps,
-    const BaseSignatureChecker &checker,
+    const ScriptImportedState &sis,
     ScriptError *serror,
     ScriptMachineResourceTracker *tracker)
 {
@@ -2233,7 +2260,7 @@ bool VerifyTraditionalScript(const CScript &scriptSig,
     }
 
     Stack stackCopy;
-    ScriptMachine sm(flags, checker, maxOps, 0xffffffff);
+    ScriptMachine sm(flags, sis, maxOps, 0xffffffff);
     if (!sm.Eval(scriptSig))
     {
         if (serror)
@@ -2338,7 +2365,7 @@ bool VerifyScript(const CScript &scriptSig,
     const CScript &scriptPubKey,
     unsigned int flags,
     unsigned int maxOps,
-    const BaseSignatureChecker &checker,
+    const ScriptImportedState &sis,
     ScriptError *serror,
     ScriptMachineResourceTracker *tracker)
 {
@@ -2376,11 +2403,11 @@ bool VerifyScript(const CScript &scriptSig,
             return set_error(serror, SCRIPT_ERR_TEMPLATE);
         }
 
-        return VerifyTemplate(templat, constraint, satisfier, flags, maxOps, maxActualSigops, checker, serror, tracker);
+        return VerifyTemplate(templat, constraint, satisfier, flags, maxOps, maxActualSigops, sis, serror, tracker);
     }
     else if (terror == ScriptTemplateError::NOT_A_TEMPLATE)
     {
-        return VerifyTraditionalScript(scriptSig, scriptPubKey, flags, maxOps, checker, serror, tracker);
+        return VerifyTraditionalScript(scriptSig, scriptPubKey, flags, maxOps, sis, serror, tracker);
     }
 
     // all cases should have been handled

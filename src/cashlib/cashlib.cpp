@@ -349,10 +349,12 @@ of the ScriptMachine.
 class ScriptMachineData
 {
 public:
-    ScriptMachineData() : sm(nullptr), tx(nullptr), checker(nullptr), script(nullptr) {}
+    ScriptMachineData() : sm(nullptr), tx(nullptr), sis(nullptr), script(nullptr) {}
     ScriptMachine *sm;
-    std::shared_ptr<CTransaction> tx;
+
+    CTransactionRef tx;
     std::shared_ptr<BaseSignatureChecker> checker;
+    std::shared_ptr<ScriptImportedState> sis;
     std::shared_ptr<CScript> script;
 
     ~ScriptMachineData()
@@ -370,8 +372,9 @@ public:
 SLAPI void *CreateNoContextScriptMachine(unsigned int flags)
 {
     ScriptMachineData *smd = new ScriptMachineData();
-    smd->checker = std::make_shared<BaseSignatureChecker>();
-    smd->sm = new ScriptMachine(flags, *smd->checker, 0xffffffff, 0xffffffff);
+
+    smd->sis = std::make_shared<ScriptImportedState>(nullptr, smd->tx, 0, 0);
+    smd->sm = new ScriptMachine(flags, *smd->sis, 0xffffffff, 0xffffffff);
     return (void *)smd;
 }
 
@@ -392,12 +395,12 @@ SLAPI void *CreateScriptMachine(unsigned int flags,
     }
 
     ScriptMachineData *smd = new ScriptMachineData();
-    smd->tx = std::make_shared<CTransaction>();
+    std::shared_ptr<CTransaction> txref = std::make_shared<CTransaction>();
 
     CDataStream ssData((char *)txData, (char *)txData + txbuflen, SER_NETWORK, PROTOCOL_VERSION);
     try
     {
-        ssData >> *smd->tx;
+        ssData >> *txref;
     }
     catch (const std::exception &)
     {
@@ -405,11 +408,13 @@ SLAPI void *CreateScriptMachine(unsigned int flags,
         return 0;
     }
 
+    smd->tx = txref;
     // Its ok to get the bare tx pointer: the life of the CTransaction is the same as TransactionSignatureChecker
     smd->checker = std::make_shared<TransactionSignatureChecker>(smd->tx.get(), inputIdx, inputAmount, flags);
+    smd->sis = std::make_shared<ScriptImportedState>(&(*smd->checker), smd->tx, inputIdx, inputAmount);
     // max ops and max sigchecks are set to the maximum value with the intention that the caller will check these if
     // needed because many uses of the script machine are for debugging and experimental scripts.
-    smd->sm = new ScriptMachine(flags, *smd->checker, 0xffffffff, 0xffffffff);
+    smd->sm = new ScriptMachine(flags, *smd->sis, 0xffffffff, 0xffffffff);
     return (void *)smd;
 }
 
@@ -428,8 +433,9 @@ SLAPI void *SmClone(void *smId)
     ScriptMachineData *from = (ScriptMachineData *)smId;
     ScriptMachineData *to = new ScriptMachineData();
     to->script = from->script;
-    to->checker = from->checker;
+    to->sis = from->sis;
     to->tx = from->tx;
+    to->sis->tx = to->tx; // Get it pointing to the right object even though they are currently the same
     to->sm = new ScriptMachine(*from->sm);
     return (void *)to;
 }

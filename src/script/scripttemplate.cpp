@@ -28,7 +28,7 @@ bool VerifyTemplate(const CScript &templat,
     unsigned int flags,
     unsigned int maxOps,
     unsigned int maxActualSigops,
-    const BaseSignatureChecker &checker,
+    const ScriptImportedState &sis,
     ScriptError *serror,
     ScriptMachineResourceTracker *tracker)
 {
@@ -53,7 +53,7 @@ bool VerifyTemplate(const CScript &templat,
         return set_error(serror, SCRIPT_ERR_SIG_PUSHONLY);
     }
 
-    ScriptMachine ssm(flags, checker, maxOps, maxActualSigops);
+    ScriptMachine ssm(flags, sis, maxOps, maxActualSigops);
 
     // Step 1, evaluate the satisfier to produce a stack
     if (!ssm.Eval(satisfier))

@@ -36,6 +36,8 @@
 
 FastRandomContext insecure_rand_ctx;
 
+FalseScriptImportedState fsis;
+
 extern bool fPrintToConsole;
 extern void noui_connect();
 

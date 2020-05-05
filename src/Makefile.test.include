@@ -120,6 +120,7 @@ BITCOIN_TESTS =\
   test/policyestimator_tests.cpp \
   test/pow_tests.cpp \
   test/prevector_tests.cpp \
+  test/pushtxstate_tests.cpp \
   test/random_tests.cpp \
   test/requestmanager_tests.cpp \
   test/reverselock_tests.cpp \

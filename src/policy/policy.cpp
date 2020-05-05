@@ -162,7 +162,7 @@ bool AreInputsStandard(const CTransactionRef tx, const CCoinsViewCache &mapInput
             // and it matches the P2SH script template, so we know that it won't have any ops, only pushes
             // so pass MAX_OPS_PER_SCRIPT for the max number of ops to match prior behavior exactly
             if (!EvalScript(
-                    stack, tx->vin[i].scriptSig, SCRIPT_VERIFY_NONE, MAX_OPS_PER_SCRIPT, BaseSignatureChecker(), 0))
+                    stack, tx->vin[i].scriptSig, SCRIPT_VERIFY_NONE, MAX_OPS_PER_SCRIPT, ScriptImportedState(), 0))
                 return false;
             if (stack.empty())
                 return false;

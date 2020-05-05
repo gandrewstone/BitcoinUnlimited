@@ -155,8 +155,11 @@ bool ProduceSignature(const BaseSignatureCreator &creator, const CScript &fromPu
     // Additionally, while this constant is currently being raised it will eventually settle to a very high const
     // value.  There is no reason to break layering by using the tweak only to take that out later.
 
-    return VerifyScript(scriptSig, fromPubKey, STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_SIGHASH_FORKID,
-        MAX_OPS_PER_SCRIPT, creator.Checker());
+    // We don't have the capability of signing with tx context dependent instructions so ScriptImportedState can be
+    // degenrate.
+    ScriptImportedState sis(&creator.Checker(), CTransactionRef(nullptr), 0, 0);
+    return VerifyScript(
+        scriptSig, fromPubKey, STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_SIGHASH_FORKID, MAX_OPS_PER_SCRIPT, sis);
 }
 
 bool SignSignature(const CKeyStore &keystore,
@@ -321,9 +324,9 @@ CScript CombineSignatures(const CScript &scriptPubKey,
     Stack stack1;
     // scriptSig should have no ops in them, only data pushes.  Send MAX_OPS_PER_SCRIPT to mirror existing
     // behavior exactly.
-    EvalScript(stack1, scriptSig1, SCRIPT_VERIFY_STRICTENC, MAX_OPS_PER_SCRIPT, BaseSignatureChecker());
+    EvalScript(stack1, scriptSig1, SCRIPT_VERIFY_STRICTENC, MAX_OPS_PER_SCRIPT, ScriptImportedState());
     Stack stack2;
-    EvalScript(stack2, scriptSig2, SCRIPT_VERIFY_STRICTENC, MAX_OPS_PER_SCRIPT, BaseSignatureChecker());
+    EvalScript(stack2, scriptSig2, SCRIPT_VERIFY_STRICTENC, MAX_OPS_PER_SCRIPT, ScriptImportedState());
 
     return CombineSignatures(scriptPubKey, checker, txType, vSolutions, stack1, stack2);
 }

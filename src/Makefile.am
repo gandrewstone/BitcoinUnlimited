@@ -205,6 +205,7 @@ BITCOIN_CORE_H = \
   respend/respendrelayer.h \
   respend/respenddetector.h \
   script/bignum.h \
+  script/pushtxstate.h \
   script/sigcache.h \
   script/sign.h \
   script/standard.h \
@@ -405,6 +406,8 @@ libbitcoincash_a_SOURCES = \
   random.h \
   script/bitfield.cpp \
   script/bitfield.h \
+  script/pushtxstate.cpp \
+  script/pushtxstate.h \
   script/interpreter.cpp \
   script/interpreter.h \
   script/standard.cpp \
@@ -507,6 +510,8 @@ libbitcoin_consensus_a_SOURCES = \
   script/bitfield.h \
   script/bignum.cpp \
   script/bignum.h \
+  script/pushtxstate.cpp \
+  script/pushtxstate.h \
   script/interpreter.cpp \
   script/interpreter.h \
   script/stackitem.cpp \

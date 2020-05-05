@@ -654,11 +654,10 @@ BOOST_AUTO_TEST_CASE(grouptoken_basicfunctions)
 
         // Verify that the script passes standard checks, especially the data coding
         Stack stack;
-        BaseSignatureChecker sigchecker;
         ScriptError err = SCRIPT_ERR_OK;
         // bool r =
         EvalScript(stack, script, STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_VERIFY_MINIMALDATA, MAX_OPS_PER_SCRIPT,
-            sigchecker, &err);
+            ScriptImportedState(), &err);
         // BOOST_CHECK(r);  r will be false because the signature check will fail.  What's important here is that
         // minimaldata passes
         BOOST_CHECK(err != SCRIPT_ERR_MINIMALDATA);

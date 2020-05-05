@@ -136,6 +136,8 @@ enum
 
 };
 
+class BaseSignatureChecker;
+
 bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned int flags, ScriptError *serror);
 
 /**
@@ -187,11 +189,11 @@ public:
 class TransactionSignatureChecker : public BaseSignatureChecker
 {
 protected:
-    const CTransaction *txTo;
-    unsigned int nIn;
-    const CAmount amount;
-    mutable size_t nBytesHashed;
-    mutable size_t nSigops;
+    const CTransaction *txTo = nullptr;
+    unsigned int nIn = 0;
+    CAmount amount = 0;
+    mutable size_t nBytesHashed = 0;
+    mutable size_t nSigops = 0;
 
 public:
     TransactionSignatureChecker(const CTransaction *txToIn,
@@ -202,6 +204,20 @@ public:
     {
         nFlags = flags;
     }
+    TransactionSignatureChecker() {} // 2 phase initialization
+    void Init(const CTransaction *txToIn,
+        unsigned int nInIn,
+        const CAmount &amountIn,
+        unsigned int flags = SCRIPT_ENABLE_SIGHASH_FORKID)
+    {
+        txTo = txToIn;
+        nIn = nInIn;
+        amount = amountIn;
+        nFlags = flags;
+        nBytesHashed = 0;
+        nSigops = 0;
+    }
+
     bool CheckSig(const std::vector<unsigned char> &scriptSig,
         const std::vector<unsigned char> &vchPubKey,
         const CScript &scriptCode) const;
@@ -228,6 +244,68 @@ public:
 
 typedef StackItem StackDataType;
 typedef std::vector<StackItem> Stack;
+
+/** All external state that a script is allowed to access must be provided here.
+ */
+class ScriptImportedState
+{
+public:
+    const BaseSignatureChecker *checker = nullptr;
+    CTransactionRef tx = nullptr;
+    // CScript scriptCode;
+    unsigned int nIn = 0;
+    CAmount amount = 0;
+
+    ScriptImportedState(const BaseSignatureChecker *c,
+        CTransactionRef t,
+        unsigned int inputIdx,
+        unsigned int inputAmount)
+        : checker(c), tx(t), nIn(inputIdx), amount(inputAmount)
+    {
+    }
+    ScriptImportedState() {}
+};
+
+class ScriptImportedStateSig : public ScriptImportedState
+{
+public:
+    TransactionSignatureChecker tsc;
+
+    ScriptImportedStateSig(const CMutableTransaction *txToIn,
+        unsigned int inIndex,
+        const CAmount &amountIn,
+        unsigned int flags = SCRIPT_ENABLE_SIGHASH_FORKID)
+    {
+        tx = MakeTransactionRef(*txToIn);
+        nIn = inIndex;
+        amount = amountIn;
+        tsc.Init(&(*tx), nIn, amount, flags);
+        checker = &tsc;
+    }
+    ScriptImportedStateSig(const CTransaction *txToIn,
+        unsigned int inIndex,
+        const CAmount &amountIn,
+        unsigned int flags = SCRIPT_ENABLE_SIGHASH_FORKID)
+    {
+        tx = MakeTransactionRef(*txToIn);
+        nIn = inIndex;
+        amount = amountIn;
+        tsc.Init(&(*tx), nIn, amount, flags);
+        checker = &tsc;
+    }
+    ScriptImportedStateSig(const CTransactionRef txToIn,
+        unsigned int inIndex,
+        const CAmount &amountIn,
+        unsigned int flags = SCRIPT_ENABLE_SIGHASH_FORKID)
+    {
+        tx = txToIn;
+        nIn = inIndex;
+        amount = amountIn;
+        tsc.Init(&(*tx), nIn, amount, flags);
+        checker = &tsc;
+    }
+};
+
 
 /**
  * Class that keeps track of number of signature operations
@@ -274,7 +352,6 @@ protected:
     Stack altstack;
     BigNum bigNumModulo = 0x10000000000000000_BN; // 64 bit magnitude
     const CScript *script;
-    const BaseSignatureChecker &checker;
     ScriptError error;
 
     unsigned char sighashtype;
@@ -295,8 +372,11 @@ protected:
     std::vector<bool> vfExec;
 
 public:
+    /** All the external information that this virtual machine is allowed to access */
+    const ScriptImportedState &sis;
+
     ScriptMachine(const ScriptMachine &from)
-        : checker(from.checker), pc(from.pc), pbegin(from.pbegin), pend(from.pend), pbegincodehash(from.pbegincodehash)
+        : pc(from.pc), pbegin(from.pbegin), pend(from.pend), pbegincodehash(from.pbegincodehash), sis(from.sis)
     {
         flags = from.flags;
         stack = from.stack;
@@ -309,12 +389,9 @@ public:
         stats = from.stats;
     }
 
-    ScriptMachine(unsigned int _flags,
-        const BaseSignatureChecker &_checker,
-        unsigned int _maxOps,
-        unsigned int _maxSigOps)
-        : flags(_flags), script(nullptr), checker(_checker), pc(CScript().end()), pbegin(CScript().end()),
-          pend(CScript().end()), pbegincodehash(CScript().end()), maxOps(_maxOps), maxConsensusSigOps(_maxSigOps)
+    ScriptMachine(unsigned int _flags, const ScriptImportedState &_sis, unsigned int _maxOps, unsigned int _maxSigOps)
+        : flags(_flags), script(nullptr), pc(CScript().end()), pbegin(CScript().end()), pend(CScript().end()),
+          pbegincodehash(CScript().end()), maxOps(_maxOps), maxConsensusSigOps(_maxSigOps), sis(_sis)
     {
     }
 
@@ -411,14 +488,14 @@ bool EvalScript(Stack &stack,
     const CScript &script,
     unsigned int flags,
     unsigned int maxOps,
-    const BaseSignatureChecker &checker,
+    const ScriptImportedState &sis,
     ScriptError *error = nullptr,
     unsigned char *sighashtype = nullptr);
 bool VerifyScript(const CScript &scriptSig,
     const CScript &scriptPubKey,
     unsigned int flags,
     unsigned int maxOps,
-    const BaseSignatureChecker &checker,
+    const ScriptImportedState &sis,
     ScriptError *error = nullptr,
     ScriptMachineResourceTracker *tracker = nullptr);
 
@@ -428,7 +505,7 @@ bool VerifyTemplate(const CScript &templat,
     unsigned int flags,
     unsigned int maxOps,
     unsigned int maxActualSigops,
-    const BaseSignatureChecker &checker,
+    const ScriptImportedState &sis,
     ScriptError *serror,
     ScriptMachineResourceTracker *tracker);
 
@@ -437,5 +514,8 @@ bool VerifyTemplate(const CScript &templat,
 extern const std::string strMessageMagic;
 
 bool CheckPubKeyEncoding(const std::vector<uint8_t> &vchSig, unsigned int flags, ScriptError *serror);
+
+// Applies the specifier to the data in sis to generate items that are pushed onto the passed stack.
+ScriptError EvalPushTxState(const VchType &specifier, const ScriptImportedState &sis, Stack &stack);
 
 #endif // BITCOIN_SCRIPT_INTERPRETER_H

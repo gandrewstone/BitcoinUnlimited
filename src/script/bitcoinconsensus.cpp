@@ -1,3 +1,4 @@
+
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2015 The Bitcoin Core developers
 // Copyright (c) 2015-2018 The Bitcoin Unlimited developers
@@ -93,7 +94,7 @@ static int verify_script(const unsigned char *scriptPubKey,
         set_error(err, bitcoinconsensus_ERR_OK);
 
         return VerifyScript(tx.vin[nIn].scriptSig, CScript(scriptPubKey, scriptPubKey + scriptPubKeyLen), flags, maxOps,
-            TransactionSignatureChecker(&tx, nIn, amount, flags), nullptr);
+            ScriptImportedStateSig(&tx, nIn, amount, flags), nullptr);
     }
     catch (const std::exception &)
     {

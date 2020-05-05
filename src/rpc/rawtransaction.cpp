@@ -1333,6 +1333,7 @@ UniValue signrawtransaction(const UniValue &params, bool fHelp)
     // Use CTransaction for the constant parts of the
     // transaction to avoid rehashing.
     const CTransaction txConst(mergedTx);
+    CTransactionRef txref = MakeTransactionRef(txConst);
     // Sign what we can:
     for (unsigned int i = 0; i < mergedTx.vin.size(); i++)
     {
@@ -1360,9 +1361,10 @@ UniValue signrawtransaction(const UniValue &params, bool fHelp)
                     txv.vin[i].scriptSig);
             }
             ScriptError serror = SCRIPT_ERR_OK;
+            MutableTransactionSignatureChecker tsc(&mergedTx, i, amount, SCRIPT_ENABLE_SIGHASH_FORKID);
+            ScriptImportedState sis(&tsc, txref, i, amount);
             if (!VerifyScript(txin.scriptSig, prevPubKey, STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_SIGHASH_FORKID,
-                    maxScriptOps.Value(),
-                    MutableTransactionSignatureChecker(&mergedTx, i, amount, SCRIPT_ENABLE_SIGHASH_FORKID), &serror))
+                    maxScriptOps.Value(), sis, &serror))
             {
                 TxInErrorToJSON(txin, vErrors, ScriptErrorString(serror));
             }
@@ -1376,8 +1378,10 @@ UniValue signrawtransaction(const UniValue &params, bool fHelp)
                     txin.scriptSig, txv.vin[i].scriptSig);
             }
             ScriptError serror = SCRIPT_ERR_OK;
-            if (!VerifyScript(txin.scriptSig, prevPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, maxScriptOps.Value(),
-                    MutableTransactionSignatureChecker(&mergedTx, i, amount, 0), &serror))
+            MutableTransactionSignatureChecker tsc(&mergedTx, i, amount, 0);
+            ScriptImportedState sis(&tsc, txref, i, amount);
+            if (!VerifyScript(
+                    txin.scriptSig, prevPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, maxScriptOps.Value(), sis, &serror))
             {
                 TxInErrorToJSON(txin, vErrors, ScriptErrorString(serror));
             }

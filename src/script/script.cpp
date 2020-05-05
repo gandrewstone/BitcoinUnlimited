@@ -266,6 +266,8 @@ const char *GetOpName(opcodetype opcode)
     case OP_REVERSEBYTES:
         return "OP_REVERSEBYTES";
 
+    case OP_PUSH_TX_STATE:
+        return "OP_PUSH_TX_STATE";
     case OP_BIN2BIGNUM:
         return "OP_BIN2BIGNUM";
     case OP_SETBMD:

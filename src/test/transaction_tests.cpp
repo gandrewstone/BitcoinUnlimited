@@ -100,7 +100,8 @@ BOOST_AUTO_TEST_CASE(tx_valid)
             stream >> tx;
 
             CValidationState state;
-            BOOST_CHECK_MESSAGE(CheckTransaction(MakeTransactionRef(CTransaction(tx)), state), strTest);
+            CTransactionRef txref = MakeTransactionRef(tx);
+            BOOST_CHECK_MESSAGE(CheckTransaction(txref, state), strTest);
             BOOST_CHECK(state.IsValid());
 
             for (unsigned int i = 0; i < tx.vin.size(); i++)
@@ -118,9 +119,10 @@ BOOST_AUTO_TEST_CASE(tx_valid)
                 }
 
                 unsigned int verify_flags = ParseScriptFlags(test[2].get_str());
-                BOOST_CHECK_MESSAGE(
-                    VerifyScript(tx.vin[i].scriptSig, mapprevOutScriptPubKeys[tx.vin[i].prevout], verify_flags,
-                        MAX_OPS_PER_SCRIPT, TransactionSignatureChecker(&tx, i, amount, verify_flags), &err),
+                TransactionSignatureChecker tsc(&tx, i, amount, verify_flags);
+                ScriptImportedState sis(&tsc, txref, i, amount);
+                BOOST_CHECK_MESSAGE(VerifyScript(tx.vin[i].scriptSig, mapprevOutScriptPubKeys[tx.vin[i].prevout],
+                                        verify_flags, MAX_OPS_PER_SCRIPT, sis, &err),
                     strTest);
                 BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
             }
@@ -190,8 +192,10 @@ BOOST_AUTO_TEST_CASE(tx_invalid)
             CTransaction tx;
             stream >> tx;
 
+            CTransactionRef txref = MakeTransactionRef(tx);
+
             CValidationState state;
-            fValid = CheckTransaction(MakeTransactionRef(CTransaction(tx)), state) && state.IsValid();
+            fValid = CheckTransaction(txref, state) && state.IsValid();
 
             for (unsigned int i = 0; i < tx.vin.size() && fValid; i++)
             {
@@ -208,8 +212,10 @@ BOOST_AUTO_TEST_CASE(tx_invalid)
                 }
 
                 unsigned int verify_flags = ParseScriptFlags(test[2].get_str());
+                TransactionSignatureChecker tsc(&tx, i, amount, verify_flags);
+                ScriptImportedState sis(&tsc, txref, i, amount);
                 fValid = VerifyScript(tx.vin[i].scriptSig, mapprevOutScriptPubKeys[tx.vin[i].prevout], verify_flags,
-                    MAX_OPS_PER_SCRIPT, TransactionSignatureChecker(&tx, i, amount, verify_flags), &err);
+                    MAX_OPS_PER_SCRIPT, sis, &err);
             }
             BOOST_CHECK_MESSAGE(!fValid, strTest);
             BOOST_CHECK_MESSAGE(err != SCRIPT_ERR_OK, ScriptErrorString(err));
