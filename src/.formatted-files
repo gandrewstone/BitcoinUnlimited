@@ -116,6 +116,7 @@ merkleblock.cpp
 merkleblock.h
 miner.cpp
 miner.h
+nextchain.cpp
 netaddress.cpp
 netaddress.h
 netbase.cpp

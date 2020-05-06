@@ -2919,7 +2919,6 @@ extern UniValue dumpwallet(const UniValue &params, bool fHelp);
 extern UniValue importwallet(const UniValue &params, bool fHelp);
 extern UniValue importprunedfunds(const UniValue &params, bool fHelp);
 extern UniValue removeprunedfunds(const UniValue &params, bool fHelp);
-extern UniValue token(const UniValue &params, bool fHelp);
 
 /* clang-format off */
 static const CRPCCommand commands[] = {
@@ -2974,7 +2973,6 @@ static const CRPCCommand commands[] = {
     {"wallet",                "walletpassphrasechange",   &walletpassphrasechange,   true},
     {"wallet",                "walletpassphrase",         &walletpassphrase,         true},
     {"wallet",                "removeprunedfunds",        &removeprunedfunds,        true},
-    {"wallet",                "token",                    &token,                    true}
 };
 
 void RegisterWalletRPCCommands(CRPCTable &table)

@@ -310,6 +310,7 @@ libbitcoin_server_a_SOURCES = \
   miner.cpp \
   net.cpp \
   net_processing.cpp \
+  nextchain.cpp \
   nodestate.cpp \
   noui.cpp \
   parallel.cpp \
@@ -396,6 +397,7 @@ libbitcoincash_a_SOURCES = \
   hashwrapper.h \
   key.cpp \
   key.h \
+  nextchain.cpp \
   primitives/block.cpp \
   primitives/block.h \
   primitives/transaction.cpp \
@@ -677,6 +679,7 @@ bitcoin_tx_LDADD += $(BOOST_LIBS) $(CRYPTO_LIBS)
 
 # bitcoin-miner binary #
 bitcoin_miner_SOURCES = bitcoin-miner.cpp \
+  pow.cpp \
   arith_uint256.cpp \
   arith_uint256.h \
   uint256.cpp \
@@ -694,11 +697,14 @@ endif
 bitcoin_miner_LDADD = \
   $(LIBBITCOIN_CLI) \
   $(LIBUNIVALUE) \
+  $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_UTIL) \
+  $(LIBBITCOIN_CONSENSUS) \
   $(LIBBITCOIN_CRYPTO) \
   $(LIBBITCOIN_CRYPTO_SSE41) \
   $(LIBBITCOIN_CRYPTO_AVX2) \
-  $(LIBRSM)
+  $(LIBRSM) \
+  $(LIBSECP256K1)
 
 bitcoin_miner_LDADD += $(BOOST_LIBS) $(SSL_LIBS) $(CRYPTO_LIBS) $(EVENT_LIBS)
 #

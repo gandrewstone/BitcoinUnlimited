@@ -513,6 +513,92 @@ public:
 };
 static CRegTestParams regTestParams;
 
+class CNextChainParams : public CChainParams
+{
+public:
+    CNextChainParams()
+    {
+        strNetworkID = "nxc";
+
+        std::vector<unsigned char> rawScript(ParseHex("76a914a123a6fdc265e1bbcf1123458891bd7af1a1b5d988ac"));
+        CScript outputScript(rawScript.begin(), rawScript.end());
+
+        genesis = CreateGenesisBlock(CScript() << 0 << CScriptNum(7227),
+            "World cash needs a broad foundation for unanticipated uses; people, not needs, disappear",
+            CScript() << OP_1, 1588789694, 1158035, 0x1e0fffff, 536870912, 50 * COIN);
+        consensus.hashGenesisBlock = genesis.GetHash();
+        consensus.nSubsidyHalvingInterval = 210000;
+        consensus.BIP16Height = 0;
+        consensus.BIP34Height = 0;
+        consensus.BIP34Hash = consensus.hashGenesisBlock;
+        consensus.BIP65Height = 0;
+        consensus.BIP66Height = 0;
+        consensus.BIP68Height = 0;
+        consensus.powLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
+        consensus.nPowTargetSpacing = 1 * 60;
+        consensus.fPowAllowMinDifficultyBlocks = true;
+        consensus.fPowNoRetargeting = false;
+        consensus.powAlgorithm = 1;
+
+        assert(
+            consensus.hashGenesisBlock == uint256S("9623194f62f31f7a7065467c38e83cf060a2b866190204f3dd16f6587d8d9374"));
+
+        /**
+         * The message start string is designed to be unlikely to occur in normal data.
+         * The characters are rarely used upper ASCII, not valid as UTF-8, and produce
+         * a large 32-bit integer with any alignment.
+         */
+        pchMessageStart[0] = 0x72;
+        pchMessageStart[1] = 0x27;
+        pchMessageStart[2] = 0xc4;
+        pchMessageStart[3] = 0xe9;
+        nDefaultPort = 7228;
+        nPruneAfterHeight = 100000;
+
+        // Aug, 1 2017 hard fork
+        consensus.uahfHeight = 0;
+        // Nov, 13 hard fork
+        consensus.daaHeight = consensus.DifficultyAdjustmentInterval();
+        // May, 15 2018 hard fork
+        consensus.may2018Height = 0;
+        // Nov, 15 2018 hard fork
+        consensus.nov2018Height = 0;
+        // May, 15 2019 hard fork
+        consensus.may2019Height = 0;
+        // May 15, 2020 12:00:00 UTC protocol upgrade¶
+        consensus.nov2019Height = 0;
+        // Nov, 15 2019 12:00:00 UTC fork activation time
+        consensus.may2020ActivationTime = 1;
+
+        vFixedSeeds.clear();
+        vSeeds.clear();
+        vSeeds.push_back(CDNSSeedData("nextchain.cash", "seed.nextchain.cash", true));
+
+        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1, 25); // P2PKH addresses begin with B
+        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1, 68); // P2SH  addresses begin with U
+        base58Prefixes[SECRET_KEY] = std::vector<unsigned char>(1, 35); // WIF   format begins with 2B or 2C
+        base58Prefixes[EXT_PUBLIC_KEY] =
+            boost::assign::list_of(0x42)(0x69)(0x67)(0x20).convert_to_container<std::vector<unsigned char> >();
+        base58Prefixes[EXT_SECRET_KEY] =
+            boost::assign::list_of(0x42)(0x6c)(0x6b)(0x73).convert_to_container<std::vector<unsigned char> >();
+        cashaddrPrefix = "nxc";
+
+        vFixedSeeds = std::vector<SeedSpec6>();
+
+        fMiningRequiresPeers = true;
+        fDefaultConsistencyChecks = false;
+        fRequireStandard = true;
+        fMineBlocksOnDemand = false;
+        fTestnetToBeDeprecatedFieldRPC = false;
+
+        checkpointData = CCheckpointData();
+    }
+};
+
+CNextChainParams nextChainParams;
+
+
 CChainParams *pCurrentParams = 0;
 
 const CChainParams &Params()
@@ -531,6 +617,8 @@ CChainParams &Params(const std::string &chain)
         return regTestParams;
     else if (chain == CBaseChainParams::UNL)
         return unlParams;
+    else if (chain == CBaseChainParams::NEXTCHAIN)
+        return nextChainParams;
     else
         throw std::runtime_error(strprintf("%s: Unknown chain %s.", __func__, chain));
 }

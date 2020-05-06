@@ -65,6 +65,7 @@ typedef enum {
     AddrBlockchainBCHtestnet = 2,
     AddrBlockchainBCHregtest = 3,
     AddrBlockchainNol = 4,
+    AddrBlockchainNextChain = 5,
 } ChainSelector;
 
 CChainParams *GetChainParams(ChainSelector chainSelector)
@@ -77,6 +78,8 @@ CChainParams *GetChainParams(ChainSelector chainSelector)
         return &Params(CBaseChainParams::REGTEST);
     else if (chainSelector == AddrBlockchainNol)
         return &Params(CBaseChainParams::UNL);
+    else if (chainSelector == AddrBlockchainNextChain)
+        return &Params(CBaseChainParams::NEXTCHAIN);
     else
         return nullptr;
 }

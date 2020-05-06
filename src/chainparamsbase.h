@@ -21,6 +21,7 @@ public:
     static const std::string UNL;
     static const std::string TESTNET;
     static const std::string REGTEST;
+    static const std::string NEXTCHAIN;
 
     const std::string &DataDir() const { return strDataDir; }
     int RPCPort() const { return nRPCPort; }
@@ -28,6 +29,9 @@ protected:
     CBaseChainParams() {}
     int nRPCPort;
     std::string strDataDir;
+
+public:
+    CBaseChainParams(const char *dataDir, int rpcPort) : nRPCPort(rpcPort), strDataDir(dataDir) {}
 };
 
 /**

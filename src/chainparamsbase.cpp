@@ -15,6 +15,7 @@ const std::string CBaseChainParams::MAIN = "main";
 const std::string CBaseChainParams::UNL = "nol";
 const std::string CBaseChainParams::TESTNET = "test";
 const std::string CBaseChainParams::REGTEST = "regtest";
+const std::string CBaseChainParams::NEXTCHAIN = "nxc";
 
 /**
  * Main network
@@ -68,6 +69,8 @@ public:
 };
 static CBaseRegTestParams regTestParams;
 
+static CBaseChainParams nextChainParams("nxc", 7227);
+
 static CBaseChainParams *pCurrentBaseParams = 0;
 
 const CBaseChainParams &BaseParams()
@@ -86,6 +89,8 @@ CBaseChainParams &BaseParams(const std::string &chain)
         return testNetParams;
     else if (chain == CBaseChainParams::REGTEST)
         return regTestParams;
+    else if (chain == CBaseChainParams::NEXTCHAIN)
+        return nextChainParams;
     else
         throw std::runtime_error(strprintf("%s: Unknown chain %s.", __func__, chain));
 }
@@ -96,6 +101,7 @@ std::string ChainNameFromCommandLine()
     bool fRegTest = GetBoolArg("-regtest", false);
     bool fTestNet = GetBoolArg("-testnet", false);
     bool fUnl = GetBoolArg("-chain_nol", false);
+    bool fNextChain = GetBoolArg("-nxc", false);
 
     if (fTestNet && fRegTest)
         throw std::runtime_error("Invalid combination of -regtest and -testnet.");
@@ -105,6 +111,8 @@ std::string ChainNameFromCommandLine()
         return CBaseChainParams::TESTNET;
     if (fUnl)
         return CBaseChainParams::UNL;
+    if (fNextChain)
+        return CBaseChainParams::NEXTCHAIN;
     return CBaseChainParams::MAIN;
 }
 
