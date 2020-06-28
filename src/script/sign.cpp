@@ -39,6 +39,10 @@ bool TransactionSignatureCreator::CreateSig(std::vector<unsigned char> &vchSig,
     if (!key.SignECDSA(hash, vchSig))
         return false;
     vchSig.push_back((unsigned char)nHashType);
+
+    CPubKey pub = key.GetPubKey();
+    LOG(SIG, "Sign ECDSA: sig: %x, pubkey: %x sighash: %x\n", HexStr(vchSig), HexStr(pub.begin(), pub.end()),
+        hash.GetHex());
     return true;
 }
 

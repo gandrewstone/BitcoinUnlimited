@@ -203,13 +203,16 @@ enum
 
     ELECTRUM = 0x100000000,
     MPOOLSYNC = 0x200000000,
-    PRIORITYQ = 0x400000000
+    PRIORITYQ = 0x400000000,
+
+    SIG = 0x800000000
 };
 
 namespace Logging
 {
 extern uint64_t categoriesEnabled;
 
+/* clang-format off */
 /*
 To add a new log category:
 1) Create a unique 1 bit category mask. (Easiest is to 2* the last enum entry.)
@@ -228,11 +231,9 @@ To add a new log category:
             {SELECTCOINS, "selectcoins"}, {ESTIMATEFEE, "estimatefee"}, {QT, "qt"}, {IBD, "ibd"},               \
             {GRAPHENE, "graphene"}, {RESPEND, "respend"}, {WB, "weakblocks"}, {CMPCT, "cmpctblock"},            \
             {ELECTRUM, "electrum"}, {MPOOLSYNC, "mempoolsync"}, {PRIORITYQ, "priorityq"},                       \
-        {                                                                                                       \
-            ZMQ, "zmq"                                                                                          \
-        }                                                                                                       \
+            { ZMQ, "zmq" } , { SIG, "sig" } \
     }
-
+/* clang-format on */
 /**
  * Check if a category should be logged
  * @param[in] category

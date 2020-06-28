@@ -17,6 +17,7 @@
 #include "script/script_error.h"
 #include "uint256.h"
 #include "util.h"
+#include "utilstrencodings.h"
 const std::string strMessageMagic = "Bitcoin Signed Message:\n";
 
 extern uint256 SignatureHashLegacy(const CScript &scriptCode,
@@ -1862,6 +1863,8 @@ bool TransactionSignatureChecker::CheckSig(const vector<unsigned char> &vchSigIn
     nBytesHashed += nHashed;
     ++nSigops;
 
+    LOG(SIG, "Verify signature: sig: %s pubkey: %s sighash: %s\n", HexStr(vchSig), HexStr(pubkey.begin(), pubkey.end()),
+        sighash.GetHex());
     if (!VerifySignature(vchSig, pubkey, sighash))
         return false;
 

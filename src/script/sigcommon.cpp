@@ -221,16 +221,19 @@ static uint256 SignatureHashBitcoinCash(const CScript &scriptCode,
     uint256 hashSequence;
     uint256 hashOutputs;
 
+    LOG(SIG, "Calculating sighash for tx: %s input: %d\n", txTo.GetHash().GetHex(), nIn);
     if (!(nHashType & SIGHASH_ANYONECANPAY))
     {
         hashPrevouts = GetPrevoutHash(txTo);
     }
+    LOG(SIG, "hashPrevouts: %s\n", hashPrevouts.ToString());
 
     if (!(nHashType & SIGHASH_ANYONECANPAY) && (nHashType & 0x1f) != SIGHASH_SINGLE &&
         (nHashType & 0x1f) != SIGHASH_NONE)
     {
         hashSequence = GetSequenceHash(txTo);
     }
+    LOG(SIG, "hashSequence: %s\n", hashSequence.ToString());
 
     if ((nHashType & 0x1f) != SIGHASH_SINGLE && (nHashType & 0x1f) != SIGHASH_NONE)
     {
@@ -242,6 +245,7 @@ static uint256 SignatureHashBitcoinCash(const CScript &scriptCode,
         ss << txTo.vout[nIn];
         hashOutputs = ss.GetHash();
     }
+    LOG(SIG, "hashOutputs: %s\n", hashOutputs.ToString());
 
     CHashWriter ss(SER_GETHASH, 0);
     // Version
@@ -253,18 +257,24 @@ static uint256 SignatureHashBitcoinCash(const CScript &scriptCode,
     // amount). The prevout may already be contained in hashPrevout, and the
     // nSequence may already be contain in hashSequence.
     ss << txTo.vin[nIn].prevout;
+    LOG(SIG, "prevout: %s (%s)\n", txTo.vin[nIn].prevout.ToString());
     ss << static_cast<const CScriptBase &>(scriptCode);
+    LOG(SIG, "scriptCode: %s\n", HexStr(scriptCode));
     ss << amount;
+    LOG(SIG, "amount: %ld\n", amount);
     ss << txTo.vin[nIn].nSequence;
+    LOG(SIG, "sequence: %d\n", txTo.vin[nIn].nSequence);
     // Outputs (none/one/all, depending on flags)
     ss << hashOutputs;
     // Locktime
     ss << txTo.nLockTime;
+    LOG(SIG, "locktime: %d\n", txTo.nLockTime);
     // Sighash type
     ss << nHashType;
+    LOG(SIG, "hashtype: %x\n", nHashType);
 
     uint256 sighash = ss.GetHash();
-    // printf("SigHash: %s\n", sighash.GetHex().c_str());
+    LOG(SIG, "SigHash: %s\n", sighash.GetHex().c_str());
     return sighash;
 }
 

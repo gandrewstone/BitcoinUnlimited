@@ -39,10 +39,15 @@ ECCVerifyHandle *verifyContext = nullptr;
 CChainParams *cashlibParams = nullptr;
 
 // stop the logging
-int LogPrintStr(const std::string &str) { return str.size(); }
+int LogPrintStr(const std::string &str)
+{
+    printf("CASHLIB log: %s", str.c_str());
+    return str.size();
+}
+
 namespace Logging
 {
-uint64_t categoriesEnabled = 0; // 64 bit log id mask.
+uint64_t categoriesEnabled = SIG; // 64 bit log id mask.
 };
 
 // I don't want to pull in the args stuff so always pick the defaults
@@ -237,6 +242,9 @@ SLAPI int SignTx(unsigned char *txData,
         return 0;
     }
     sig.push_back((unsigned char)nHashType);
+    CPubKey pub = key.GetPubKey();
+    LOG(SIG, "Sign ECDSA: sig: %x, pubkey: %x sighash: %x\n", HexStr(sig), HexStr(pub.begin(), pub.end()),
+        sighash.GetHex());
     unsigned int sigSize = sig.size();
     if (sigSize > resultLen)
         return 0;
@@ -296,6 +304,10 @@ SLAPI int SignTxSchnorr(unsigned char *txData,
     {
         return 0;
     }
+
+    CPubKey pub = key.GetPubKey();
+    LOG(SIG, "Sign Schnorr: sig: %x, pubkey: %x sighash: %x\n", HexStr(sig), HexStr(pub.begin(), pub.end()),
+        sighash.GetHex());
     sig.push_back((unsigned char)nHashType);
     unsigned int sigSize = sig.size();
     if (sigSize > resultLen)
@@ -332,6 +344,10 @@ SLAPI int SignHashSchnorr(const unsigned char *hash,
     {
         return 0;
     }
+
+    CPubKey pub = key.GetPubKey();
+    LOG(SIG, "Sign Schnorr: sig: %x, pubkey: %x hash: %x\n", HexStr(sig), HexStr(pub.begin(), pub.end()),
+        sighash.GetHex());
     unsigned int sigSize = sig.size();
     if (sigSize > resultLen)
         return 0;
