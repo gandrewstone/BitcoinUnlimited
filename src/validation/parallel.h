@@ -161,7 +161,7 @@ private:
         uint256 hashPrevBlock;
         uint32_t nChainWork; // chain work for this block.
         uint32_t nMostWorkOurFork; // most work for the chain we are on.
-        uint32_t nSequenceId;
+        uint64_t nSequenceId;
         int64_t nStartTime;
         uint64_t nBlockSize;
         bool fQuit;
