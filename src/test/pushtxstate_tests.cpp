@@ -1,9 +1,9 @@
 // Copyright (c) 2020 G. Andrew Stone
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-#include "script/pushtxstate.h"
 #include "core_io.h"
 #include "script/interpreter.h"
+#include "script/pushtxstate.h"
 #include "script/script.h"
 #include "scriptnum10.h"
 #include "test/test_bitcoin.h"
@@ -33,8 +33,8 @@ void testScript(const CScript &s,
     }
     else
     {
-        BOOST_CHECK_MESSAGE(sm.getError() == expectedError, "got: " << ScriptErrorString(sm.getError()) << " ("
-                                                                    << sm.getError() << ")");
+        BOOST_CHECK_MESSAGE(sm.getError() == expectedError,
+            "got: " << ScriptErrorString(sm.getError()) << " (" << sm.getError() << ")");
     }
 }
 

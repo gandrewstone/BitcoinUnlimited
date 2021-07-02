@@ -1068,10 +1068,10 @@ BOOST_AUTO_TEST_CASE(grouptoken_basicfunctions)
             gp2pkh(grp1, u1.addr,
                 toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::SUBGROUP | GroupAuthorityFlags::MINT)),
             1, coins);
-        COutPoint mintChildAuth1sg =
-            AddUtxo(gp2pkh(grp1, u1.addr, toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::BATON |
-                                                   GroupAuthorityFlags::SUBGROUP | GroupAuthorityFlags::MINT)),
-                1, coins);
+        COutPoint mintChildAuth1sg = AddUtxo(gp2pkh(grp1, u1.addr,
+                                                 toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::BATON |
+                                                          GroupAuthorityFlags::SUBGROUP | GroupAuthorityFlags::MINT)),
+            1, coins);
         COutPoint mintChildAuth1 = AddUtxo(
             gp2pkh(grp1, u1.addr,
                 toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT | GroupAuthorityFlags::BATON)),
@@ -1081,8 +1081,9 @@ BOOST_AUTO_TEST_CASE(grouptoken_basicfunctions)
                 toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::RESCRIPT | GroupAuthorityFlags::BATON)),
             1, coins);
         COutPoint rescriptChildAuth1sg =
-            AddUtxo(gp2pkh(grp1, u1.addr, toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::SUBGROUP |
-                                                   GroupAuthorityFlags::RESCRIPT | GroupAuthorityFlags::BATON)),
+            AddUtxo(gp2pkh(grp1, u1.addr,
+                        toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::SUBGROUP |
+                                 GroupAuthorityFlags::RESCRIPT | GroupAuthorityFlags::BATON)),
                 1, coins);
         COutPoint mintctrl2 = AddUtxo(
             gp2pkh(grp2, u1.addr, toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT)), 1, coins);
@@ -1261,50 +1262,56 @@ BOOST_AUTO_TEST_CASE(grouptoken_basicfunctions)
 
             // 2 input auths combine into 1 output utxo with both auths
             t = tx2x1(rescriptChildAuth1, mintChildAuth1,
-                gp2pkh(grp1, u1.addr, toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT |
-                                               GroupAuthorityFlags::RESCRIPT | GroupAuthorityFlags::BATON)),
+                gp2pkh(grp1, u1.addr,
+                    toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT |
+                             GroupAuthorityFlags::RESCRIPT | GroupAuthorityFlags::BATON)),
                 1);
             ok = CheckGroupTokens(t, state, coins);
             BOOST_CHECK(ok);
 
             // Same but rescript is not subgroupable
             t = tx2x1(rescriptChildAuth1, mintChildAuth1sg,
-                gp2pkh(grp1, u1.addr, toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT |
-                                               GroupAuthorityFlags::RESCRIPT | GroupAuthorityFlags::BATON)),
+                gp2pkh(grp1, u1.addr,
+                    toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT |
+                             GroupAuthorityFlags::RESCRIPT | GroupAuthorityFlags::BATON)),
                 1);
             ok = CheckGroupTokens(t, state, coins);
             BOOST_CHECK(ok);
             t = tx2x1(rescriptChildAuth1, mintChildAuth1sg,
-                gp2pkh(subgrp1a, u1.addr, toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT |
-                                                   GroupAuthorityFlags::RESCRIPT | GroupAuthorityFlags::BATON)),
+                gp2pkh(subgrp1a, u1.addr,
+                    toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT |
+                             GroupAuthorityFlags::RESCRIPT | GroupAuthorityFlags::BATON)),
                 1);
             ok = CheckGroupTokens(t, state, coins);
             BOOST_CHECK(!ok);
             t = tx2x1(rescriptChildAuth1sg, mintChildAuth1sg,
-                gp2pkh(subgrp1b, u1.addr, toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT |
-                                                   GroupAuthorityFlags::RESCRIPT | GroupAuthorityFlags::BATON)),
+                gp2pkh(subgrp1b, u1.addr,
+                    toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT |
+                             GroupAuthorityFlags::RESCRIPT | GroupAuthorityFlags::BATON)),
                 1);
             ok = CheckGroupTokens(t, state, coins);
             BOOST_CHECK(ok);
 
             // 1 input has child auth, one does not, but output tries to claim both functions
             t = tx2x1(meltctrl1, mintChildAuth1,
-                gp2pkh(grp1, u1.addr, toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT |
-                                               GroupAuthorityFlags::MELT | GroupAuthorityFlags::BATON)),
+                gp2pkh(grp1, u1.addr,
+                    toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT | GroupAuthorityFlags::MELT |
+                             GroupAuthorityFlags::BATON)),
                 1);
             ok = CheckGroupTokens(t, state, coins);
             BOOST_CHECK(!ok);
             t = tx2x1(meltctrl1, mintChildAuth1,
-                gp2pkh(grp1, u1.addr, toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT |
-                                               GroupAuthorityFlags::MELT)),
+                gp2pkh(grp1, u1.addr,
+                    toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT | GroupAuthorityFlags::MELT)),
                 1);
             ok = CheckGroupTokens(t, state, coins);
             BOOST_CHECK(!ok);
 
             // 2 input auths combine, but wrong output auth bits
             t = tx2x1(rescriptChildAuth1, mintChildAuth1,
-                gp2pkh(grp1, u1.addr, toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT |
-                                               GroupAuthorityFlags::MELT | GroupAuthorityFlags::BATON)),
+                gp2pkh(grp1, u1.addr,
+                    toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT | GroupAuthorityFlags::MELT |
+                             GroupAuthorityFlags::BATON)),
                 1);
             ok = CheckGroupTokens(t, state, coins);
             BOOST_CHECK(!ok);
@@ -1317,8 +1324,8 @@ BOOST_AUTO_TEST_CASE(grouptoken_basicfunctions)
 
             // mint and create child, with auth
             t = tx1x2(mintChildAuth1, gp2pkh(grp1, u1.addr, 100000), 1,
-                gp2pkh(grp1, u1.addr, toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT |
-                                               GroupAuthorityFlags::BATON)),
+                gp2pkh(grp1, u1.addr,
+                    toAmount(GroupAuthorityFlags::AUTHORITY | GroupAuthorityFlags::MINT | GroupAuthorityFlags::BATON)),
                 1);
             ok = CheckGroupTokens(t, state, coins);
             BOOST_CHECK(ok);
@@ -1651,11 +1658,10 @@ BOOST_FIXTURE_TEST_CASE(grouptoken_blockchain, TestChain100Setup)
     BOOST_CHECK(!ret);
 
     // now try the same but to the correct group, wrong group qty
-    txns[0] = tx({grpInp},
-        {
-            OutputData(gp2pkh(gid, a2.addr, grpInpTokAmt - 1), grpInpAmt - 100),
-            OutputData(gp2pkh(gid, a1.addr, 2), 10),
-        });
+    txns[0] = tx({grpInp}, {
+                               OutputData(gp2pkh(gid, a2.addr, grpInpTokAmt - 1), grpInpAmt - 100),
+                               OutputData(gp2pkh(gid, a1.addr, 2), 10),
+                           });
     ret = tryMempool(txns[0], state);
     BOOST_CHECK(!ret);
     ret = tryBlock(txns, p2pkh(a2.addr), badblk, state);
@@ -1670,11 +1676,10 @@ BOOST_FIXTURE_TEST_CASE(grouptoken_blockchain, TestChain100Setup)
 
 
     // now correct group spend in various ways
-    txns[0] = tx({grpInp},
-        {
-            OutputData(gp2pkh(gid, a2.addr, grpInpTokAmt / 2), grpInpAmt - 100),
-            OutputData(gp2pkh(gid, a1.addr, grpInpTokAmt / 2), 10),
-        });
+    txns[0] = tx({grpInp}, {
+                               OutputData(gp2pkh(gid, a2.addr, grpInpTokAmt / 2), grpInpAmt - 100),
+                               OutputData(gp2pkh(gid, a1.addr, grpInpTokAmt / 2), 10),
+                           });
     ret = tryMempool(txns[0], state);
     BOOST_CHECK(ret);
 

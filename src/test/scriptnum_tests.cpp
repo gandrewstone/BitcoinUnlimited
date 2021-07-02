@@ -3,9 +3,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "script/script.h"
 #include "script/bignum.h"
 #include "script/interpreter.h"
+#include "script/script.h"
 #include "scriptnum10.h"
 #include "test/test_bitcoin.h"
 
@@ -379,8 +379,8 @@ void testScript(const CScript &s, bool expectedRet, bool expectedStackTF, Script
     }
     else
     {
-        BOOST_CHECK_MESSAGE(sm.getError() == expectedError, "got: " << ScriptErrorString(sm.getError()) << " ("
-                                                                    << sm.getError() << ")");
+        BOOST_CHECK_MESSAGE(sm.getError() == expectedError,
+            "got: " << ScriptErrorString(sm.getError()) << " (" << sm.getError() << ")");
     }
 }
 

@@ -144,7 +144,7 @@ public:
 is therefore 1 byte longer (for the sign). */
     size_t magSize() const { return ((mpz_sizeinbase(n, 2) + 7) / 8); }
     /** Return a byte vector of this BigNum in little-endian sign-magnitude format.
-    */
+     */
     std::vector<unsigned char> serialize(size_t padTo) const
     {
         std::vector<unsigned char> ret;

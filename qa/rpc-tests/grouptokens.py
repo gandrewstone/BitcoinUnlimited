@@ -19,6 +19,12 @@ if sys.version_info[0] < 3:
 logging.basicConfig(format='%(asctime)s.%(levelname)s: %(message)s', level=logging.DEBUG, stream=sys.stdout)
 
 
+def returnException(lambdaFn):
+    try:
+        return lambdaFn()
+    except Exception as e:
+        return e
+
 class GroupTokensTest (BitcoinTestFramework):
 
     def setup_chain(self, bitcoinConfDict=None, wallets=None):
@@ -84,7 +90,8 @@ class GroupTokensTest (BitcoinTestFramework):
         tx = self.nodes[0].token("mint",sg1a, addr2, 100)
 
         self.sync_blocks()
-        assert_equal(self.nodes[2].token("balance", sg1a), 100)
+        # after blocks sync, wallet still needs to apply the block change to itself
+        waitFor(30, lambda: self.nodes[2].token("balance", sg1a) == 100)
         assert_equal(self.nodes[2].token("balance", grp1), 0)
 
         try: # node 2 doesn't have melt auth on the group or subgroup
@@ -95,7 +102,7 @@ class GroupTokensTest (BitcoinTestFramework):
 
         tx = self.nodes[0].token("authority","create", sg1a, addr2, "MELT", "NOCHILD")
         self.sync_blocks()
-        tx = self.nodes[2].token("melt",sg1a, 50)
+        waitFor(30, lambda: not isinstance(returnException(lambda: self.nodes[2].token("melt",sg1a, 50)), Exception)  )
 
         try: # gave a nonrenewable authority
             tx = self.nodes[2].token("melt",sg1a, 50)

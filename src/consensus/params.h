@@ -8,7 +8,6 @@
 #define BITCOIN_CONSENSUS_PARAMS_H
 
 #include "amount.h"
-#include "amount.h"
 #include "clientversion.h"
 #include "uint256.h"
 

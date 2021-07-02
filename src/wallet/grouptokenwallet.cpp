@@ -161,48 +161,52 @@ public:
 void GetAllGroupBalances(const CWallet *wallet, std::unordered_map<CGroupTokenID, CAmount> &balances)
 {
     std::vector<COutput> coins;
-    wallet->FilterCoins(coins, [&balances](const CWalletTx *tx, const CTxOut *out) {
-        CGroupTokenInfo tg(out->scriptPubKey);
-        if ((tg.associatedGroup != NoGroup) && !tg.isAuthority()) // must be sitting in any group address
+    wallet->FilterCoins(coins,
+        [&balances](const CWalletTx *tx, const CTxOut *out)
         {
-            if (tg.quantity > std::numeric_limits<CAmount>::max() - balances[tg.associatedGroup])
-                balances[tg.associatedGroup] = std::numeric_limits<CAmount>::max();
-            else
-                balances[tg.associatedGroup] += tg.quantity;
-        }
-        return false; // I don't want to actually filter anything
-    });
+            CGroupTokenInfo tg(out->scriptPubKey);
+            if ((tg.associatedGroup != NoGroup) && !tg.isAuthority()) // must be sitting in any group address
+            {
+                if (tg.quantity > std::numeric_limits<CAmount>::max() - balances[tg.associatedGroup])
+                    balances[tg.associatedGroup] = std::numeric_limits<CAmount>::max();
+                else
+                    balances[tg.associatedGroup] += tg.quantity;
+            }
+            return false; // I don't want to actually filter anything
+        });
 }
 
 CAmount GetGroupBalance(const CGroupTokenID &grpID, const CTxDestination &dest, const CWallet *wallet)
 {
     std::vector<COutput> coins;
     CAmount balance = 0;
-    wallet->FilterCoins(coins, [grpID, dest, &balance](const CWalletTx *tx, const CTxOut *out) {
-        CGroupTokenInfo tg(out->scriptPubKey);
-        if ((grpID == tg.associatedGroup) && !tg.isAuthority()) // must be sitting in group address
+    wallet->FilterCoins(coins,
+        [grpID, dest, &balance](const CWalletTx *tx, const CTxOut *out)
         {
-            bool useit = dest == CTxDestination(CNoDestination());
-            if (!useit)
+            CGroupTokenInfo tg(out->scriptPubKey);
+            if ((grpID == tg.associatedGroup) && !tg.isAuthority()) // must be sitting in group address
             {
-                CTxDestination address;
-                txnouttype whichType;
-                if (ExtractDestinationAndType(out->scriptPubKey, address, whichType))
+                bool useit = dest == CTxDestination(CNoDestination());
+                if (!useit)
                 {
-                    if (address == dest)
-                        useit = true;
+                    CTxDestination address;
+                    txnouttype whichType;
+                    if (ExtractDestinationAndType(out->scriptPubKey, address, whichType))
+                    {
+                        if (address == dest)
+                            useit = true;
+                    }
+                }
+                if (useit)
+                {
+                    if (tg.quantity > std::numeric_limits<CAmount>::max() - balance)
+                        balance = std::numeric_limits<CAmount>::max();
+                    else
+                        balance += tg.quantity;
                 }
             }
-            if (useit)
-            {
-                if (tg.quantity > std::numeric_limits<CAmount>::max() - balance)
-                    balance = std::numeric_limits<CAmount>::max();
-                else
-                    balance += tg.quantity;
-            }
-        }
-        return false;
-    });
+            return false;
+        });
     return balance;
 }
 
@@ -438,10 +442,12 @@ void ConstructTx(CWalletTx &wtxNew,
         {
             // find a fee input
             std::vector<COutput> bchcoins;
-            wallet->FilterCoins(bchcoins, [](const CWalletTx *_tx, const CTxOut *out) {
-                CGroupTokenInfo tg(out->scriptPubKey);
-                return NoGroup == tg.associatedGroup;
-            });
+            wallet->FilterCoins(bchcoins,
+                [](const CWalletTx *_tx, const CTxOut *out)
+                {
+                    CGroupTokenInfo tg(out->scriptPubKey);
+                    return NoGroup == tg.associatedGroup;
+                });
 
             COutput feeCoin(nullptr, 0, 0, false);
             if (!NearestGreaterCoin(bchcoins, fee, feeCoin))
@@ -506,14 +512,16 @@ void GroupMelt(CWalletTx &wtxNew, const CGroupTokenID &grpID, CAmount totalNeede
     // Find melt authority
     std::vector<COutput> coins;
 
-    int nOptions = wallet->FilterCoins(coins, [grpID](const CWalletTx *tx, const CTxOut *out) {
-        CGroupTokenInfo tg(out->scriptPubKey);
-        if ((tg.associatedGroup == grpID) && tg.allowsMelt())
+    int nOptions = wallet->FilterCoins(coins,
+        [grpID](const CWalletTx *tx, const CTxOut *out)
         {
-            return true;
-        }
-        return false;
-    });
+            CGroupTokenInfo tg(out->scriptPubKey);
+            if ((tg.associatedGroup == grpID) && tg.allowsMelt())
+            {
+                return true;
+            }
+            return false;
+        });
 
     // if its a subgroup look for a parent authority that will work
     // As an idiot-proofing step, we only allow parent authorities that can be renewed, but that is a
@@ -521,15 +529,17 @@ void GroupMelt(CWalletTx &wtxNew, const CGroupTokenID &grpID, CAmount totalNeede
     if ((nOptions == 0) && (grpID.isSubgroup()))
     {
         // if its a subgroup look for a parent authority that will work
-        nOptions = wallet->FilterCoins(coins, [grpID](const CWalletTx *tx, const CTxOut *out) {
-            CGroupTokenInfo tg(out->scriptPubKey);
-            if (tg.isAuthority() && tg.allowsRenew() && tg.allowsSubgroup() && tg.allowsMelt() &&
-                (tg.associatedGroup == grpID.parentGroup()))
+        nOptions = wallet->FilterCoins(coins,
+            [grpID](const CWalletTx *tx, const CTxOut *out)
             {
-                return true;
-            }
-            return false;
-        });
+                CGroupTokenInfo tg(out->scriptPubKey);
+                if (tg.isAuthority() && tg.allowsRenew() && tg.allowsSubgroup() && tg.allowsMelt() &&
+                    (tg.associatedGroup == grpID.parentGroup()))
+                {
+                    return true;
+                }
+                return false;
+            });
     }
 
     if (nOptions == 0)
@@ -548,11 +558,13 @@ void GroupMelt(CWalletTx &wtxNew, const CGroupTokenID &grpID, CAmount totalNeede
 
     // Find meltable coins
     coins.clear();
-    wallet->FilterCoins(coins, [grpID](const CWalletTx *tx, const CTxOut *out) {
-        CGroupTokenInfo tg(out->scriptPubKey);
-        // must be a grouped output sitting in group address
-        return ((grpID == tg.associatedGroup) && !tg.isAuthority());
-    });
+    wallet->FilterCoins(coins,
+        [grpID](const CWalletTx *tx, const CTxOut *out)
+        {
+            CGroupTokenInfo tg(out->scriptPubKey);
+            // must be a grouped output sitting in group address
+            return ((grpID == tg.associatedGroup) && !tg.isAuthority());
+        });
 
     // Get a near but greater quantity
     std::vector<COutput> chosenCoins;
@@ -586,15 +598,17 @@ void GroupSend(CWalletTx &wtxNew,
     std::vector<COutput> coins;
     CAmount totalAvailable = 0;
     CAmount totalBchNeeded = 0;
-    wallet->FilterCoins(coins, [grpID, &totalAvailable](const CWalletTx *tx, const CTxOut *out) {
-        CGroupTokenInfo tg(out->scriptPubKey);
-        if ((grpID == tg.associatedGroup) && !tg.isAuthority())
+    wallet->FilterCoins(coins,
+        [grpID, &totalAvailable](const CWalletTx *tx, const CTxOut *out)
         {
-            totalAvailable += tg.quantity;
-            return true;
-        }
-        return false;
-    });
+            CGroupTokenInfo tg(out->scriptPubKey);
+            if ((grpID == tg.associatedGroup) && !tg.isAuthority())
+            {
+                totalAvailable += tg.quantity;
+                return true;
+            }
+            return false;
+        });
 
     if (totalAvailable < totalNeeded)
     {
@@ -876,31 +890,35 @@ extern UniValue token(const UniValue &params, bool fHelp)
 
             // Now find a compatible authority
             std::vector<COutput> coins;
-            int nOptions = wallet->FilterCoins(coins, [auth, grpID](const CWalletTx *tx, const CTxOut *out) {
-                CGroupTokenInfo tg(out->scriptPubKey);
-                if ((tg.associatedGroup == grpID) && tg.isAuthority() && tg.allowsRenew())
+            int nOptions = wallet->FilterCoins(coins,
+                [auth, grpID](const CWalletTx *tx, const CTxOut *out)
                 {
-                    // does this authority have at least the needed bits set?
-                    if ((tg.controllingGroupFlags & auth) == auth)
-                        return true;
-                }
-                return false;
-            });
-
-            // if its a subgroup look for a parent authority that will work
-            if ((nOptions == 0) && (grpID.isSubgroup()))
-            {
-                // if its a subgroup look for a parent authority that will work
-                nOptions = wallet->FilterCoins(coins, [auth, grpID](const CWalletTx *tx, const CTxOut *out) {
                     CGroupTokenInfo tg(out->scriptPubKey);
-                    if (tg.isAuthority() && tg.allowsRenew() && tg.allowsSubgroup() &&
-                        (tg.associatedGroup == grpID.parentGroup()))
+                    if ((tg.associatedGroup == grpID) && tg.isAuthority() && tg.allowsRenew())
                     {
+                        // does this authority have at least the needed bits set?
                         if ((tg.controllingGroupFlags & auth) == auth)
                             return true;
                     }
                     return false;
                 });
+
+            // if its a subgroup look for a parent authority that will work
+            if ((nOptions == 0) && (grpID.isSubgroup()))
+            {
+                // if its a subgroup look for a parent authority that will work
+                nOptions = wallet->FilterCoins(coins,
+                    [auth, grpID](const CWalletTx *tx, const CTxOut *out)
+                    {
+                        CGroupTokenInfo tg(out->scriptPubKey);
+                        if (tg.isAuthority() && tg.allowsRenew() && tg.allowsSubgroup() &&
+                            (tg.associatedGroup == grpID.parentGroup()))
+                        {
+                            if ((tg.controllingGroupFlags & auth) == auth)
+                                return true;
+                        }
+                        return false;
+                    });
             }
 
             if (nOptions == 0) // TODO: look for multiple authorities that can be combined to form the required bits
@@ -946,17 +964,19 @@ extern UniValue token(const UniValue &params, bool fHelp)
         {
             std::vector<COutput> coins;
             CAmount lowest = MAX_MONEY;
-            wallet->FilterCoins(coins, [&lowest](const CWalletTx *tx, const CTxOut *out) {
-                CGroupTokenInfo tg(out->scriptPubKey);
-                // although its possible to spend a grouped input to produce
-                // a single mint group, I won't allow it to make the tx construction easier.
-                if ((tg.associatedGroup == NoGroup) && (out->nValue < lowest))
+            wallet->FilterCoins(coins,
+                [&lowest](const CWalletTx *tx, const CTxOut *out)
                 {
-                    lowest = out->nValue;
-                    return true;
-                }
-                return false;
-            });
+                    CGroupTokenInfo tg(out->scriptPubKey);
+                    // although its possible to spend a grouped input to produce
+                    // a single mint group, I won't allow it to make the tx construction easier.
+                    if ((tg.associatedGroup == NoGroup) && (out->nValue < lowest))
+                    {
+                        lowest = out->nValue;
+                        return true;
+                    }
+                    return false;
+                });
 
             if (0 == coins.size())
             {
@@ -1049,14 +1069,16 @@ extern UniValue token(const UniValue &params, bool fHelp)
 
         // Now find a mint authority
         std::vector<COutput> coins;
-        int nOptions = wallet->FilterCoins(coins, [grpID](const CWalletTx *tx, const CTxOut *out) {
-            CGroupTokenInfo tg(out->scriptPubKey);
-            if ((tg.associatedGroup == grpID) && tg.allowsMint())
+        int nOptions = wallet->FilterCoins(coins,
+            [grpID](const CWalletTx *tx, const CTxOut *out)
             {
-                return true;
-            }
-            return false;
-        });
+                CGroupTokenInfo tg(out->scriptPubKey);
+                if ((tg.associatedGroup == grpID) && tg.allowsMint())
+                {
+                    return true;
+                }
+                return false;
+            });
 
         // if its a subgroup look for a parent authority that will work
         // As an idiot-proofing step, we only allow parent authorities that can be renewed, but that is a
@@ -1064,15 +1086,17 @@ extern UniValue token(const UniValue &params, bool fHelp)
         if ((nOptions == 0) && (grpID.isSubgroup()))
         {
             // if its a subgroup look for a parent authority that will work
-            nOptions = wallet->FilterCoins(coins, [grpID](const CWalletTx *tx, const CTxOut *out) {
-                CGroupTokenInfo tg(out->scriptPubKey);
-                if (tg.isAuthority() && tg.allowsRenew() && tg.allowsSubgroup() && tg.allowsMint() &&
-                    (tg.associatedGroup == grpID.parentGroup()))
+            nOptions = wallet->FilterCoins(coins,
+                [grpID](const CWalletTx *tx, const CTxOut *out)
                 {
-                    return true;
-                }
-                return false;
-            });
+                    CGroupTokenInfo tg(out->scriptPubKey);
+                    if (tg.isAuthority() && tg.allowsRenew() && tg.allowsSubgroup() && tg.allowsMint() &&
+                        (tg.associatedGroup == grpID.parentGroup()))
+                    {
+                        return true;
+                    }
+                    return false;
+                });
         }
 
         if (nOptions == 0)
@@ -1322,12 +1346,13 @@ UniValue groupedlisttransactions(const UniValue &params, bool fHelp)
             "                                                associated with an address, transaction id and block "
             "details\n"
             "    \"amount\": x.xxx,          (numeric) The amount in " +
-            CURRENCY_UNIT + ". This is negative for the 'send' category, and for the\n"
-                            "                                         'move' category for moves outbound. It is "
-                            "positive for the 'receive' category,\n"
-                            "                                         and for the 'move' category for inbound funds.\n"
-                            "    \"vout\": n,                (numeric) the vout value\n"
-                            "    \"fee\": x.xxx,             (numeric) The amount of the fee in " +
+            CURRENCY_UNIT +
+            ". This is negative for the 'send' category, and for the\n"
+            "                                         'move' category for moves outbound. It is "
+            "positive for the 'receive' category,\n"
+            "                                         and for the 'move' category for inbound funds.\n"
+            "    \"vout\": n,                (numeric) the vout value\n"
+            "    \"fee\": x.xxx,             (numeric) The amount of the fee in " +
             CURRENCY_UNIT +
             ". This is negative and only available for the \n"
             "                                         'send' category of transactions.\n"
@@ -1473,11 +1498,12 @@ UniValue groupedlistsinceblock(const UniValue &params, bool fHelp)
             "    \"category\":\"send|receive\",     (string) The transaction category. 'send' has negative amounts, "
             "'receive' has positive amounts.\n"
             "    \"amount\": x.xxx,          (numeric) The amount in " +
-            CURRENCY_UNIT + ". This is negative for the 'send' category, and for the 'move' category for moves \n"
-                            "                                          outbound. It is positive for the 'receive' "
-                            "category, and for the 'move' category for inbound funds.\n"
-                            "    \"vout\" : n,               (numeric) the vout value\n"
-                            "    \"fee\": x.xxx,             (numeric) The amount of the fee in " +
+            CURRENCY_UNIT +
+            ". This is negative for the 'send' category, and for the 'move' category for moves \n"
+            "                                          outbound. It is positive for the 'receive' "
+            "category, and for the 'move' category for inbound funds.\n"
+            "    \"vout\" : n,               (numeric) the vout value\n"
+            "    \"fee\": x.xxx,             (numeric) The amount of the fee in " +
             CURRENCY_UNIT +
             ". This is negative and only available for the 'send' category of transactions.\n"
             "    \"confirmations\": n,       (numeric) The number of confirmations for the transaction. Available for "

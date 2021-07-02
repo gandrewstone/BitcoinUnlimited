@@ -1,6 +1,6 @@
-#include "script.h"
 #include "consensus/grouptokens.h"
 #include "interpreter.h"
+#include "script.h"
 #include "streams.h"
 #include <vector>
 
