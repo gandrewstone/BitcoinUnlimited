@@ -340,6 +340,7 @@ build-arm-depends-64:
     stage: build_depends
     extends: .cache-arm-64
     script:
+        - apt-get install -y lzip
         - cd depends
         - make HOST=aarch64-linux-gnu NO_QT=1 -j `nproc` NO_RUST=1
     artifacts:
@@ -375,6 +376,7 @@ build-arm-depends-32:
     stage: build_depends
     extends: .cache-arm-32
     script:
+        - apt-get install -y lzip
         - cd depends
         - make HOST=arm-linux-gnueabihf NO_QT=1 -j `nproc` NO_RUST=1
     artifacts:
