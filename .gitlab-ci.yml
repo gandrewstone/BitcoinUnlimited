@@ -412,6 +412,7 @@ build-win-64-depends:
     stage: build_depends
     extends: .cache-win-64
     script:
+        - apt-get install -y lzip
         - cd depends
         - make HOST=x86_64-w64-mingw32 NO_QT=1 -j `nproc` NO_RUST=1
     artifacts:
@@ -447,6 +448,7 @@ build-win-32-depends:
     stage: build_depends
     extends: .cache-win-32
     script:
+        - apt-get install -y lzip
         - cd depends
         - make HOST=i686-w64-mingw32 NO_QT=1 -j `nproc` NO_RUST=1
     artifacts:
@@ -482,6 +484,7 @@ build-osx-depends:
     stage: build_depends
     extends: .cache-osx
     script:
+        - apt-get install -y lzip
         - mkdir -p depends/sdk-sources; mkdir depends/SDKs
         - curl --location --fail https://www.bitcoinunlimited.info/sdks/MacOSX10.11.sdk.tar.gz -o ./depends/sdk-sources/MacOSX10.11.sdk.tar.gz
         - tar -C depends/SDKs -xf depends/sdk-sources/MacOSX10.11.sdk.tar.gz
@@ -527,6 +530,7 @@ build-debian-32-depends:
     extends: .cache-debian-32
     needs: []
     script:
+        - apt-get install -y lzip
         - cd depends
         - make HOST=i686-pc-linux-gnu -j `nproc` NO_RUST=1 NO_QT=1
     artifacts:
