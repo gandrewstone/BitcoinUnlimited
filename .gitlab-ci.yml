@@ -56,6 +56,7 @@ check-formatting:
     extends: .cache-linting
     needs: []
     script:
+        - apt-get install -y libgmp-dev
         - apt-get install -y wget gpg-agent
         - wget https://apt.llvm.org/llvm.sh
         - chmod +x llvm.sh
@@ -77,6 +78,7 @@ build-debian-nodeps:
     extends: .cache-debian-nodeps
     needs: []
     script:
+        - apt-get install -y libgmp-dev
         - ./autogen.sh
         - mkdir build; cd build
         - ../configure --cache-file=config.cache --with-incompatible-bdb --with-gui=no --enable-glibc-back-compat --enable-reduce-exports
@@ -96,6 +98,7 @@ build-debian-nodeps-qt:
     extends: .cache-debian-nodeps
     needs: []
     script:
+        - apt-get install -y libgmp-dev
         - ./autogen.sh
         - mkdir build; cd build
         - ../configure --cache-file=config.cache --with-incompatible-bdb --with-gui=qt5 --enable-glibc-back-compat --enable-reduce-exports --disable-bench --disable-tests
@@ -146,6 +149,7 @@ build-debian:
     extends: .cache-debian
     needs: [build-debian-deps]
     script:
+        - apt-get install -y libgmp-dev
         - ./autogen.sh
         - mkdir build; cd build
         - ../configure --enable-shared --enable-debug --enable-zmq --enable-glibc-back-compat --enable-reduce-exports --cache-file=config.cache --prefix=$PWD/../depends/x86_64-unknown-linux-gnu CPPFLAGS=-DDEBUG_LOCKORDER
@@ -184,6 +188,7 @@ build-debian-electrscash:
       - mkdir -p build
 
     script:
+        - apt-get install -y libgmp-dev
         # add cargo to PATH
         - export PATH=$PATH:`pwd`/depends/x86_64-unknown-linux-gnu/native/bin
 
@@ -292,6 +297,7 @@ build-debian-clang:
     extends: .debian-clang-env
     needs: []
     script:
+        - apt-get install -y libgmp-dev
         - ./autogen.sh
         - mkdir build; cd build
         - ../configure --cache-file=config.cache --enable-zmq --with-gui=qt5 --with-incompatible-bdb CPPFLAGS=-DDEBUG_LOCKORDER CXXFLAGS="-std=c++14"
