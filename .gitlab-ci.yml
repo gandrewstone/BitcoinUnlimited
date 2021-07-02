@@ -134,6 +134,7 @@ build-debian-deps:
     extends: .cache-debian
     needs: []
     script:
+        - apt-get install -y libgmp-dev
         - cd depends
         - make HOST=x86_64-unknown-linux-gnu -j `nproc`
     artifacts:

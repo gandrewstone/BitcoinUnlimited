@@ -492,7 +492,8 @@ void UnlimitedSetup(void)
 
     // Start Internal CPU miner
     // Generate coins in the background
-    GenerateBitcoins(GetBoolArg("-gen", DEFAULT_GENERATE), GetArg("-genproclimit", DEFAULT_GENERATE_THREADS), Params());
+    GenerateBitcoins(
+        GetBoolArg("-gen", DEFAULT_GENERATE), GetArg("-genproclimit", DEFAULT_GENERATE_THREADS), &Params());
 }
 
 FILE *blockReceiptLog = nullptr;
@@ -751,7 +752,7 @@ void static BitcoinMiner(const CChainParams &chainparams)
     }
 }
 
-void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams &chainparams)
+void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams *chainparams)
 {
     static boost::thread_group *minerThreads = nullptr;
 
@@ -767,10 +768,10 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams &chainpar
 
     if (nThreads == 0 || !fGenerate)
         return;
-
+    assert(chainparams); // If you passed true to fGenerate, you must pass the chainparams
     minerThreads = new boost::thread_group();
     for (int i = 0; i < nThreads; i++)
-        minerThreads->create_thread(boost::bind(&BitcoinMiner, boost::cref(chainparams)));
+        minerThreads->create_thread(boost::bind(&BitcoinMiner, boost::cref(*chainparams)));
 }
 
 // RPC read mining status
@@ -828,7 +829,7 @@ UniValue setgenerate(const UniValue &params, bool fHelp)
 
     mapArgs["-gen"] = (fGenerate ? "1" : "0");
     mapArgs["-genproclimit"] = itostr(nGenProcLimit);
-    GenerateBitcoins(fGenerate, nGenProcLimit, Params());
+    GenerateBitcoins(fGenerate, nGenProcLimit, &Params());
 
     return NullUniValue;
 }
