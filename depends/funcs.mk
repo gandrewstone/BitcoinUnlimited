@@ -182,6 +182,7 @@ $($(1)_configured): | $($(1)_preprocessed)
 	$(AT)touch $$@
 $($(1)_built): | $($(1)_configured)
 	$(AT)echo Building $(1)...
+	$(AT)echo $(call $(1)_build_cmds, $(1))
 	$(AT)mkdir -p $$(@D)
 	$(AT)+cd $$(@D); $($(1)_build_env) $(call $(1)_build_cmds, $(1))
 	$(AT)touch $$@
