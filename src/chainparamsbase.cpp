@@ -143,7 +143,7 @@ std::string ChainNameFromCommandLine()
     num_selected += fScaleNet;
     bool fUnl = GetBoolArg("-chain_nol", false);
     num_selected += fUnl;
-    bool fNextChain = GetBoolArg("-xnex", false);
+    bool fNextChain = GetBoolArg("-nextchain", false);
     num_selected += fNextChain;
     bool fBch = GetBoolArg("-bch", false);
     num_selected += fBch;
