@@ -13,7 +13,7 @@ $(package)_build_opts+=RANLIB="$($(package)_ranlib)"
 endef
 
 define $(package)_config_cmds
-  ./configure --enable-cxx --enable-static --prefix=$(host_prefix)
+  ./configure --enable-cxx --enable-static --host=$(HOST)
 endef
 
 define $(package)_build_cmds
