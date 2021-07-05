@@ -9,8 +9,6 @@
 #include <string>
 #include <vector>
 
-#define NEXTCHAIN_TICKER "xnex"
-
 /**
  * CBaseChainParams defines the base parameters (shared between bitcoin-cli and bitcoind)
  * of a given instance of the Bitcoin system.

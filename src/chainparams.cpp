@@ -103,7 +103,7 @@ class CMainParams : public CChainParams
 public:
     CMainParams()
     {
-        strNetworkID = "main";
+        strNetworkID = CBaseChainParams::MAIN;
         consensus.nSubsidyHalvingInterval = 210000;
         // 00000000000000ce80a7e057163a4db1d5ad7b20fb6f598c9597b9665c8fb0d4 - April 1, 2012
         consensus.BIP16Height = 173805;
@@ -253,7 +253,7 @@ class CUnlParams : public CChainParams
 public:
     CUnlParams()
     {
-        strNetworkID = "nol";
+        strNetworkID = CBaseChainParams::UNL;
 
         std::vector<unsigned char> rawScript(ParseHex("76a914a123a6fdc265e1bbcf1123458891bd7af1a1b5d988ac"));
         CScript outputScript(rawScript.begin(), rawScript.end());
@@ -346,7 +346,7 @@ class CTestNetParams : public CChainParams
 public:
     CTestNetParams()
     {
-        strNetworkID = "test";
+        strNetworkID = CBaseChainParams::TESTNET;
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP16Height = 514; // 00000000040b4e986385315e14bee30ad876d8b47f748025b26683116d21aa65
         consensus.BIP34Height = 21111;
@@ -485,7 +485,7 @@ class CRegTestParams : public CChainParams
 public:
     CRegTestParams()
     {
-        strNetworkID = "regtest";
+        strNetworkID = CBaseChainParams::REGTEST;
         consensus.nSubsidyHalvingInterval = 150;
         consensus.BIP16Height = 0; // always enforce P2SH BIP16 on regtest
         consensus.BIP34Height = 1000; // BIP34 has activated on regtest (Used in rpc activation tests)
@@ -581,7 +581,7 @@ class CTestNet4Params : public CChainParams
 public:
     CTestNet4Params()
     {
-        strNetworkID = "test4";
+        strNetworkID = CBaseChainParams::TESTNET4;
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP16Height = 1;
         consensus.BIP34Height = 2;
@@ -707,7 +707,7 @@ class CScaleNetParams : public CChainParams
 public:
     CScaleNetParams()
     {
-        strNetworkID = "scale";
+        strNetworkID = CBaseChainParams::SCALENET;
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP16Height = 1;
         consensus.BIP34Height = 2;
@@ -839,7 +839,7 @@ class CNextChainParams : public CChainParams
 public:
     CNextChainParams()
     {
-        strNetworkID = NEXTCHAIN_TICKER;
+        strNetworkID = CBaseChainParams::NEXTCHAIN;
 
         genesis = CreateGenesisBlock(CScript() << 0 << CScriptNum(7227),
             "Innovations enabling viral uses create a virtuous adoption cycle that overwhelms legacy systems",

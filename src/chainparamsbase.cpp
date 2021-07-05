@@ -17,7 +17,7 @@ const std::string CBaseChainParams::TESTNET = "test";
 const std::string CBaseChainParams::TESTNET4 = "test4";
 const std::string CBaseChainParams::SCALENET = "scale";
 const std::string CBaseChainParams::REGTEST = "regtest";
-const std::string CBaseChainParams::NEXTCHAIN = NEXTCHAIN_TICKER;
+const std::string CBaseChainParams::NEXTCHAIN = "nex";
 
 /**
  * Main network
