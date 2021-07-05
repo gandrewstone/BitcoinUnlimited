@@ -504,8 +504,8 @@ public:
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = true;
-        consensus.powAlgorithm = 0;
-        consensus.initialSubsidy = 50 * COIN;
+        consensus.powAlgorithm = 1;
+        consensus.initialSubsidy = 10 * COIN;
         // The half life for the ASERT DAA. For every (nASERTHalfLife) seconds behind schedule the blockchain gets,
         // difficulty is cut in half. Doubled if blocks are ahead of schedule.
         // Two days
