@@ -5,6 +5,10 @@ $(package)_download_path=https://gmplib.org/download/gmp
 $(package)_file_name=gmp-$($(package)_version).tar.lz
 $(package)_sha256_hash=2c7f4f0d370801b2849c48c9ef3f59553b5f1d3791d070cffb04599f9fc67b41
 
+ifeq  ($(HOST),i686-pc-linux-gnu)
+  XTRA_CFG:=--disable-assembly
+endif
+
 ifeq  ($(HOST),x86_64-apple-darwin11)
   XTRA_CFG:=--disable-assembly
   # See https://gmplib.org/list-archives/gmp-bugs/2012-January/002499.html

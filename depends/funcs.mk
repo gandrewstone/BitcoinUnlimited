@@ -174,8 +174,6 @@ $($(1)_preprocessed): | $($(1)_dependencies) $($(1)_extracted)
 	$(AT)cd $$(@D); $(call $(1)_preprocess_cmds, $(1))
 	$(AT)touch $$@
 $($(1)_configured): | $($(1)_preprocessed)
-	$(AT)echo Environment $(1)
-	$(AT)env
 	$(AT)echo Configuring $(1)...
 	$(AT)echo $($(1)_config_env) $(call $(1)_config_cmds, $(1))
 	$(AT)rm -rf $(host_prefix); mkdir -p $(host_prefix)/lib; cd $(host_prefix); $(foreach package,$($(1)_all_dependencies), tar xf $($(package)_cached); )
