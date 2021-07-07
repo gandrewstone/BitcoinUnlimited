@@ -154,7 +154,7 @@ static const bool DEFAULT_GENERATE = false;
 static const int DEFAULT_GENERATE_THREADS = 1;
 
 // Run the miner threads
-extern void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams &chainparams);
+extern void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams *chainparams);
 
 // Internal CPU miner RPC calls
 extern UniValue getgenerate(const UniValue &params, bool fHelp);

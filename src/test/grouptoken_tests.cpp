@@ -84,13 +84,14 @@ CScript gp2sh(const CGroupTokenID &group, const CScriptID &dest, CAmount amt)
     return script;
 }
 
-std::string HexStr(const CMutableTransaction &tx)
+/*
+std::string HexStrTx(const CMutableTransaction &tx)
 {
     CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
     ssTx << tx;
     return HexStr(ssTx.begin(), ssTx.end());
 }
-
+*/
 
 class QuickAddress
 {
