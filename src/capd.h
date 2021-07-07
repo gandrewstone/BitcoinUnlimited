@@ -124,6 +124,36 @@ public:
         }
     }
 };
+//! Indicate a section of a vector, without copying the vector.  You can then serialize the section.
+template <typename T, class A = std::allocator<T> >
+class PtrVectorSpan
+{
+public:
+    std::vector<T, A> &v;
+    size_t start;
+    size_t count;
+
+    PtrVectorSpan(std::vector<T, A> &_v, unsigned int _start, unsigned int _count) : v(_v), start(_start), count(_count) {}
+    template <typename Stream>
+    void Serialize(Stream &os) const
+    {
+        // Get the mininum of the desired element count and the number of elements
+        auto sz = v.size() - start;
+        if (start >= v.size())
+            sz = 0;
+        if (count < sz)
+            sz = count;
+        // Write the vector size
+        WriteCompactSize(os, sz);
+        // Serialized the desired span
+        if (sz != 0)
+        {
+            auto end = v.begin() + start + sz;
+            for (typename std::vector<T, A>::const_iterator vi = v.begin() + start; vi != end; ++vi)
+                ::Serialize(os, *(*vi));
+        }
+    }
+};
 
 template <typename Stream, typename T, typename A, typename V>
 void Serialize_impl(Stream &os, VectorSpan<T, A> &vs, const V &)
@@ -584,6 +614,14 @@ public:
     PriorityType _GetLocalPriority();
 
 
+    /** Return the max difficulty for a message in this mempool. */
+    PriorityType GetHighestPriority()
+    {
+        READLOCK(csMsgPool);
+        return _GetHighestPriority();
+    }
+    PriorityType _GetHighestPriority();
+
     /** Add a message into the message pool.  Throws CapdMsgPoolException if the message was not added.
      */
     void add(const CapdMsgRef &msg);
@@ -617,7 +655,7 @@ public:
 
 
     /** Content search */
-    std::vector<CapdMsgRef> find(const std::vector<unsigned char> c) const;
+    std::vector<CapdMsgRef> find(const std::vector<unsigned char>& c) const;
 
     /** Remove enough lowest priority messages to make at least len bytes available in the msgpool */
     void pare(int len)
@@ -644,6 +682,13 @@ public:
     enum // Since these types will never appear in a normal INV msg they could overlap values, but don't.
     {
         CAPD_MSG_TYPE = 72,
+
+        CAPD_QUERY_TYPE_MSG = 1,
+        CAPD_QUERY_TYPE_MSG_HASH = 2,
+        // CAPD_QUERY_TYPE_MSG_COMBINED = 3,
+
+        CAPD_QUERY_MAX_MSGS = 200,
+        CAPD_QUERY_MAX_INVS = 2000
     };
 
     CapdProtocol(CapdMsgPool &msgpool) : pool(&msgpool) {}

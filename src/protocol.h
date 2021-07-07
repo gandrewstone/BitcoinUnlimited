@@ -374,6 +374,27 @@ extern const char *CAPDGETMSG;
  * only if XVERSION capd enabled
  */
 extern const char *CAPDMSG;
+
+/**
+ * Request info about the capd pool
+ * only if XVERSION capd enabled
+ */
+extern const char *CAPDGETINFO;
+/**
+ * Provide info about the capd pool
+ * only if XVERSION capd enabled
+ */
+extern const char *CAPDINFO;
+/**
+ * Search for matching messages
+ * only if XVERSION capd enabled
+ */
+extern const char *CAPDQUERY;
+/**
+ * Reply with matching messages
+ * only if XVERSION capd enabled
+ */
+extern const char *CAPDQUERYREPLY;
 };
 
 

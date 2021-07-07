@@ -50,6 +50,7 @@ UniValue capdrpc(const UniValue &params, bool fHelp)
         ret.pushKV("count", msgpool.Count());
         ret.pushKV("relayPriority", msgpool.GetRelayPriority());
         ret.pushKV("minPriority", msgpool.GetLocalPriority());
+        ret.pushKV("maxPriority", msgpool.GetHighestPriority());
         return ret;
     }
 

@@ -7,6 +7,8 @@ CAPD_NOMINAL_MSG_SIZE = 100
 CAPD_MIN_FORWARD_MSG_DIFFICULTY = 0x007fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 CAPD_MIN_LOCAL_MSG_DIFFICULTY = 0x00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 
+CAPD_MIN_RELAY_PRIORITY = 2
+CAPD_MIN_LOCAL_PRIORITY = 1
 
 def CapdMsgPriorityToDifficultyTarget(priority, msgContentSize):
     if msgContentSize > CAPD_NOMINAL_MSG_SIZE:

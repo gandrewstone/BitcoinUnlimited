@@ -19,6 +19,9 @@ from test_framework.bumessages import *
 
 CAPD_XVERSION_STR = '0000000000020006'
 
+def hashToHex(x):
+    return x[::-1].hex()
+
 class CapdProtoHandler(BUProtocolHandler):
     def __init__(self):
         BUProtocolHandler.__init__(self)
@@ -127,6 +130,7 @@ class MyTest (BitcoinTestFramework):
         m = CapdMsg(b"this is a test")
         m.solve(4)
         print("hash: " + m.calcHash().hex() )
+        firstMsgHash = m.calcHash()
 
         hdlr.send_message(msg_capdmsg([m]))
         # Wait for the node to INV me with my own message
@@ -149,7 +153,7 @@ class MyTest (BitcoinTestFramework):
         print("Create 300 messages")
         # Let's create a lot of messages
         hdlr.msgs = {}
-        EXP_MSGS = 301
+        EXP_MSGS = 31
         for i in range(0,EXP_MSGS-1):
             m = CapdMsg(i.to_bytes(2,"big") + (b" msg count %d" % i))
             m.solve(7)
@@ -185,31 +189,75 @@ class MyTest (BitcoinTestFramework):
             print("unpropagated: ", len(sleft))
             print (sleft)
 
+        c0 = sorted([ hashToHex(x) for x in hdlr.msgs.keys()] + [ hashToHex(firstMsgHash)])
+        assert_equal(c0, sorted(l0))
+
 
         # pdb.set_trace()
         # reduce the capd message size and validate that it gets pared down
-        self.nodes[1].set("net.capd=1000")
+        self.nodes[1].set("net.capd=10000")
         st0 = self.nodes[1].capd()
-        assert(st0["size"] < 1000)
+        assert(st0["size"] < 10000)
         print(st0)
 
-        print("Create 2000 messages, overflow pool")
+        print("Create 3000 messages, overflow pool")
         # Generate acceptable messages, given a full msg pool
         hdlr.msgs={}
-        while i < 5000:
+        msgs = []
+        while i < 3000:
             i+=1
-            st0 = self.nodes[1].capd()
-            pri = st0["relayPriority"]
-            if i&127 == 0: print("%d: priority: %f" % (i,pri))
+            st0 = self.nodes[0].capd()
+            pri0 = st0["maxPriority"]
+            # print(st0)
+            st1 = self.nodes[1].capd()
+            pri1 = st0["maxPriority"]
+            pri = max(pri0, pri1)
+            if i&127 == 0: print("%d: priority: %f, %f -> %f" % (i, pri0, pri1, pri))
             m = CapdMsg(i.to_bytes(2,"big") + (b" 2nd msg count %d" % i))
-            m.solve(pri + decimal.Decimal(0.1))
+            m.solve(pri + decimal.Decimal(0.01))
             hdlr.msgs[m.getHash()] = m
             hdlr.send_message(msg_capdinv([ m.getHash()]))
-            # time.sleep(0.001)
+            msgs.append(m)
+
+
+        lastMsg = None
+        count = 0
+        while count < 10:
+            count += 1
+            try:
+                lastMsg = self.nodes[1].capd("get", hashToHex(msgs[-1].getHash()))
+                break
+            except: # propagation time
+                time.sleep(0.10)
+
+        assert(lastMsg != None)
+
+        epoch_time = int(time.time())
+        epoch_time += 300
+        s0 = self.nodes[0].capd()
+        m0 = self.nodes[0].capd("get", hashToHex(msgs[-1].getHash()))
+        self.nodes[0].setmocktime(epoch_time)
+        s1 = self.nodes[0].capd()
+        m1 = self.nodes[0].capd("get", hashToHex(msgs[-1].getHash()))
+        epoch_time += 300
+        self.nodes[0].setmocktime(epoch_time)
+        s2 = self.nodes[0].capd()
+        m2 = self.nodes[0].capd("get", hashToHex(msgs[-1].getHash()))
+
+        # after half the time, the priority of every message will have halved
+        assert s0["maxPriority"]/s1["maxPriority"] > 1.99, "time priority reduction issue"
+        assert m0['priority']/m1['priority'] > 1.99, "time priority reduction issue 2"
+
+        assert_equal(s2["maxPriority"], CAPD_MIN_RELAY_PRIORITY)
+        assert_equal(s2["relayPriority"], CAPD_MIN_RELAY_PRIORITY)
+        assert_equal(s2["minPriority"], CAPD_MIN_LOCAL_PRIORITY)
+
+        # After 10 minutes the message is fully aged
+        assert(m2["priority"] <= 0)
 
         logging.info("CAPD test finished")
-        time.sleep(1)
-        pdb.set_trace()
+        # time.sleep(1)
+        # pdb.set_trace()
 
 
 

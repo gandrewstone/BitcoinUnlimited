@@ -305,10 +305,12 @@ void CapdMsgPool::add(const CapdMsgRef &msg)
 
         if (!msg->DoesPowMatchDifficulty())
         {
+            LOG(CAPD, "Message POW inconsistent");
             throw CapdMsgPoolException("Message POW inconsistent");
         }
         if (msg->Priority() < _GetLocalPriority())
         {
+            LOG(CAPD, "message priority %f below local priority %f", msg->Priority(),_GetLocalPriority());
             // printf("Priority: msg: %s >=  local: %s\n", msg->Priority().GetHex().c_str(),
             // _GetLocalPriority().GetHex().c_str());
             // printf("Difficulty: msg: %s  local: %s\n", msg->GetDifficulty().GetHex().c_str(),
@@ -454,12 +456,29 @@ PriorityType CapdMsgPool::_GetLocalPriority()
     if (i == priorityIndexer.end())
         return MIN_LOCAL_PRIORITY;
 
+    //MsgIterByPriority last = priorityIndexer.end();
+    //last--;
+
+    PriorityType ret = (*i)->Priority();
+    if (ret < MIN_LOCAL_PRIORITY)
+        return MIN_LOCAL_PRIORITY;
+    return ret;
+}
+
+PriorityType CapdMsgPool::_GetHighestPriority()
+{
+    auto &priorityIndexer = msgs.get<MsgPriorityTag>();
+
+    MsgIterByPriority i = priorityIndexer.begin();
+    if (i == priorityIndexer.end())
+        return MIN_RELAY_PRIORITY;
+
     MsgIterByPriority last = priorityIndexer.end();
     last--;
 
     PriorityType ret = (*last)->Priority();
-    if (ret < MIN_LOCAL_PRIORITY)
-        return MIN_LOCAL_PRIORITY;
+    if (ret < MIN_RELAY_PRIORITY)
+        return MIN_RELAY_PRIORITY;
     return ret;
 }
 
@@ -497,7 +516,7 @@ CapdMsgRef CapdMsgPool::find(const uint256 &hash) const
     return *i;
 }
 
-std::vector<CapdMsgRef> CapdMsgPool::find(const std::vector<unsigned char> v) const
+std::vector<CapdMsgRef> CapdMsgPool::find(const std::vector<unsigned char>& v) const
 {
     READLOCK(csMsgPool);
     if (v.size() == 2)
@@ -606,7 +625,59 @@ bool CapdProtocol::HandleCapdMessage(CNode *pfrom,
         return false;
     }
 
-    if (command == NetMsgType::CAPDINV)
+    if (command == NetMsgType::CAPDINFO)
+    {
+        double localPri;
+        double relayPri;
+        double highestPri;
+        vRecv >> localPri >> relayPri >> highestPri;
+        cn->youDontSendPriority = relayPri;
+    }
+    else if (command == NetMsgType::CAPDGETINFO)
+    {
+        pfrom->PushMessage(NetMsgType::CAPDINFO, msgpool.GetLocalPriority(), msgpool.GetRelayPriority(), msgpool.GetHighestPriority());
+    }
+    else if (command == NetMsgType::CAPDQUERY)
+    {
+        uint32_t cookie;
+        uint16_t type;
+        uint32_t quantity;
+        uint32_t start;
+        std::vector<unsigned char> content;
+        vRecv >> cookie >> type >> start >> quantity >> content;
+
+        auto sz = content.size();
+        if ((sz == 2) || (sz == 4) || (sz == 8) || (sz == 16))
+        {
+            std::vector<CapdMsgRef> msgs = msgpool.find(content);
+            if (type == CAPD_QUERY_TYPE_MSG)
+            {
+                quantity = std::min((int)CAPD_QUERY_MAX_MSGS, (int)quantity);
+                pfrom->PushMessage(NetMsgType::CAPDQUERYREPLY, cookie, msgs.size(), PtrVectorSpan<CapdMsgRef>(msgs, start, quantity));
+            }
+            if (type == CAPD_QUERY_TYPE_MSG_HASH)
+            {
+                int qty = std::min(std::min((int)CAPD_QUERY_MAX_INVS+start, (int)start+quantity), (int) msgs.size()-start);
+                std::vector<uint256> hashes;
+                for (int i=start; i<qty;i++)
+                {
+                    hashes.push_back(msgs[i]->GetHash());
+                }
+                pfrom->PushMessage(NetMsgType::CAPDQUERYREPLY, cookie, msgs.size(), hashes);
+            }
+            
+        }
+        else
+        {
+            uint8_t error = 2;
+            pfrom->PushMessage(NetMsgType::CAPDQUERYREPLY, cookie, error);
+        }
+    }
+    else if (command == NetMsgType::CAPDQUERYREPLY)
+    {
+        // Ignore, I didn't query so this must be accidental
+    }
+    else if (command == NetMsgType::CAPDINV)
     {
         std::vector<uint256> vInv;
         int objtype = ReadCompactSize(vRecv);

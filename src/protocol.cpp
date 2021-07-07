@@ -71,9 +71,13 @@ const char *GETBLOCKTXN = "getblocktxn";
 const char *BLOCKTXN = "blocktxn";
 
 const char *CAPDPREFIX = "capd";
+const char *CAPDGETINFO = "capdgetinfo";
+const char *CAPDINFO = "capdinfo";
 const char *CAPDINV = "capdinv";
 const char *CAPDGETMSG = "capdgetmsg";
 const char *CAPDMSG = "capdmsg";
+const char *CAPDQUERY = "capdquery";
+const char *CAPDQUERYREPLY = "capdqreply";
 };
 
 static const char *ppszTypeName[] = {
@@ -99,7 +103,9 @@ const static std::string allNetMessageTypes[] = {NetMsgType::VERSION, NetMsgType
     NetMsgType::BUVERACK, NetMsgType::XVERSION, NetMsgType::XVERACK, NetMsgType::XUPDATE, NetMsgType::SENDCMPCT,
     NetMsgType::SENDCMPCT, NetMsgType::CMPCTBLOCK, NetMsgType::GETBLOCKTXN, NetMsgType::BLOCKTXN,
 
-    NetMsgType::CAPDINV, NetMsgType::CAPDGETMSG, NetMsgType::CAPDMSG};
+    NetMsgType::CAPDINV, NetMsgType::CAPDGETMSG, NetMsgType::CAPDMSG, NetMsgType::CAPDGETINFO, NetMsgType::CAPDINFO,
+    NetMsgType::CAPDQUERY, NetMsgType::CAPDQUERYREPLY
+};
 
 const static std::vector<std::string> allNetMessageTypesVec(allNetMessageTypes,
     allNetMessageTypes + ARRAYLEN(allNetMessageTypes));
