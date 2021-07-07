@@ -1967,8 +1967,10 @@ static UniValue getblockstats(const UniValue &params, bool fHelp)
             "  \"minfeerate\": xxxxx,      (numeric) Minimum feerate (in satoshis per virtual byte)\n"
             "  \"mintxsize\": xxxxx,       (numeric) Minimum transaction size\n"
             "  \"outs\": xxxxx,            (numeric) The number of outputs\n"
+            "  \"sequence_id\": xxxxx,     (numeric) The arrival order of a block at any given height\n"
             "  \"subsidy\": xxxxx,         (numeric) The block subsidy\n"
             "  \"time\": xxxxx,            (numeric) The block time\n"
+            "  \"time_received\": xxxxx,   (numeric) The first time either the header or block was received\n"
             "  \"total_out\": xxxxx,       (numeric) Total amount in all outputs (excluding coinbase and thus reward "
             "[ie subsidy + totalfee])\n"
             "  \"total_size\": xxxxx,      (numeric) Total size of all non-coinbase transactions\n"
@@ -2185,8 +2187,16 @@ static UniValue getblockstats(const UniValue &params, bool fHelp)
     ret_all.pushKV("minfeerate", ValueFromAmount((minfeerate == MAX_MONEY) ? 0 : minfeerate));
     ret_all.pushKV("mintxsize", mintxsize == std::numeric_limits<int64_t>::max() ? 0 : mintxsize);
     ret_all.pushKV("outs", outputs);
+    {
+        READLOCK(cs_mapBlockIndex);
+        ret_all.pushKV("sequence_id", pindex->nSequenceId);
+    }
     ret_all.pushKV("subsidy", ValueFromAmount(GetBlockSubsidy(pindex->nHeight, Params().GetConsensus())));
     ret_all.pushKV("time", pindex->GetBlockTime());
+    {
+        READLOCK(cs_mapBlockIndex);
+        ret_all.pushKV("time_received", pindex->nTimeReceived);
+    }
     ret_all.pushKV("total_out", ValueFromAmount(total_out));
     ret_all.pushKV("total_size", total_size);
     ret_all.pushKV("totalfee", ValueFromAmount(totalfee));

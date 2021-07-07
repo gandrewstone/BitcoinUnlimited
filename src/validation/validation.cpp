@@ -66,7 +66,13 @@ struct CBlockIndexWorkComparator
         if (pa->nChainWork < pb->nChainWork)
             return true;
 
-        // ... then by earliest time received, ...
+        // ... then by block arrival sequence.
+        //
+        // Although in general the sequence id orders block by time, in the case of a block race, the
+        // sequence id can be swapped such that the winning block will have the lower sequence_id. This
+        // swapping of id's only is important when/if the node is shutdown and restarts where there were
+        // two or more blocks present at the same height. Then upon restarting the node will stay on the
+        // same block before shutdown regardless of the original time of arrival.
         if (pa->nSequenceId < pb->nSequenceId)
             return false;
         if (pa->nSequenceId > pb->nSequenceId)
@@ -617,6 +623,9 @@ bool LoadBlockIndexDB()
         return true;
     }
     chainActive.SetTip(it->second);
+
+    // set the current maximum sequence id in the block index
+    nBlockSequenceId = mapBlockIndex.size() + 1;
 
     PruneBlockIndexCandidates();
 

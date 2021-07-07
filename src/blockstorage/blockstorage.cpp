@@ -207,6 +207,8 @@ void SyncStorage(const CChainParams &chainparams)
                 pindexNew->nNonce = item.second.nNonce;
                 pindexNew->nStatus = item.second.nStatus;
                 pindexNew->nTx = item.second.nTx;
+                pindexNew->nSequenceId = item.second.nSequenceId;
+                pindexNew->nTimeReceived = item.second.nTimeReceived;
                 index = pindexNew;
             }
 
@@ -378,6 +380,8 @@ void SyncStorage(const CChainParams &chainparams)
                 pindexNew->nNonce = item.second.nNonce;
                 pindexNew->nStatus = item.second.nStatus;
                 pindexNew->nTx = item.second.nTx;
+                pindexNew->nSequenceId = item.second.nSequenceId;
+                pindexNew->nTimeReceived = item.second.nTimeReceived;
                 index = pindexNew;
             }
 

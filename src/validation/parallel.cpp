@@ -178,8 +178,7 @@ bool CParallelValidation::Initialize(const boost::thread::id this_id, const CBlo
             iter++;
         }
 
-        // Assign the nSequenceId for the block being validated in this thread. cs_main must be locked for lookup on
-        // pindex.
+        // Assign the nSequenceId for the block being validated in this thread.
         {
             READLOCK(cs_mapBlockIndex);
             if (pindex->nSequenceId > 0)

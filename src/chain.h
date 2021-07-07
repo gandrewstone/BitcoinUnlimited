@@ -201,10 +201,10 @@ public:
     unsigned int nBits;
     unsigned int nNonce;
 
-    //! (memory only) Sequential id assigned to distinguish order in which blocks are received.
-    uint32_t nSequenceId;
+    //! Sequential id assigned to distinguish order in which blocks are received.
+    uint64_t nSequenceId;
 
-    //! (memory only) The time (in seconds) the block header was added to the index.
+    //! The time (in seconds) the block header was added to the index.
     uint64_t nTimeReceived;
 
     void SetNull()
@@ -422,6 +422,10 @@ public:
         READWRITE(nTime);
         READWRITE(nBits);
         READWRITE(nNonce);
+
+        // sequence id and time received
+        READWRITE(VARINT(nSequenceId));
+        READWRITE(nTimeReceived);
     }
 
     uint256 GetBlockHash() const

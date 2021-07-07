@@ -49,9 +49,14 @@ bool AcceptBlockHeader(const CBlockHeader &block,
     const CChainParams &chainparams,
     CBlockIndex **ppindex = nullptr);
 
+/** Create a new block index entry for a new block or header that has arrived.
+ *  This updates setDirtyBlockIndex only.
+ */
 CBlockIndex *AddToBlockIndex(const CBlockHeader &block);
 
-/** Create a new block index entry for a given block hash */
+/** Add a block index entry for a given block hash.
+ *  This is used when loading the block index at startup or upgrading the database.
+ */
 CBlockIndex *InsertBlockIndex(const uint256 &hash);
 
 /** Look up the block index entry for a given block hash. returns nullptr if it does not exist */
