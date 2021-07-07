@@ -39,6 +39,30 @@ check_hash() {
 mkdir -p "$PATH_DEPS"
 cd "$PATH_DEPS"
 
+
+# GMP (Download, unpack and build)
+cd "$DEPS_ROOT"
+# don't download if already downloaded
+if [ ! -e gmp_6.2.0+dfsg.orig.tar.xz ]
+then
+	wget http://archive.ubuntu.com/ubuntu/pool/main/g/gmp/gmp_6.2.0+dfsg.orig.tar.xz -O "$DEPS_ROOT/gmp_6.2.0+dfsg.orig.tar.xz"
+	# Verify downloaded file's hash
+	check_hash 5D7610449498A79AA62D4B9A8F6BAAEF91B8716726E1009E02B879962DFF32AB "$DEPS_ROOT/gmp_6.2.0+dfsg.orig.tar.xz"
+fi
+# don't extract if already extracted
+cd "$PATH_DEPS"
+if [ ! -d gmp-6.2.0+dfsg ]
+then
+	cd "$DEPS_ROOT"
+	tar xvf gmp_6.2.0+dfsg.orig.tar.xz -C "$PATH_DEPS"
+
+fi
+mv "$PATH_DEPS/gmp-6.2.0+dfsg.orig" "$PATH_DEPS/gmp-6.2.0+dsfg"
+cd "$PATH_DEPS/gmp-6.2.0+dfsg"
+./configure --disable-assembly
+make
+
+
 # Hexdump (Download, unpack, and build into the toolchain path)
 # NOTE: Hexdump is only needed if you intend to build with unit tests enabled.
 cd "$DEPS_ROOT"
