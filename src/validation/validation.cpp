@@ -3313,6 +3313,8 @@ bool ConnectTip(CValidationState &state,
                     FormatStateMessage(state));
             }
         }
+        else
+            pindexFinalized = nullptr;
 
         mapBlockSource.erase(pindexNew->GetBlockHash());
         nTime3 = GetStopwatchMicros();

@@ -26,7 +26,7 @@ BOOST_AUTO_TEST_CASE(finalizationDelay)
     // Create maxreorgdepth blocks. Auto-finalization will not occur because
     // the delay is not expired
     int64_t mockedTime = GetTime();
-    for (uint32_t i = 0; i < DEFAULT_MAX_REORG_DEPTH; i++)
+    for (int i = 0; i < DEFAULT_MAX_REORG_DEPTH; i++)
     {
         block = CreateAndProcessBlock({}, p2pk_scriptPubKey);
         // These blocks are too recent.
@@ -41,7 +41,7 @@ BOOST_AUTO_TEST_CASE(finalizationDelay)
     // Next maxreorgdepth blocks should cause auto-finalization
     CBlockIndex *blockToFinalize = chainActive.Tip()->GetAncestor(chainActive.Tip()->nHeight - DEFAULT_MAX_REORG_DEPTH);
 
-    for (uint32_t i = 0; i < DEFAULT_MAX_REORG_DEPTH; i++)
+    for (int i = 0; i < DEFAULT_MAX_REORG_DEPTH; i++)
     {
         blockToFinalize = chainActive.Next(blockToFinalize);
         block = CreateAndProcessBlock({}, p2pk_scriptPubKey);
@@ -52,7 +52,7 @@ BOOST_AUTO_TEST_CASE(finalizationDelay)
 
     // Next blocks won't cause auto-finalization because the delay is not
     // expired
-    for (uint32_t i = 0; i < DEFAULT_MAX_REORG_DEPTH; i++)
+    for (int i = 0; i < DEFAULT_MAX_REORG_DEPTH; i++)
     {
         block = CreateAndProcessBlock({}, p2pk_scriptPubKey);
         // These blocks are finalized.
@@ -69,7 +69,7 @@ BOOST_AUTO_TEST_CASE(finalizationDelay)
 
     // Create some more blocks.
     // Finalization should start moving again.
-    for (uint32_t i = 0; i < DEFAULT_MAX_REORG_DEPTH; i++)
+    for (int i = 0; i < DEFAULT_MAX_REORG_DEPTH; i++)
     {
         blockToFinalize = chainActive.Next(blockToFinalize);
         block = CreateAndProcessBlock({}, p2pk_scriptPubKey);

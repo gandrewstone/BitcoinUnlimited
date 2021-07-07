@@ -43,6 +43,8 @@
 #include <boost/thread/thread.hpp> // boost::thread::interrupt
 #include <mutex>
 
+extern CTweak<int> maxReorgDepth;
+
 // In case of operator error, limit the rollback of a chain to 100 blocks
 static uint32_t nDefaultRollbackLimit = 100;
 
@@ -197,6 +199,9 @@ UniValue getfinalizedblockhash(const UniValue &params, bool fHelp)
                                  "\nResult:\n"
                                  "\"hex\"      (string) the block hash hex encoded\n");
     }
+
+    if (maxReorgDepth.Value() < 0)
+        throw JSONRPCError(RPC_INVALID_REQUEST, "Block finalization is not enabled");
 
     LOCK(cs_main);
     const CBlockIndex *blockIndexFinalized = GetFinalizedBlock();
@@ -1605,6 +1610,9 @@ UniValue finalizeblock(const UniValue &params, bool fHelp)
     uint256 hash(uint256S(strHash));
     CValidationState state;
 
+    if (maxReorgDepth.Value() < 0)
+        throw JSONRPCError(RPC_INVALID_REQUEST, "Block finalization is not enabled");
+    else
     {
         CBlockIndex *pblockindex;
         {

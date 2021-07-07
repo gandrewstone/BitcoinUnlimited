@@ -31,8 +31,8 @@ class FinalizeBlockTest(BitcoinTestFramework):
 
     def setup_network(self, split=False):
         self.nodes = []
-        self.nodes.append(start_node(0, self.options.tmpdir, ["-debug=net"]))
-        self.nodes.append(start_node(1, self.options.tmpdir, ["-debug=net"]))
+        self.nodes.append(start_node(0, self.options.tmpdir, ["-debug=net", "-blockchain.maxReorgDepth=10"]))
+        self.nodes.append(start_node(1, self.options.tmpdir, ["-debug=net", "-blockchain.maxReorgDepth=10"]))
 
     def run_test(self):
         node = self.nodes[0]
@@ -113,6 +113,13 @@ class FinalizeBlockTest(BitcoinTestFramework):
         assert node.getfinalizedblockhash() != alt_node.getbestblockhash(), \
             "Finalize block is alt_node's tip!"
         assert_equal(node.getfinalizedblockhash(), finalized_block)
+
+        # test deactivation of finalization
+        logging.info("Deactivate finalization...")
+        self.nodes[0].set("blockchain.maxReorgDepth=-1")
+        assert_raises_rpc_error(-32600, "Block finalization is not enabled",
+                                node.finalizeblock, alt_node.getbestblockhash())
+
 
 if __name__ == '__main__':
     FinalizeBlockTest().main()
