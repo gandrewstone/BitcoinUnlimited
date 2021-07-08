@@ -219,10 +219,9 @@ void CParallelValidation::Cleanup(const CBlock &block, CBlockIndex *pindex)
             if (pindex->nSequenceId > (*riter).first)
             {
                 uint32_t nId = pindex->nSequenceId;
-                if (nId == 0)
-                    nId = 1;
-                if ((*riter).first == 0)
-                    (*riter).first = 1;
+                DbgAssert(nId > 0, nId = 1);
+                DbgAssert((*riter).first > 0, (*riter).first = 1);
+
                 LOG(PARALLEL, "swapping sequence id for block %s before %d after %d\n", block.GetHash().ToString(),
                     pindex->nSequenceId, (*riter).first);
                 pindex->nSequenceId = (*riter).first;
