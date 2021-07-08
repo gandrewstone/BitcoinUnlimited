@@ -237,7 +237,6 @@ void Shutdown()
     if (pwalletMain)
         pwalletMain->Flush(false);
 #endif
-    GenerateBitcoins(false, 0, nullptr); // Shut down any mining threads
 
     if (g_txindex)
     {
