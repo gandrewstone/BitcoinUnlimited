@@ -13,7 +13,7 @@ Run the following to install the base dependencies for building:
 
 
 ```bash
-sudo apt-get install build-essential libtool autotools-dev autoconf automake pkg-config libssl-dev libevent-dev bsdmainutils git
+sudo apt-get install build-essential libtool autotools-dev autoconf automake pkg-config libssl-dev libevent-dev libgmp-dev bsdmainutils git
 ```
 
 On at least Ubuntu 14.04+ and Debian 7+ there are generic names for the
@@ -111,6 +111,7 @@ These dependencies are required:
  libssl      | Crypto           | Random Number Generation, Elliptic Curve Cryptography
  libboost    | Utility          | Library for threading, data structures, etc
  libevent    | Networking       | OS independent asynchronous networking
+ libgmp      | Math             | Arbitrary precision arithmetic
 
 Optional dependencies:
 
