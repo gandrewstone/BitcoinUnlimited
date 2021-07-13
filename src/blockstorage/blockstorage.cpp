@@ -481,8 +481,8 @@ bool WriteBlockToDisk(const CBlock &block,
 CBlockRef ReadBlockFromDisk(const CBlockIndex *pindex, const Consensus::Params &consensusParams)
 {
     // First check the in memory cache
-    CBlockRef pblock = blockcache.GetBlock(pindex->GetBlockHash());
-    if (pblock)
+    CBlockRef pblock;
+    if (blockcache.GetBlock(pindex->GetBlockHash(), pblock))
     {
         LOG(THIN | GRAPHENE | CMPCT | BLK, "Retrieved block from memory cache: %s\n",
             pblock->GetHash().ToString().c_str());

@@ -17,16 +17,21 @@ void CBlockCache::AddBlock(CBlockRef pblock, uint64_t nHeight)
     int64_t nMaxMempool = GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
     nMaxSizeCache = nMaxMempool - mempool.DynamicMemoryUsage();
     if (nMaxSizeCache < 0)
+    {
         nMaxSizeCache = nMaxMempool;
+    }
+    uint64_t blockSize = pblock->GetBlockSize();
 
     // Add the block to the cache if there is room.
-    _CalculateDownloadWindow(pblock);
-    if ((nBytesCache + (int64_t)pblock->GetBlockSize() < nMaxSizeCache) &&
+    _CalculateDownloadWindow(blockSize);
+    if ((nBytesCache + (int64_t)blockSize < nMaxSizeCache) &&
         (cache.size() + 1 < requester.BLOCK_DOWNLOAD_WINDOW.load()))
     {
-        auto ret = cache.insert({pblock->GetHash(), {GetTimeMillis(), nHeight, pblock}});
+        auto ret = cache.insert({pblock->GetHash(), {GetTimeMillis(), nHeight, BlockType::CBLOCK, blockSize, pblock}});
         if (ret.second == true)
-            nBytesCache += pblock->GetBlockSize();
+        {
+            nBytesCache += blockSize;
+        }
     }
 
     _TrimCache();
@@ -34,18 +39,22 @@ void CBlockCache::AddBlock(CBlockRef pblock, uint64_t nHeight)
         requester.BLOCK_DOWNLOAD_WINDOW.load());
 }
 
-CBlockRef CBlockCache::GetBlock(uint256 hash) const
+bool CBlockCache::GetBlock(const uint256 &hash, CBlockRef &pblock) const
 {
-    CBlockRef pblock = nullptr;
+    pblock = nullptr;
     {
         READLOCK(cs_blockcache);
         auto iter = cache.find(hash);
         if (iter != cache.end())
         {
-            return iter->second.pblock;
+            if (iter->second.blockType == BlockType::CBLOCK)
+            {
+                pblock = std::static_pointer_cast<CBlock>(iter->second.pblock);
+                return true;
+            }
         }
     }
-    return pblock;
+    return false;
 }
 
 void CBlockCache::EraseBlock(const uint256 &hash)
@@ -54,7 +63,7 @@ void CBlockCache::EraseBlock(const uint256 &hash)
     auto iter = cache.find(hash);
     if (iter != cache.end())
     {
-        nBytesCache -= iter->second.pblock->GetBlockSize();
+        nBytesCache -= iter->second.blockSize;
         cache.erase(iter);
         LOG(IBD, "Erased Block from cache - current size: %d,  num blocks: %d\n", nBytesCache, cache.size());
     }
@@ -76,11 +85,13 @@ void CBlockCache::_TrimCache()
             LOG(IBD, "Cache item height %d nMinheight %d\n", mi->second.nHeight, nMinHeight);
             if (mi->second.nHeight <= nMinHeight)
             {
-                nBytesCache -= mi->second.pblock->GetBlockSize();
+                nBytesCache -= mi->second.blockSize;
                 mi = cache.erase(mi);
             }
             else
+            {
                 mi++;
+            }
         }
     }
     // This should never happen but as a safeguard during IBD we can trim the cache
@@ -94,31 +105,34 @@ void CBlockCache::_TrimCache()
         auto mi = cache.begin();
         while (nBytesCache > nMaxSizeCache)
         {
-            nBytesCache -= mi->second.pblock->GetBlockSize();
+            nBytesCache -= mi->second.blockSize;
             mi = cache.erase(mi);
         }
     }
 }
 
-void CBlockCache::_CalculateDownloadWindow(CBlockRef pblock)
+void CBlockCache::_CalculateDownloadWindow(const int64_t &blockSize)
 {
     AssertWriteLockHeld(cs_blockcache);
 
     // Adjust the block download window depending on how much memory is available
-    if (cache.size() + nIncrement >= requester.BLOCK_DOWNLOAD_WINDOW.load() &&
-        nBytesCache + (int64_t)pblock->GetBlockSize() < nMaxSizeCache)
+    if (cache.size() + nIncrement >= requester.BLOCK_DOWNLOAD_WINDOW.load() && nBytesCache + blockSize < nMaxSizeCache)
     {
         if (requester.BLOCK_DOWNLOAD_WINDOW.load() <= DEFAULT_BLOCK_DOWNLOAD_WINDOW)
         {
             requester.BLOCK_DOWNLOAD_WINDOW.fetch_add(nIncrement);
         }
     }
-    else if (nBytesCache + (int64_t)pblock->GetBlockSize() > nMaxSizeCache)
+    else if (nBytesCache + blockSize > nMaxSizeCache)
     {
         if (cache.size() > nIncrement)
+        {
             requester.BLOCK_DOWNLOAD_WINDOW.store(cache.size());
+        }
         else
+        {
             requester.BLOCK_DOWNLOAD_WINDOW.store(nIncrement); // make sure we don't go to zero
+        }
     }
     else
     {
