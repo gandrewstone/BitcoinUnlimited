@@ -99,7 +99,15 @@ public:
 };
 static CBaseRegTestParams regTestParams;
 
-static CBaseChainParams nextChainParams(CBaseChainParams::NEXTCHAIN, 7227);
+/**
+ * Nextchain
+ */
+class CBaseNextchainParams : public CBaseChainParams
+{
+public:
+    CBaseNextchainParams() { nRPCPort = 7227; }
+};
+static CBaseNextchainParams nextChainParams;
 
 static CBaseChainParams *pCurrentBaseParams = 0;
 
