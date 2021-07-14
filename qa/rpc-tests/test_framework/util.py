@@ -180,7 +180,7 @@ def enable_mocktime():
     # Set the mocktime to be after the Bitcoin Cash fork so
     # in normal tests blockchains the fork is in the past
     global MOCKTIME
-    MOCKTIME = 1501600000 + (201 * 10 * 60)
+    MOCKTIME = 1626275623 + (201 * 10 * 60)
 
 def disable_mocktime():
     global MOCKTIME
