@@ -2779,17 +2779,18 @@ bool ConnectBlock(const CBlock &block,
 
     // Discover how to handle this block
     bool canonical = fCanonicalTxsOrder;
-    // Always allow overwite of fCanonicalTxsOrder but for regtest on BCH
-    if (IsNov2018Activated(chainparams.GetConsensus(), chainActive.Tip()))
+    if (chainparams.NetworkIDString() == "regtest")
     {
-        if (!(chainparams.NetworkIDString() == "regtest"))
-        {
-            canonical = true;
-        }
+        canonical = true;
     }
     else
     {
-        if (!(chainparams.NetworkIDString() == "regtest"))
+        // Always allow overwite of fCanonicalTxsOrder but for regtest on BCH
+        if (IsNov2018Activated(chainparams.GetConsensus(), chainActive.Tip()))
+        {
+            canonical = true;
+        }
+        else
         {
             canonical = false;
         }
