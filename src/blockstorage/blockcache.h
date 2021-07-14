@@ -15,11 +15,19 @@
 class CBlockCache
 {
 private:
+    enum BlockType
+    {
+        CBLOCK,
+        CTAILSTORMBLOCK,
+    };
+
     struct CCacheEntry
     {
         int64_t nEntryTime;
         uint64_t nHeight;
-        CBlockRef pblock;
+        BlockType blockType;
+        uint64_t blockSize;
+        std::shared_ptr<void> pblock;
     };
 
     mutable CSharedCriticalSection cs_blockcache;
@@ -42,7 +50,7 @@ public:
     void AddBlock(CBlockRef pblock, uint64_t nHeight);
 
     /** Find and return a block from the block cache */
-    CBlockRef GetBlock(uint256 hash) const;
+    bool GetBlock(const uint256 &hash, CBlockRef &pblock) const;
 
     /** Remove a block from the block cache */
     void EraseBlock(const uint256 &hash);
@@ -50,7 +58,7 @@ public:
 
 private:
     /** Adjust the block download window */
-    void _CalculateDownloadWindow(CBlockRef pblock);
+    void _CalculateDownloadWindow(const int64_t &blockSize);
 
     /** Trim the cache when necessary */
     void _TrimCache();
