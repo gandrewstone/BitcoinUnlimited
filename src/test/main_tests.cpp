@@ -36,6 +36,7 @@ static void TestBlockSubsidyHalvings(int nSubsidyHalvingInterval)
 {
     Consensus::Params consensusParams;
     consensusParams.nSubsidyHalvingInterval = nSubsidyHalvingInterval;
+    consensusParams.initialSubsidy = 10 * COIN;
     TestBlockSubsidyHalvings(consensusParams);
 }
 
