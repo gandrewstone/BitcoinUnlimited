@@ -27,16 +27,16 @@ class ZapWalletTXesTest (BitcoinTestFramework):
         self.nodes[1].generate(101)
         self.sync_all()
 
-        assert_equal(self.nodes[0].getbalance(), 50)
+        assert_equal(self.nodes[0].getbalance(), COINBASE_REWARD)
 
-        txid0 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 11)
-        txid1 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 10)
+        txid0 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 4)
+        txid1 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 3)
         self.sync_all()
         self.nodes[0].generate(1)
         self.sync_all()
 
-        txid2 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 11)
-        txid3 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 10)
+        txid2 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 4)
+        txid3 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 3)
 
         tx0 = self.nodes[0].gettransaction(txid0)
         assert_equal(tx0['txid'], txid0) #tx0 must be available (confirmed)

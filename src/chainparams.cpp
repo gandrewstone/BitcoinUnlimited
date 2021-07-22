@@ -103,7 +103,7 @@ class CMainParams : public CChainParams
 public:
     CMainParams()
     {
-        strNetworkID = CBaseChainParams::MAIN;
+        strNetworkID = "main"; // Do not use the const string because of ctor execution order issues
         consensus.nSubsidyHalvingInterval = 210000;
         // 00000000000000ce80a7e057163a4db1d5ad7b20fb6f598c9597b9665c8fb0d4 - April 1, 2012
         consensus.BIP16Height = 173805;
@@ -255,7 +255,7 @@ class CUnlParams : public CChainParams
 public:
     CUnlParams()
     {
-        strNetworkID = CBaseChainParams::UNL;
+        strNetworkID = "nol"; // Do not use the const string because of ctor execution order issues
 
         std::vector<unsigned char> rawScript(ParseHex("76a914a123a6fdc265e1bbcf1123458891bd7af1a1b5d988ac"));
         CScript outputScript(rawScript.begin(), rawScript.end());
@@ -350,7 +350,7 @@ class CTestNetParams : public CChainParams
 public:
     CTestNetParams()
     {
-        strNetworkID = CBaseChainParams::TESTNET;
+        strNetworkID = "test"; // Do not use the const string because of ctor execution order issues
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP16Height = 514; // 00000000040b4e986385315e14bee30ad876d8b47f748025b26683116d21aa65
         consensus.BIP34Height = 21111;
@@ -491,7 +491,7 @@ class CRegTestParams : public CChainParams
 public:
     CRegTestParams()
     {
-        strNetworkID = CBaseChainParams::REGTEST;
+        strNetworkID = "regtest"; // Do not use the const string because of ctor execution order issues
         consensus.nSubsidyHalvingInterval = 150;
         consensus.BIP16Height = 0; // always enforce P2SH BIP16 on regtest
         consensus.BIP34Height = 1000; // BIP34 has activated on regtest (Used in rpc activation tests)
@@ -588,7 +588,7 @@ class CTestNet4Params : public CChainParams
 public:
     CTestNet4Params()
     {
-        strNetworkID = CBaseChainParams::TESTNET4;
+        strNetworkID = "test4"; // Do not use the const string because of ctor execution order issues
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP16Height = 1;
         consensus.BIP34Height = 2;
@@ -716,7 +716,7 @@ class CScaleNetParams : public CChainParams
 public:
     CScaleNetParams()
     {
-        strNetworkID = CBaseChainParams::SCALENET;
+        strNetworkID = "scale"; // Do not use the const string because of ctor execution order issues
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP16Height = 1;
         consensus.BIP34Height = 2;
@@ -850,7 +850,7 @@ class CNextChainParams : public CChainParams
 public:
     CNextChainParams()
     {
-        strNetworkID = CBaseChainParams::NEXTCHAIN;
+        strNetworkID = "nex"; // Do not use the const string because of ctor execution order issues
 
         genesis = CreateGenesisBlock(CScript() << 0 << CScriptNum(7227),
             "Innovations enabling viral uses create a virtuous adoption cycle that overwhelms legacy systems",

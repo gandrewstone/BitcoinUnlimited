@@ -153,7 +153,7 @@ class GroupTokensTest (BitcoinTestFramework):
         self.nodes[0].generate(101)
         self.sync_blocks()
 
-        assert_equal(self.nodes[0].getbalance(), 50)
+        assert_equal(self.nodes[0].getbalance(), COINBASE_REWARD)
 
         try:
             ret = self.nodes[1].token("new")

@@ -205,7 +205,7 @@ testScripts = [ RpcTest(t) for t in [
     'schnorrsig',
     'segwit_recovery',
     'bip135basic',
-    'ctor',
+     Disabled('ctor', "ctor always on in regtest"),
     'mining_ctor',
     Disabled('nov152018_forkactivation','Nov 2018 already activated'),
     'blockstorage',
