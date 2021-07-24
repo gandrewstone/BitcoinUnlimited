@@ -70,25 +70,20 @@ static void AssembleBlock(benchmark::State &state)
         CMutableTransaction tx;
         tx.vin.push_back(MineBlock(SCRIPT_PUB, chainparams));
         tx.vin.back().scriptSig = scriptSig;
-        tx.vout.emplace_back(49.999 * COIN, SCRIPT_PUB);
+        tx.vout.emplace_back(9.999 * COIN, SCRIPT_PUB);
         if (NUM_BLOCKS - b >= COINBASE_MATURITY)
         {
             txs.at(b) = MakeTransactionRef(tx);
         }
     }
 
+    for (const auto &txr : txs)
     {
-        // Required for AcceptToMemoryPool.
-        LOCK(cs_main);
-
-        for (const auto &txr : txs)
-        {
-            CValidationState vstate;
-            bool ret{AcceptToMemoryPool(mempool, vstate, txr, false, /* fLimitFree */
-                nullptr /* pfMissingInputs */, true, /* fRejectAbsurdFee */
-                TransactionClass::DEFAULT)};
-            assert(ret);
-        }
+        CValidationState vstate;
+        bool ret{AcceptToMemoryPool(mempool, vstate, txr, false, /* fLimitFree */
+            nullptr /* pfMissingInputs */, true, /* fRejectAbsurdFee */
+            TransactionClass::DEFAULT)};
+        assert(ret);
     }
 
     while (state.KeepRunning())
