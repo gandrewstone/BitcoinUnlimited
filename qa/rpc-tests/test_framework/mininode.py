@@ -601,6 +601,7 @@ class P2PDataStore(SingleNodeConnCB):
                 ct = waitForBlockInChainTips(node, blockHash, timeout)
                 assert ct["status"] == 'invalid'  # Was expecting failure but block is not invalid
                 gbbh = node.getbestblockhash()
+                print(gbbh, blocks[-1].hash)
                 assert gbbh != blocks[-1].hash
 
     def send_txs_and_test(self, txs, node, *, success=True, expect_ban=False, reject_reason=None, timeout=60):

@@ -158,10 +158,9 @@ if __name__ == '__main__':
 
 def Test():
     t = AbandonConflictTest()
+    t.drop_to_pdb = True
     bitcoinConf = {
-        "debug": ["rpc","net", "blk", "thin", "mempool", "req", "bench", "evict"],
-        "blockprioritysize": 2000000,  # we don't want any transactions rejected due to insufficient fees...
-        "blockminsize": 1000000,
+        "debug": ["rpc","net", "blk", "thin", "mempool", "req", "bench", "evict"]
     }
     flags = standardFlags()
     t.main(flags, bitcoinConf, None)

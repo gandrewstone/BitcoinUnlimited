@@ -536,10 +536,22 @@ void BlockAssembler::addPackageTxs(std::vector<const CTxMemPoolEntry *> *vtxe, b
                 packageSigOps += it->GetSigOpCount();
             }
         }
-        if (packageFees < ::minRelayTxFee.GetFee(packageSize) && nBlockSize >= nBlockMinSize)
+
+        LOGA("Consider mining TX %s priority %f, package size %d, fee %d, ancestor count %d\n",
+            iter->GetSharedTx()->GetHash().GetHex(), iter->GetPriority(nHeight), packageSize, packageFees,
+            ancestors.size());
+        if (packageFees < ::minRelayTxFee.GetFee(packageSize))
         {
-            // Everything else we might consider has a lower fee rate so no need to continue
-            return;
+            LOGA("Treating Tx %s as free because fee %d < %d \n", iter->GetSharedTx()->GetHash().GetHex(), packageFees,
+                ::minRelayTxFee.GetFee(packageSize));
+
+            if (nBlockSize >= nBlockMinSize)
+            {
+                // Everything else we might consider has a lower fee rate so no need to continue
+                LOGA("Skipping this and lower fee value tx because free space (%d) is full (current block size %d)",
+                    nBlockMinSize, nBlockSize);
+                return;
+            }
         }
 
         // Test if package fits in the block

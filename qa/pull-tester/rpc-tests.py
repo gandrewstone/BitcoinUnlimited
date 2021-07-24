@@ -273,7 +273,7 @@ testScripts = [ RpcTest(t) for t in [
     'minimaldata',
     'schnorrmultisig',
     'uptime',
-    'op_reversebytes'
+    Disabled('op_reversebytes', "reversebytes activated from genesis on nextchain")
 ] ]
 
 testScriptsExt = [ RpcTest(t) for t in [

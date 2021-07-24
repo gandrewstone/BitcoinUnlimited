@@ -196,7 +196,7 @@ class SegwitRecoveryTest(BitcoinTestFramework):
             # Fund transaction to segwit addresses
             txfund = CTransaction()
             txfund.vin = [CTxIn(COutPoint(spend.tx.sha256, spend.n))]
-            amount = (50 * COIN - 1000) // len(redeem_scripts)
+            amount = (COINBASE_REWARD * COIN - 1000) // len(redeem_scripts)
             for redeem_script in redeem_scripts:
                 txfund.vout.append(
                     CTxOut(amount, CScript([OP_HASH160, hash160(redeem_script), OP_EQUAL])))

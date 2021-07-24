@@ -29,14 +29,14 @@ class ZapWalletTXesTest (BitcoinTestFramework):
 
         assert_equal(self.nodes[0].getbalance(), COINBASE_REWARD)
 
-        txid0 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 4)
-        txid1 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 3)
+        txid0 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 1)
+        txid1 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 2)
         self.sync_all()
         self.nodes[0].generate(1)
         self.sync_all()
 
-        txid2 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 4)
-        txid3 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 3)
+        txid2 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 1)
+        txid3 = self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 2)
 
         tx0 = self.nodes[0].gettransaction(txid0)
         assert_equal(tx0['txid'], txid0) #tx0 must be available (confirmed)
@@ -73,3 +73,12 @@ class ZapWalletTXesTest (BitcoinTestFramework):
 
 if __name__ == '__main__':
     ZapWalletTXesTest ().main ()
+
+def Test():
+    t = ZapWalletTXesTest()
+    t.drop_to_pdb = True
+    bitcoinConf = {
+        "debug": ["graphene", "blk", "mempool", "net", "req"],
+    }
+    flags = standardFlags()
+    t.main(flags, bitcoinConf, None)
