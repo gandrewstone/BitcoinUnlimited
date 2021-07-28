@@ -422,7 +422,7 @@ bool BlockAssembler::TestForBlock(CTxMemPool::txiter iter)
     if (!IsFinalTx(iter->GetSharedTx(), nHeight, nLockTimeCutoff))
         return false;
 
-    // On BCH if Nov 15th 2019 has been activaterd make sure tx size
+    // On BCH if Nov 15th 2019 has been activated make sure tx size
     // is greater or equal than 100 bytes
     if (IsNov2018Activated(Params().GetConsensus(), chainActive.Tip()))
     {
@@ -607,7 +607,6 @@ void BlockAssembler::addPriorityTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
     // included regardless of the fees they pay
     uint64_t nBlockPrioritySize = GetArg("-blockprioritysize", DEFAULT_BLOCK_PRIORITY_SIZE);
     nBlockPrioritySize = std::min(nBlockMaxSize, nBlockPrioritySize);
-
     if (nBlockPrioritySize == 0)
     {
         return;
@@ -630,9 +629,11 @@ void BlockAssembler::addPriorityTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
     }
     std::make_heap(vecPriority.begin(), vecPriority.end(), pricomparer);
 
+
+    // Try to add a txns from the priority queue to fill the blockprioritysize
     CTxMemPool::txiter iter;
     while (!vecPriority.empty() && !blockFinished)
-    { // add a tx from priority queue to fill the blockprioritysize
+    {
         iter = vecPriority.front().second;
         actualPriority = vecPriority.front().first;
         std::pop_heap(vecPriority.begin(), vecPriority.end(), pricomparer);
@@ -656,14 +657,14 @@ void BlockAssembler::addPriorityTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
         // If this tx fits in the block add it, otherwise keep looping
         if (TestForBlock(iter))
         {
-            AddToBlock(vtxe, iter);
-
             // If now that this txs is added we've surpassed our desired priority size
             // or have dropped below the AllowFreeThreshold, then we're done adding priority txs
-            if (nBlockSize >= nBlockPrioritySize || !AllowFree(actualPriority))
+            if (nBlockSize + iter->GetTxSize() > nBlockPrioritySize || !AllowFree(actualPriority))
             {
                 return;
             }
+            AddToBlock(vtxe, iter);
+
 
             // This tx was successfully added, so
             // add transactions that depend on this one to the priority queue to try again

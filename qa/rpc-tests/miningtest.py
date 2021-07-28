@@ -147,8 +147,8 @@ class MiningTest (BitcoinTestFramework):
         # Add a few txns to the mempool and mine them with the default fee
         self.nodes[0].set("minlimitertxfee=0")
         self.nodes[1].set("minlimitertxfee=0")
-        self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 0.1)
-        self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 0.1)
+        self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 1)
+        self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 1)
         self.sync_all()
         assert_equal(str(self.nodes[0].getnetworkinfo()["relayfee"]), "0E-8")
         assert_equal(self.nodes[0].getmempoolinfo()["size"], 2)
@@ -160,8 +160,8 @@ class MiningTest (BitcoinTestFramework):
 
         # Add a few txns to the mempool, then increase the relayfee beyond what the txns would pay
         # and mine a block. All txns should be mined and removed from the
-        txid1 = self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), COINBASE_REWARD-1)
-        txid2 = self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), COINBASE_REWARD-1)
+        txid1 = self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 1)
+        txid2 = self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 1)
         self.sync_all()
         assert_equal(self.nodes[0].getmempoolinfo()["size"], 2)
         assert_equal(self.nodes[0].getmempoolinfo()["mempoolminfee"], 0)
@@ -172,20 +172,27 @@ class MiningTest (BitcoinTestFramework):
         # and be mineable.
         self.nodes[0].set("minlimitertxfee=1000")
         self.nodes[1].set("minlimitertxfee=1000")
-        txid3 = self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), COINBASE_REWARD-1)
-        txid4 = self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), COINBASE_REWARD-1)
-        self.sync_all()
 
-        # This original test relied on the wallet to create a specific tx dependency graph by reusing change.
-        # This is not reliable, so the test is simplified to verify that the miner fills priority tx and then not free tx since the
-        # min block size is met.  And then without priority tx, it fills the next block with free tx.
+        txid3 = self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 1)
+        txid4 = self.nodes[0].sendtoaddress(self.nodes[1].getnewaddress(), 1)
+        self.sync_all()
 
         assert_equal(self.nodes[0].getmempoolinfo()["size"], 4)
         assert_equal(self.nodes[1].getmempoolinfo()["size"], 4)
         assert_equal(str(self.nodes[0].getnetworkinfo()["relayfee"]), "0.01000000")
+
+        #only tx1 and tx2 should have been mined since there is not enough space
+        # in the priority area for all 4 free txns.
+        # txid1 has the highest priority and is chosen first
+        # txid2 has same priority but lower fee than txid3. However txid3 and txid4 depends on txid2
+        #   and therefore txid2 is chosen. 
         self.nodes[0].generate(1)
         self.sync_all()
-        rawmempool = self.nodes[0].getrawmempool()
+
+        assert(txid1 not in self.nodes[0].getrawmempool())
+        assert(txid2 not in self.nodes[0].getrawmempool())
+        assert(txid3 in self.nodes[0].getrawmempool())
+        assert(txid4 in self.nodes[0].getrawmempool())
         assert_equal(self.nodes[0].getmempoolinfo()["size"], 2)
         assert_equal(self.nodes[1].getmempoolinfo()["size"], 2)
 
@@ -197,18 +204,17 @@ class MiningTest (BitcoinTestFramework):
 
 
 if __name__ == '__main__':
-    MiningTest().main(None, {  "blockprioritysize": 1400, "blockmaxsize":200000 })
+    MiningTest().main(None, {  "blockprioritysize": 1315, "blockmaxsize":1600 })
 
 # Create a convenient function for an interactive python debugging session
 
 
 def Test():
     t = MiningTest()
-    t.drop_to_pdb = True
     bitcoinConf = {
         "debug": ["net", "blk", "thin", "mempool", "req", "bench", "evict"],
-        "blockprioritysize": 1400,
-        "blockmaxsize":200000
+        "blockprioritysize": 1315,
+        "blockmaxsize":1600
     }
 
     flags = standardFlags()
