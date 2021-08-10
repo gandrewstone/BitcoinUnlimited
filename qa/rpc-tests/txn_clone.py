@@ -135,9 +135,9 @@ class TxnCloneTest(BitcoinTestFramework):
         # "foo" should have been debited by the equivalent clone of tx1
         assert_equal(self.nodes[0].getbalance("foo"), FooAmt + tx1["amount"] + tx1["fee"])
         assert_equal(self.nodes[0].getbalance("", 0), starting_balance
-                                                                - 219
+                                                                - FooAmt
                                                                 + fund_foo_tx["fee"]
-                                                                +  20)
+                                                                + 2*COINBASE_REWARD)
 
         # Node1's "from0" account balance
         assert_equal(self.nodes[1].getbalance("from0", 0), -(tx1["amount"]))
