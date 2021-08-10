@@ -9,6 +9,7 @@ from codecs import encode
 from threading import RLock
 from io import BytesIO
 import copy
+from test_framework.schnorr import sign
 from test_framework.siphash import siphash256
 import test_framework.util as util
 
@@ -915,11 +916,33 @@ class CBlock(CBlockHeader):
         return True
 
     def solve(self):
-        self.rehash()
+        self.sha256 = None
+
         target = uint256_from_compact(self.nBits)
-        while self.sha256 > target:
+        while True:
+
+            r = b""
+            r += struct.pack("<i", self.nVersion)
+            r += ser_uint256(self.hashPrevBlock)
+            r += ser_uint256(self.hashMerkleRoot)
+            r += struct.pack("<I", self.nTime)
+            r += struct.pack("<I", self.nBits)
+            r += struct.pack("<I", self.nNonce)
+            self.sha256 = uint256_from_str(hash256(r))
+            self.hash = encode(hash256(r)[::-1], 'hex_codec').decode('ascii')
+
+            # create a private key from the blockhash
+            private_key = hash256(r)
+
+            # create a schorr sig by signing with the sha256(blockhash) and, private key from above
+            sig = sign(private_key, sha256(hash256(r)))
+
+            # get the sha256 of the schnorr sig
+            schnorr_sha256 = uint256_from_str(sha256(sig))
+            if schnorr_sha256 < target:
+                break
+
             self.nNonce += 1
-            self.rehash()
 
     def __str__(self):
         return "CBlock(nVersion=%i hashPrevBlock=%064x hashMerkleRoot=%064x nTime=%s nBits=%08x nNonce=%08x vtx_len=%d)" \
