@@ -103,7 +103,7 @@ class CMainParams : public CChainParams
 public:
     CMainParams()
     {
-        strNetworkID = "main";
+        strNetworkID = "main"; // Do not use the const string because of ctor execution order issues
         consensus.nSubsidyHalvingInterval = 210000;
         // 00000000000000ce80a7e057163a4db1d5ad7b20fb6f598c9597b9665c8fb0d4 - April 1, 2012
         consensus.BIP16Height = 173805;
@@ -117,6 +117,8 @@ public:
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
+        consensus.powAlgorithm = 0;
+        consensus.initialSubsidy = 50 * COIN;
         // The half life for the ASERT DAA. For every (nASERTHalfLife) seconds behind schedule the blockchain gets,
         // difficulty is cut in half. Doubled if blocks are ahead of schedule.
         // Two days
@@ -253,7 +255,7 @@ class CUnlParams : public CChainParams
 public:
     CUnlParams()
     {
-        strNetworkID = "nol";
+        strNetworkID = "nol"; // Do not use the const string because of ctor execution order issues
 
         std::vector<unsigned char> rawScript(ParseHex("76a914a123a6fdc265e1bbcf1123458891bd7af1a1b5d988ac"));
         CScript outputScript(rawScript.begin(), rawScript.end());
@@ -273,6 +275,8 @@ public:
         consensus.nPowTargetSpacing = 1 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = false;
+        consensus.powAlgorithm = 0;
+        consensus.initialSubsidy = 50 * COIN;
 
         assert(
             consensus.hashGenesisBlock == uint256S("0000000057e31bd2066c939a63b7b8623bd0f10d8c001304bdfc1a7902ae6d35"));
@@ -346,7 +350,7 @@ class CTestNetParams : public CChainParams
 public:
     CTestNetParams()
     {
-        strNetworkID = "test";
+        strNetworkID = "test"; // Do not use the const string because of ctor execution order issues
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP16Height = 514; // 00000000040b4e986385315e14bee30ad876d8b47f748025b26683116d21aa65
         consensus.BIP34Height = 21111;
@@ -359,6 +363,8 @@ public:
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = false;
+        consensus.powAlgorithm = 0;
+        consensus.initialSubsidy = 50 * COIN;
         // The half life for the ASERT DAA. For every (nASERTHalfLife) seconds behind schedule the blockchain gets,
         // difficulty is cut in half. Doubled if blocks are ahead of schedule.
         // One hour
@@ -485,7 +491,7 @@ class CRegTestParams : public CChainParams
 public:
     CRegTestParams()
     {
-        strNetworkID = "regtest";
+        strNetworkID = "regtest"; // Do not use the const string because of ctor execution order issues
         consensus.nSubsidyHalvingInterval = 150;
         consensus.BIP16Height = 0; // always enforce P2SH BIP16 on regtest
         consensus.BIP34Height = 1000; // BIP34 has activated on regtest (Used in rpc activation tests)
@@ -498,6 +504,8 @@ public:
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = true;
+        consensus.powAlgorithm = 1;
+        consensus.initialSubsidy = 10 * COIN;
         // The half life for the ASERT DAA. For every (nASERTHalfLife) seconds behind schedule the blockchain gets,
         // difficulty is cut in half. Doubled if blocks are ahead of schedule.
         // Two days
@@ -545,12 +553,11 @@ public:
         nMinMaxBlockSize = MIN_EXCESSIVE_BLOCK_SIZE_REGTEST;
         nDefaultMaxBlockMiningSize = DEFAULT_BLOCK_MAX_SIZE;
 
-        genesis = CreateGenesisBlock(1296688602, 2, 0x207fffff, 1, 50 * COIN);
+        genesis = CreateGenesisBlock(CScript() << 0 << CScriptNum(7227), "This is regtest", CScript() << OP_1,
+            1626275623, 1, 0x207fffff, 536870912, 0 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
         assert(consensus.hashGenesisBlock ==
-               uint256S("0x0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"));
-        assert(
-            genesis.hashMerkleRoot == uint256S("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
+               uint256S("0xaa258934f701130c37bba436aa497c2dcd25b884ef1f4f4ee80598fa76e81526"));
 
         vFixedSeeds.clear(); //! Regtest mode doesn't have any fixed seeds.
         vSeeds.clear(); //! Regtest mode doesn't have any DNS seeds.
@@ -562,7 +569,7 @@ public:
         fTestnetToBeDeprecatedFieldRPC = false;
 
         checkpointData = (CCheckpointData){
-            {{0, uint256S("0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206")}}, 0, 0, 0};
+            {{0, uint256S("0xaa258934f701130c37bba436aa497c2dcd25b884ef1f4f4ee80598fa76e81526")}}, 0, 0, 0};
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<uint8_t>(1, 111);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<uint8_t>(1, 196);
         base58Prefixes[SECRET_KEY] = std::vector<uint8_t>(1, 239);
@@ -581,7 +588,7 @@ class CTestNet4Params : public CChainParams
 public:
     CTestNet4Params()
     {
-        strNetworkID = "test4";
+        strNetworkID = "test4"; // Do not use the const string because of ctor execution order issues
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP16Height = 1;
         consensus.BIP34Height = 2;
@@ -596,6 +603,8 @@ public:
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = false;
+        consensus.powAlgorithm = 0;
+        consensus.initialSubsidy = 50 * COIN;
         // The half life for the ASERT DAA. For every (nASERTHalfLife) seconds behind schedule the blockchain gets,
         // difficulty is cut in half. Doubled if blocks are ahead of schedule.
         // One hour
@@ -707,7 +716,7 @@ class CScaleNetParams : public CChainParams
 public:
     CScaleNetParams()
     {
-        strNetworkID = "scale";
+        strNetworkID = "scale"; // Do not use the const string because of ctor execution order issues
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP16Height = 1;
         consensus.BIP34Height = 2;
@@ -722,6 +731,8 @@ public:
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = false;
+        consensus.powAlgorithm = 0;
+        consensus.initialSubsidy = 50 * COIN;
 
         // The half life for the ASERT DAA. For every (nASERTHalfLife) seconds behind schedule the blockchain gets,
         // difficulty is cut in half. Doubled if blocks are ahead of schedule.
@@ -839,7 +850,7 @@ class CNextChainParams : public CChainParams
 public:
     CNextChainParams()
     {
-        strNetworkID = NEXTCHAIN_TICKER;
+        strNetworkID = "nex"; // Do not use the const string because of ctor execution order issues
 
         genesis = CreateGenesisBlock(CScript() << 0 << CScriptNum(7227),
             "Innovations enabling viral uses create a virtuous adoption cycle that overwhelms legacy systems",

@@ -226,17 +226,18 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript &sc
             (STANDARD_LOCKTIME_VERIFY_FLAGS & LOCKTIME_MEDIAN_TIME_PAST) ? nMedianTimePast : pblock->GetBlockTime();
 
         bool canonical = fCanonicalTxsOrder;
-        // On BCH always allow overwite of fCanonicalTxsOrder but not for regtest
-        if (IsNov2018Activated(Params().GetConsensus(), chainActive.Tip()))
+        if (chainparams.NetworkIDString() == "regtest")
         {
-            if (chainparams.NetworkIDString() != "regtest")
-            {
-                canonical = true;
-            }
+            canonical = true;
         }
         else
         {
-            if (chainparams.NetworkIDString() != "regtest")
+            // Always allow overwite of fCanonicalTxsOrder but for regtest on BCH
+            if (IsNov2018Activated(chainparams.GetConsensus(), chainActive.Tip()))
+            {
+                canonical = true;
+            }
+            else
             {
                 canonical = false;
             }
@@ -421,7 +422,7 @@ bool BlockAssembler::TestForBlock(CTxMemPool::txiter iter)
     if (!IsFinalTx(iter->GetSharedTx(), nHeight, nLockTimeCutoff))
         return false;
 
-    // On BCH if Nov 15th 2019 has been activaterd make sure tx size
+    // On BCH if Nov 15th 2019 has been activated make sure tx size
     // is greater or equal than 100 bytes
     if (IsNov2018Activated(Params().GetConsensus(), chainActive.Tip()))
     {
@@ -535,10 +536,22 @@ void BlockAssembler::addPackageTxs(std::vector<const CTxMemPoolEntry *> *vtxe, b
                 packageSigOps += it->GetSigOpCount();
             }
         }
-        if (packageFees < ::minRelayTxFee.GetFee(packageSize) && nBlockSize >= nBlockMinSize)
+
+        LOGA("Consider mining TX %s priority %f, package size %d, fee %d, ancestor count %d\n",
+            iter->GetSharedTx()->GetHash().GetHex(), iter->GetPriority(nHeight), packageSize, packageFees,
+            ancestors.size());
+        if (packageFees < ::minRelayTxFee.GetFee(packageSize))
         {
-            // Everything else we might consider has a lower fee rate so no need to continue
-            return;
+            LOGA("Treating Tx %s as free because fee %d < %d \n", iter->GetSharedTx()->GetHash().GetHex(), packageFees,
+                ::minRelayTxFee.GetFee(packageSize));
+
+            if (nBlockSize >= nBlockMinSize)
+            {
+                // Everything else we might consider has a lower fee rate so no need to continue
+                LOGA("Skipping this and lower fee value tx because free space (%d) is full (current block size %d)",
+                    nBlockMinSize, nBlockSize);
+                return;
+            }
         }
 
         // Test if package fits in the block
@@ -594,7 +607,6 @@ void BlockAssembler::addPriorityTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
     // included regardless of the fees they pay
     uint64_t nBlockPrioritySize = GetArg("-blockprioritysize", DEFAULT_BLOCK_PRIORITY_SIZE);
     nBlockPrioritySize = std::min(nBlockMaxSize, nBlockPrioritySize);
-
     if (nBlockPrioritySize == 0)
     {
         return;
@@ -617,9 +629,11 @@ void BlockAssembler::addPriorityTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
     }
     std::make_heap(vecPriority.begin(), vecPriority.end(), pricomparer);
 
+
+    // Try to add a txns from the priority queue to fill the blockprioritysize
     CTxMemPool::txiter iter;
     while (!vecPriority.empty() && !blockFinished)
-    { // add a tx from priority queue to fill the blockprioritysize
+    {
         iter = vecPriority.front().second;
         actualPriority = vecPriority.front().first;
         std::pop_heap(vecPriority.begin(), vecPriority.end(), pricomparer);
@@ -643,14 +657,14 @@ void BlockAssembler::addPriorityTxs(std::vector<const CTxMemPoolEntry *> *vtxe)
         // If this tx fits in the block add it, otherwise keep looping
         if (TestForBlock(iter))
         {
-            AddToBlock(vtxe, iter);
-
             // If now that this txs is added we've surpassed our desired priority size
             // or have dropped below the AllowFreeThreshold, then we're done adding priority txs
-            if (nBlockSize >= nBlockPrioritySize || !AllowFree(actualPriority))
+            if (nBlockSize + iter->GetTxSize() > nBlockPrioritySize || !AllowFree(actualPriority))
             {
                 return;
             }
+            AddToBlock(vtxe, iter);
+
 
             // This tx was successfully added, so
             // add transactions that depend on this one to the priority queue to try again

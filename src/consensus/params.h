@@ -91,9 +91,9 @@ struct ForkDeployment
 struct Params
 {
     /** what pow algorithm to use (nextchain's = 1 or BTC/BCH = 0) */
-    unsigned int powAlgorithm = 0;
+    unsigned int powAlgorithm;
     /** Initial subsidy */
-    CAmount initialSubsidy = 50 * COIN;
+    CAmount initialSubsidy;
 
     uint256 hashGenesisBlock;
     int nSubsidyHalvingInterval;

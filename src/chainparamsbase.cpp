@@ -17,7 +17,7 @@ const std::string CBaseChainParams::TESTNET = "test";
 const std::string CBaseChainParams::TESTNET4 = "test4";
 const std::string CBaseChainParams::SCALENET = "scale";
 const std::string CBaseChainParams::REGTEST = "regtest";
-const std::string CBaseChainParams::NEXTCHAIN = NEXTCHAIN_TICKER;
+const std::string CBaseChainParams::NEXTCHAIN = "nex";
 
 /**
  * Main network
@@ -99,7 +99,15 @@ public:
 };
 static CBaseRegTestParams regTestParams;
 
-static CBaseChainParams nextChainParams(CBaseChainParams::NEXTCHAIN, 7227);
+/**
+ * Nextchain
+ */
+class CBaseNextchainParams : public CBaseChainParams
+{
+public:
+    CBaseNextchainParams() { nRPCPort = 7227; }
+};
+static CBaseNextchainParams nextChainParams;
 
 static CBaseChainParams *pCurrentBaseParams = 0;
 
@@ -143,7 +151,7 @@ std::string ChainNameFromCommandLine()
     num_selected += fScaleNet;
     bool fUnl = GetBoolArg("-chain_nol", false);
     num_selected += fUnl;
-    bool fNextChain = GetBoolArg("-xnex", false);
+    bool fNextChain = GetBoolArg("-nextchain", false);
     num_selected += fNextChain;
     bool fBch = GetBoolArg("-bch", false);
     num_selected += fBch;

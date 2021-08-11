@@ -20,7 +20,7 @@ static const struct
     {"test4", QAPP_APP_NAME_TESTNET4, 120, 30, QT_TRANSLATE_NOOP("SplashScreen", "[testnet4]")},
     {"scale", QAPP_APP_NAME_SCALENET, 180, 30, QT_TRANSLATE_NOOP("SplashScreen", "[scalenet]")},
     {"nol", QAPP_APP_NAME_NOLNET, 70, 30, QT_TRANSLATE_NOOP("SplashScreen", "[nolimit]")}, // BU
-    {"xnex", QAPP_APP_NAME_NEXTCHAIN, 83, 30, QT_TRANSLATE_NOOP("SplashScreen", "NextChain")}, // BU
+    {"nex", QAPP_APP_NAME_NEXTCHAIN, 83, 30, QT_TRANSLATE_NOOP("SplashScreen", "NextChain")}, // BU
     {"regtest", QAPP_APP_NAME_TESTNET, 160, 30, "[regtest]"}};
 static const unsigned network_styles_count = sizeof(network_styles) / sizeof(*network_styles);
 

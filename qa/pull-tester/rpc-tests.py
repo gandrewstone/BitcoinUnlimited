@@ -204,8 +204,8 @@ testScripts = [ RpcTest(t) for t in [
     Disabled('schnorr-activation', 'Need to be updated to work with BU'),
     'schnorrsig',
     'segwit_recovery',
-    'bip135basic',
-    'ctor',
+    Disabled('bip135basic', "having trouble on gitlab"),
+    Disabled('ctor', "ctor always on in regtest"),
     'mining_ctor',
     Disabled('nov152018_forkactivation','Nov 2018 already activated'),
     'blockstorage',
@@ -273,7 +273,7 @@ testScripts = [ RpcTest(t) for t in [
     'minimaldata',
     'schnorrmultisig',
     'uptime',
-    'op_reversebytes'
+    Disabled('op_reversebytes', "reversebytes activated from genesis on nextchain")
 ] ]
 
 testScriptsExt = [ RpcTest(t) for t in [
