@@ -19,12 +19,6 @@ if sys.version_info[0] < 3:
 logging.basicConfig(format='%(asctime)s.%(levelname)s: %(message)s', level=logging.DEBUG, stream=sys.stdout)
 
 
-def returnException(lambdaFn):
-    try:
-        return lambdaFn()
-    except Exception as e:
-        return e
-
 class GroupTokensTest (BitcoinTestFramework):
 
     def setup_chain(self, bitcoinConfDict=None, wallets=None):
@@ -88,10 +82,8 @@ class GroupTokensTest (BitcoinTestFramework):
 
         # mint 100 tokens for node 2
         tx = self.nodes[0].token("mint",sg1a, addr2, 100)
-
-        self.sync_blocks()
-        # after blocks sync, wallet still needs to apply the block change to itself
-        waitFor(30, lambda: self.nodes[2].token("balance", sg1a) == 100)
+        waitFor(30, lambda: tx in self.nodes[2].getrawmempool())  # If this fails, remember that there's a very rare chance that a tx won't propagate due to an inv bloom filter collision.
+        assert_equal(self.nodes[2].token("balance", sg1a), 100)
         assert_equal(self.nodes[2].token("balance", grp1), 0)
 
         try: # node 2 doesn't have melt auth on the group or subgroup
@@ -101,8 +93,8 @@ class GroupTokensTest (BitcoinTestFramework):
             pass
 
         tx = self.nodes[0].token("authority","create", sg1a, addr2, "MELT", "NOCHILD")
-        self.sync_blocks()
-        waitFor(30, lambda: not isinstance(returnException(lambda: self.nodes[2].token("melt",sg1a, 50)), Exception)  )
+        waitFor(30, lambda: tx in self.nodes[2].getrawmempool())  # If this fails, remember that there's a very rare chance that a tx won't propagate due to an inv bloom filter collision.
+        tx = self.nodes[2].token("melt",sg1a, 50)
 
         try: # gave a nonrenewable authority
             tx = self.nodes[2].token("melt",sg1a, 50)
@@ -320,6 +312,7 @@ def Test():
         "debug": ["net", "blk", "thin", "mempool", "req", "bench", "evict"],
         "blockprioritysize": 2000000  # we don't want any transactions rejected due to insufficient fees...
     }
+    logging.getLogger().setLevel(logging.INFO)
     # you may want these additional flags:
     # "--srcdir=<out-of-source-build-dir>/debug/src"
     # "--tmpdir=/ramdisk/test"

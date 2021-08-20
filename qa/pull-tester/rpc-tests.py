@@ -450,8 +450,8 @@ def runtests():
 
         if len(tests_to_run) > 1 and run_parallel:
             # Populate cache
-            subprocess.check_output([RPC_TESTS_DIR + 'create_cache.py'] + [flags]+
-                                    (["--no-ipv6-rpc-listen"] if option_passed("no-ipv6-rpc-listen") else []))
+            cCargs = [RPC_TESTS_DIR + 'create_cache.py'] + [x.strip() for x in flags.split()] + (["--no-ipv6-rpc-listen"] if option_passed("no-ipv6-rpc-listen") else [])
+            subprocess.check_output(cCargs)
 
         tests_to_run = list(map(str,tests_to_run))
         max_len_name = len(max(tests_to_run, key=len))
